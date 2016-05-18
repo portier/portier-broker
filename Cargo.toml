@@ -1,0 +1,12 @@
+[package]
+name = "ladaemon"
+version = "0.1.0"
+authors = ["Dirkjan Ochtman <dirkjan@ochtman.nl>"]
+
+[dependencies]
+iron = "*"
+redis = "*"
+openssl = "*"
+hyper = "*"
+router = "*"
+serde_json = "*"
