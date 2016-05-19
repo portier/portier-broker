@@ -8,9 +8,10 @@ use std::fs::File;
 use iron::prelude::*;
 use iron::status;
 use openssl::crypto::rsa::RSA;
-use std::collections::HashMap;
 use iron::headers::ContentType;
 use router::Router;
+use serde_json::builder::ObjectBuilder;
+use serde_json::value::Value;
 
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -18,7 +19,7 @@ const SCHEME: &'static str = "http";
 const HOST: &'static str = "xavamedia.nl:8000";
 
 
-fn json_response(obj: &HashMap<&str, &str>) -> IronResult<Response> {
+fn json_response(obj: &Value) -> IronResult<Response> {
 	let content = serde_json::to_string(&obj).unwrap();
 	let mut rsp = Response::with((status::Ok, content));
 	rsp.headers.set(ContentType::json());
@@ -27,10 +28,10 @@ fn json_response(obj: &HashMap<&str, &str>) -> IronResult<Response> {
 
 
 fn welcome(_: &mut Request) -> IronResult<Response> {
-	let mut obj = HashMap::new();
-	obj.insert("ladaemon", "Welcome");
-	obj.insert("version", VERSION);
-	return json_response(&obj);
+	return json_response(&ObjectBuilder::new()
+	    .insert("ladaemon", "Welcome")
+	    .insert("version", VERSION)
+	    .unwrap());
 }
 
 
