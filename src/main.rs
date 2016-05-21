@@ -1,10 +1,10 @@
 extern crate iron;
 extern crate openssl;
-extern crate router;
-extern crate serde_json;
-extern crate rustc_serialize;
 extern crate rand;
 extern crate redis;
+extern crate router;
+extern crate rustc_serialize;
+extern crate serde_json;
 extern crate urlencoded;
 
 use iron::headers::ContentType;

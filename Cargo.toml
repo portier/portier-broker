@@ -5,11 +5,10 @@ authors = ["Dirkjan Ochtman <dirkjan@ochtman.nl>"]
 
 [dependencies]
 iron = "*"
-redis = "*"
 openssl = "*"
-hyper = "*"
-router = "*"
-serde_json = "*"
-rustc-serialize = "*"
 rand = "*"
+redis = "*"
+router = "*"
+rustc-serialize = "*"
+serde_json = "*"
 urlencoded = "*"
