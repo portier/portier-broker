@@ -4,18 +4,18 @@ extern crate router;
 extern crate serde_json;
 extern crate rustc_serialize;
 
-use std::io::BufReader;
-use std::fs::File;
+use iron::headers::ContentType;
+use iron::middleware::Handler;
 use iron::prelude::*;
 use iron::status;
-use iron::middleware::Handler;
 use openssl::bn::BigNum;
 use openssl::crypto::pkey::PKey;
-use iron::headers::ContentType;
-use router::Router;
 use serde_json::builder::ObjectBuilder;
 use serde_json::value::Value;
+use router::Router;
 use rustc_serialize::base64::{self, ToBase64};
+use std::fs::File;
+use std::io::BufReader;
 
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
