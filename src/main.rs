@@ -3,6 +3,7 @@ extern crate openssl;
 extern crate router;
 extern crate serde_json;
 extern crate rustc_serialize;
+extern crate rand;
 
 use iron::headers::ContentType;
 use iron::middleware::Handler;
@@ -89,6 +90,22 @@ impl Handler for KeysHandler {
 }
 
 
+const CODE_CHARS: &'static [char] = &[
+    '2', '3', '4', '6', '7', '9', 'a', 'c', 'd', 'e', 'f', 'g', 'h', 'j', 'k',
+    'm', 'n', 'p', 'q', 'r', 't', 'v', 'w', 'x', 'y', 'z',
+];
+
+
+struct AuthHandler { app: AppConfig }
+impl Handler for AuthHandler {
+    fn handle(&self, _: &mut Request) -> IronResult<Response> {
+        let chars: String = (0..6).map(|_| CODE_CHARS[rand::random::<usize>() % CODE_CHARS.len()]).collect();
+	    return json_response(&ObjectBuilder::new()
+	        .insert("auth", chars)
+	        .unwrap());
+    }
+}
+
 
 fn main() {
 
@@ -104,6 +121,7 @@ fn main() {
     router.get("/", WelcomeHandler { app: app.clone() });
     router.get("/.well-known/openid-configuration", OIDConfigHandler { app: app.clone() });
     router.get("/keys.json", KeysHandler { app: app.clone() });
+    router.post("/auth", AuthHandler { app: app.clone() });
     Iron::new(router).http("0.0.0.0:8000").unwrap();
 
 }
