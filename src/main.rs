@@ -18,10 +18,6 @@ use std::fs::File;
 use std::io::BufReader;
 
 
-const VERSION: &'static str = env!("CARGO_PKG_VERSION");
-const SELF_BASE: &'static str = "http://xavamedia.nl:8000";
-
-
 fn json_response(obj: &Value) -> IronResult<Response> {
 	let content = serde_json::to_string(&obj).unwrap();
 	let mut rsp = Response::with((status::Ok, content));
@@ -30,27 +26,41 @@ fn json_response(obj: &Value) -> IronResult<Response> {
 }
 
 
-fn welcome(_: &mut Request) -> IronResult<Response> {
-	return json_response(&ObjectBuilder::new()
-	    .insert("ladaemon", "Welcome")
-	    .insert("version", VERSION)
-	    .unwrap());
+struct WelcomeHandler { app: AppConfig }
+impl Handler for WelcomeHandler {
+    fn handle(&self, _: &mut Request) -> IronResult<Response> {
+	    return json_response(&ObjectBuilder::new()
+	        .insert("ladaemon", "Welcome")
+	        .insert("version", &self.app.version)
+	        .unwrap());
+	}
 }
 
 
-fn oid_config(_: &mut Request) -> IronResult<Response> {
-    return json_response(&ObjectBuilder::new()
-        .insert("issuer", SELF_BASE)
-        .insert("authorization_endpoint", format!("{}/auth", SELF_BASE))
-        .insert("jwks_uri", format!("{}/keys.json", SELF_BASE))
-        .insert("scopes_supported", vec!["openid", "email"])
-        .insert("claims_supported", vec!["aud", "email", "email_verified", "exp", "iat", "iss", "sub"])
-        .insert("response_types_supported", vec!["id_token"])
-        .insert("response_modes_supported", vec!["form_post"])
-        .insert("grant_types_supported", vec!["implicit"])
-        .insert("subject_types_supported", vec!["public"])
-        .insert("id_token_signing_alg_values_supported", vec!["RS256"])
-        .unwrap());
+struct OIDConfigHandler { app: AppConfig }
+impl Handler for OIDConfigHandler {
+    fn handle(&self, _: &mut Request) -> IronResult<Response> {
+        return json_response(&ObjectBuilder::new()
+            .insert("issuer", &self.app.base_url)
+            .insert("authorization_endpoint", format!("{}/auth", self.app.base_url))
+            .insert("jwks_uri", format!("{}/keys.json", self.app.base_url))
+            .insert("scopes_supported", vec!["openid", "email"])
+            .insert("claims_supported", vec!["aud", "email", "email_verified", "exp", "iat", "iss", "sub"])
+            .insert("response_types_supported", vec!["id_token"])
+            .insert("response_modes_supported", vec!["form_post"])
+            .insert("grant_types_supported", vec!["implicit"])
+            .insert("subject_types_supported", vec!["public"])
+            .insert("id_token_signing_alg_values_supported", vec!["RS256"])
+            .unwrap());
+	}
+}
+
+
+#[derive(Clone)]
+struct AppConfig {
+    version: String,
+    base_url: String,
+    priv_key: PKey,
 }
 
 
@@ -59,19 +69,10 @@ fn json_big_num(n: &BigNum) -> String {
 }
 
 
-struct PrivKey {
-    priv_key: PKey,
-}
-
-impl PrivKey {
-    fn new(priv_key: PKey) -> PrivKey {
-        PrivKey { priv_key: priv_key }
-    }
-}
-
-impl Handler for PrivKey {
+struct KeysHandler { app: AppConfig }
+impl Handler for KeysHandler {
     fn handle(&self, _: &mut Request) -> IronResult<Response> {
-        let rsa = self.priv_key.get_rsa();
+        let rsa = self.app.priv_key.get_rsa();
         return json_response(&ObjectBuilder::new()
             .insert_array("keys", |builder| {
                 builder.push_object(|builder| {
@@ -93,12 +94,16 @@ fn main() {
 
     let priv_key_file = File::open("private.pem").unwrap();
     let mut reader = BufReader::new(priv_key_file);
-    let priv_key = PrivKey::new(PKey::private_key_from_pem(&mut reader).unwrap());
+    let app = AppConfig {
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        base_url: "http://xavamedia.nl:8000".to_string(),
+        priv_key: PKey::private_key_from_pem(&mut reader).unwrap(),
+    };
 
     let mut router = Router::new();
-    router.get("/", welcome);
-    router.get("/.well-known/openid-configuration", oid_config);
-    router.get("/keys.json", priv_key);
+    router.get("/", WelcomeHandler { app: app.clone() });
+    router.get("/.well-known/openid-configuration", OIDConfigHandler { app: app.clone() });
+    router.get("/keys.json", KeysHandler { app: app.clone() });
     Iron::new(router).http("0.0.0.0:8000").unwrap();
 
 }
