@@ -4,15 +4,19 @@ extern crate router;
 extern crate serde_json;
 extern crate rustc_serialize;
 extern crate rand;
+extern crate redis;
+extern crate urlencoded;
 
 use iron::headers::ContentType;
 use iron::middleware::Handler;
 use iron::prelude::*;
 use iron::status;
+use urlencoded::UrlEncodedBody;
 use openssl::bn::BigNum;
 use openssl::crypto::pkey::PKey;
 use serde_json::builder::ObjectBuilder;
 use serde_json::value::Value;
+use redis::{Client, Commands, RedisResult};
 use router::Router;
 use rustc_serialize::base64::{self, ToBase64};
 use std::fs::File;
@@ -62,6 +66,8 @@ struct AppConfig {
     version: String,
     base_url: String,
     priv_key: PKey,
+    store: Client,
+    expire_keys: usize,
 }
 
 
@@ -98,10 +104,19 @@ const CODE_CHARS: &'static [char] = &[
 
 struct AuthHandler { app: AppConfig }
 impl Handler for AuthHandler {
-    fn handle(&self, _: &mut Request) -> IronResult<Response> {
+    fn handle(&self, req: &mut Request) -> IronResult<Response> {
         let chars: String = (0..6).map(|_| CODE_CHARS[rand::random::<usize>() % CODE_CHARS.len()]).collect();
+        let params = req.get_ref::<UrlEncodedBody>().unwrap();
+        let email = &params.get("login_hint").unwrap()[0];
+        let client_id = &params.get("client_id").unwrap()[0];
+        let key = format!("{}:{}", email, client_id);
+        let _: RedisResult<String> = self.app.store.hset_multiple(key.clone(), &[
+            ("code", chars.clone()),
+            ("redirect", params.get("redirect_uri").unwrap()[0].clone()),
+        ]);
+        let _: RedisResult<String> = self.app.store.expire(key.clone(), self.app.expire_keys);
 	    return json_response(&ObjectBuilder::new()
-	        .insert("auth", chars)
+	        .insert("code", chars)
 	        .unwrap());
     }
 }
@@ -115,6 +130,8 @@ fn main() {
         version: env!("CARGO_PKG_VERSION").to_string(),
         base_url: "http://xavamedia.nl:8000".to_string(),
         priv_key: PKey::private_key_from_pem(&mut reader).unwrap(),
+        store: Client::open("redis://127.0.0.1/5").unwrap(),
+        expire_keys: 60 * 15,
     };
 
     let mut router = Router::new();
