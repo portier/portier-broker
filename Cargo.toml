@@ -5,7 +5,8 @@ authors = ["Dirkjan Ochtman <dirkjan@ochtman.nl>"]
 
 [dependencies]
 iron = "*"
-openssl = "*"
+lettre = "*"
+openssl = "0.7"
 rand = "*"
 redis = "*"
 router = "*"

@@ -1,4 +1,5 @@
 extern crate iron;
+extern crate lettre;
 extern crate openssl;
 extern crate rand;
 extern crate redis;
@@ -11,6 +12,9 @@ use iron::headers::ContentType;
 use iron::middleware::Handler;
 use iron::prelude::*;
 use iron::status;
+use lettre::email::EmailBuilder;
+use lettre::transport::smtp::SmtpTransportBuilder;
+use lettre::transport::EmailTransport;
 use urlencoded::UrlEncodedBody;
 use openssl::bn::BigNum;
 use openssl::crypto::pkey::PKey;
@@ -19,6 +23,7 @@ use serde_json::value::Value;
 use redis::{Client, Commands, RedisResult};
 use router::Router;
 use rustc_serialize::base64::{self, ToBase64};
+use std::error::Error;
 use std::fs::File;
 use std::io::BufReader;
 
@@ -68,6 +73,7 @@ struct AppConfig {
     priv_key: PKey,
     store: Client,
     expire_keys: usize,
+    sender: String,
 }
 
 
@@ -105,19 +111,41 @@ const CODE_CHARS: &'static [char] = &[
 struct AuthHandler { app: AppConfig }
 impl Handler for AuthHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
+
         let chars: String = (0..6).map(|_| CODE_CHARS[rand::random::<usize>() % CODE_CHARS.len()]).collect();
         let params = req.get_ref::<UrlEncodedBody>().unwrap();
-        let email = &params.get("login_hint").unwrap()[0];
+        let email_addr = &params.get("login_hint").unwrap()[0];
         let client_id = &params.get("client_id").unwrap()[0];
-        let key = format!("{}:{}", email, client_id);
+        let key = format!("{}:{}", email_addr, client_id);
         let _: RedisResult<String> = self.app.store.hset_multiple(key.clone(), &[
             ("code", chars.clone()),
             ("redirect", params.get("redirect_uri").unwrap()[0].clone()),
         ]);
         let _: RedisResult<String> = self.app.store.expire(key.clone(), self.app.expire_keys);
-	    return json_response(&ObjectBuilder::new()
-	        .insert("code", chars)
-	        .unwrap());
+
+        let email = EmailBuilder::new()
+            .to(email_addr.as_str())
+            .from(self.app.sender.as_str())
+            .body(&format!("code: {}", chars))
+            .subject("Your login code")
+            .build().unwrap();
+        let mut mailer = SmtpTransportBuilder::localhost().unwrap().build();
+        let result = mailer.send(email);
+        mailer.close();
+
+        let mut obj = ObjectBuilder::new()
+            .insert("code", chars);
+        if !result.is_ok() {
+            let error = result.unwrap_err();
+            obj = obj.insert("error", error.to_string());
+            obj = match error {
+                lettre::transport::error::Error::IoError(inner)
+                    => obj.insert("cause", inner.description()),
+                _ => obj,
+            }
+        }
+        return json_response(&obj.unwrap());
+
     }
 }
 
@@ -132,6 +160,7 @@ fn main() {
         priv_key: PKey::private_key_from_pem(&mut reader).unwrap(),
         store: Client::open("redis://127.0.0.1/5").unwrap(),
         expire_keys: 60 * 15,
+        sender: "Let's Auth <letsauth@xavamedia.nl>".to_string(),
     };
 
     let mut router = Router::new();
