@@ -119,11 +119,11 @@ impl Handler for AuthHandler {
         let email_addr = &params.get("login_hint").unwrap()[0];
         let client_id = &params.get("client_id").unwrap()[0];
         let key = format!("{}:{}", email_addr, client_id);
-        let _: RedisResult<String> = self.app.store.hset_multiple(key.clone(), &[
+        let set_res: RedisResult<String> = self.app.store.hset_multiple(key.clone(), &[
             ("code", chars.clone()),
             ("redirect", params.get("redirect_uri").unwrap()[0].clone()),
         ]);
-        let _: RedisResult<String> = self.app.store.expire(key.clone(), self.app.expire_keys);
+        let exp_res: RedisResult<bool> = self.app.store.expire(key.clone(), self.app.expire_keys);
 
         let email = EmailBuilder::new()
             .to(email_addr.as_str())
@@ -151,6 +151,12 @@ impl Handler for AuthHandler {
                     => obj.insert("cause", inner.description()),
                 _ => obj,
             }
+        }
+        if !set_res.is_ok() {
+            obj = obj.insert("hset_multiple", set_res.unwrap_err().to_string());
+        }
+        if !exp_res.is_ok() {
+            obj = obj.insert("expire", exp_res.unwrap_err().to_string());
         }
         return json_response(&obj.unwrap());
 
