@@ -38,17 +38,17 @@ fn json_response(obj: &Value) -> IronResult<Response> {
     let content = serde_json::to_string(&obj).unwrap();
     let mut rsp = Response::with((status::Ok, content));
     rsp.headers.set(ContentType::json());
-    return Ok(rsp);
+    Ok(rsp)
 }
 
 
 struct WelcomeHandler { app: AppConfig }
 impl Handler for WelcomeHandler {
     fn handle(&self, _: &mut Request) -> IronResult<Response> {
-        return json_response(&ObjectBuilder::new()
+        json_response(&ObjectBuilder::new()
             .insert("ladaemon", "Welcome")
             .insert("version", &self.app.version)
-            .unwrap());
+            .unwrap())
     }
 }
 
@@ -56,7 +56,7 @@ impl Handler for WelcomeHandler {
 struct OIDConfigHandler { app: AppConfig }
 impl Handler for OIDConfigHandler {
     fn handle(&self, _: &mut Request) -> IronResult<Response> {
-        return json_response(&ObjectBuilder::new()
+        json_response(&ObjectBuilder::new()
             .insert("issuer", &self.app.base_url)
             .insert("authorization_endpoint",
                     format!("{}/auth", self.app.base_url))
@@ -69,7 +69,7 @@ impl Handler for OIDConfigHandler {
             .insert("grant_types_supported", vec!["implicit"])
             .insert("subject_types_supported", vec!["public"])
             .insert("id_token_signing_alg_values_supported", vec!["RS256"])
-            .unwrap());
+            .unwrap())
     }
 }
 
@@ -87,7 +87,7 @@ struct AppConfig {
 
 
 fn json_big_num(n: &BigNum) -> String {
-    return n.to_vec().to_base64(base64::URL_SAFE);
+    n.to_vec().to_base64(base64::URL_SAFE)
 }
 
 
@@ -95,7 +95,7 @@ struct KeysHandler { app: AppConfig }
 impl Handler for KeysHandler {
     fn handle(&self, _: &mut Request) -> IronResult<Response> {
         let rsa = self.app.priv_key.get_rsa();
-        return json_response(&ObjectBuilder::new()
+        json_response(&ObjectBuilder::new()
             .insert_array("keys", |builder| {
                 builder.push_object(|builder| {
                     builder.insert("kty", "RSA")
@@ -106,7 +106,7 @@ impl Handler for KeysHandler {
                         .insert("e", json_big_num(&rsa.e().unwrap()))
                 })
             })
-            .unwrap());
+            .unwrap())
     }
 }
 
@@ -166,7 +166,7 @@ impl Handler for AuthHandler {
         if !exp_res.is_ok() {
             obj = obj.insert("expire", exp_res.unwrap_err().to_string());
         }
-        return json_response(&obj.unwrap());
+        json_response(&obj.unwrap())
 
     }
 }
@@ -181,7 +181,7 @@ fn create_jwt(key: &PKey, header: &str, payload: &str) -> String {
     let sig = key.sign(&sha256);
     input.push(b'.');
     input.extend(sig.to_base64(base64::URL_SAFE).into_bytes());
-    return String::from_utf8(input).unwrap();
+    String::from_utf8(input).unwrap()
 }
 
 
@@ -244,7 +244,7 @@ impl Handler for ConfirmHandler {
 
         let mut rsp = Response::with((status::Ok, html));
         rsp.headers.set(ContentType::html());
-        return Ok(rsp);
+        Ok(rsp)
 
     }
 }
