@@ -6,6 +6,7 @@ extern crate redis;
 extern crate router;
 extern crate rustc_serialize;
 extern crate serde_json;
+extern crate url;
 extern crate urlencoded;
 
 use iron::headers::ContentType;
@@ -26,6 +27,7 @@ use rustc_serialize::base64::{self, ToBase64};
 use std::error::Error;
 use std::fs::File;
 use std::io::BufReader;
+use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 
 
 fn json_response(obj: &Value) -> IronResult<Response> {
@@ -133,8 +135,14 @@ impl Handler for AuthHandler {
         let result = mailer.send(email);
         mailer.close();
 
+        let href = format!("{}/confirm?email={}&origin={}&code={}",
+                           self.app.base_url,
+                           utf8_percent_encode(email_addr, QUERY_ENCODE_SET),
+                           utf8_percent_encode(client_id, QUERY_ENCODE_SET),
+                           utf8_percent_encode(&chars, QUERY_ENCODE_SET));
         let mut obj = ObjectBuilder::new()
-            .insert("code", chars);
+            .insert("code", chars)
+            .insert("href", href);
         if !result.is_ok() {
             let error = result.unwrap_err();
             obj = obj.insert("error", error.to_string());
