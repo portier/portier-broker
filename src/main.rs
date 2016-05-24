@@ -271,6 +271,6 @@ fn main() {
     router.get("/keys.json", KeysHandler { app: app.clone() });
     router.post("/auth", AuthHandler { app: app.clone() });
     router.get("/confirm", ConfirmHandler { app: app.clone() });
-    Iron::new(router).http("0.0.0.0:8000").unwrap();
+    Iron::new(router).http("0.0.0.0:3333").unwrap();
 
 }
