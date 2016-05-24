@@ -35,9 +35,9 @@ use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 
 
 fn json_response(obj: &Value) -> IronResult<Response> {
-	let content = serde_json::to_string(&obj).unwrap();
-	let mut rsp = Response::with((status::Ok, content));
-	rsp.headers.set(ContentType::json());
+    let content = serde_json::to_string(&obj).unwrap();
+    let mut rsp = Response::with((status::Ok, content));
+    rsp.headers.set(ContentType::json());
     return Ok(rsp);
 }
 
@@ -45,11 +45,11 @@ fn json_response(obj: &Value) -> IronResult<Response> {
 struct WelcomeHandler { app: AppConfig }
 impl Handler for WelcomeHandler {
     fn handle(&self, _: &mut Request) -> IronResult<Response> {
-	    return json_response(&ObjectBuilder::new()
-	        .insert("ladaemon", "Welcome")
-	        .insert("version", &self.app.version)
-	        .unwrap());
-	}
+        return json_response(&ObjectBuilder::new()
+            .insert("ladaemon", "Welcome")
+            .insert("version", &self.app.version)
+            .unwrap());
+    }
 }
 
 
@@ -58,17 +58,19 @@ impl Handler for OIDConfigHandler {
     fn handle(&self, _: &mut Request) -> IronResult<Response> {
         return json_response(&ObjectBuilder::new()
             .insert("issuer", &self.app.base_url)
-            .insert("authorization_endpoint", format!("{}/auth", self.app.base_url))
+            .insert("authorization_endpoint",
+                    format!("{}/auth", self.app.base_url))
             .insert("jwks_uri", format!("{}/keys.json", self.app.base_url))
             .insert("scopes_supported", vec!["openid", "email"])
-            .insert("claims_supported", vec!["aud", "email", "email_verified", "exp", "iat", "iss", "sub"])
+            .insert("claims_supported",
+                    vec!["aud", "email", "email_verified", "exp", "iat", "iss", "sub"])
             .insert("response_types_supported", vec!["id_token"])
             .insert("response_modes_supported", vec!["form_post"])
             .insert("grant_types_supported", vec!["implicit"])
             .insert("subject_types_supported", vec!["public"])
             .insert("id_token_signing_alg_values_supported", vec!["RS256"])
             .unwrap());
-	}
+    }
 }
 
 
@@ -96,15 +98,15 @@ impl Handler for KeysHandler {
         return json_response(&ObjectBuilder::new()
             .insert_array("keys", |builder| {
                 builder.push_object(|builder| {
-                    builder
-                        .insert("kty", "RSA")
+                    builder.insert("kty", "RSA")
                         .insert("alg", "RS256")
                         .insert("use", "sig")
                         .insert("kid", "base")
                         .insert("n", json_big_num(&rsa.n().unwrap()))
                         .insert("e", json_big_num(&rsa.e().unwrap()))
+                })
             })
-        }).unwrap());
+            .unwrap());
     }
 }
 
@@ -152,8 +154,9 @@ impl Handler for AuthHandler {
             let error = result.unwrap_err();
             obj = obj.insert("error", error.to_string());
             obj = match error {
-                lettre::transport::error::Error::IoError(inner)
-                    => obj.insert("cause", inner.description()),
+                lettre::transport::error::Error::IoError(inner) => {
+                    obj.insert("cause", inner.description())
+                }
                 _ => obj,
             }
         }
@@ -212,8 +215,7 @@ impl Handler for ConfirmHandler {
 
         let req_code = &params.get("code").unwrap()[0];
         if stored.get("code").is_none() || req_code != stored.get("code").unwrap() {
-            let mut obj = ObjectBuilder::new()
-                .insert("error", "code fail");
+            let mut obj = ObjectBuilder::new().insert("error", "code fail");
             obj = obj.insert("stored", stored);
             return json_response(&obj.unwrap());
         }
@@ -264,7 +266,8 @@ fn main() {
 
     let mut router = Router::new();
     router.get("/", WelcomeHandler { app: app.clone() });
-    router.get("/.well-known/openid-configuration", OIDConfigHandler { app: app.clone() });
+    router.get("/.well-known/openid-configuration",
+               OIDConfigHandler { app: app.clone() });
     router.get("/keys.json", KeysHandler { app: app.clone() });
     router.post("/auth", AuthHandler { app: app.clone() });
     router.get("/confirm", ConfirmHandler { app: app.clone() });
