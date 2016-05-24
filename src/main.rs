@@ -156,7 +156,7 @@ fn main() {
     let mut reader = BufReader::new(priv_key_file);
     let app = AppConfig {
         version: env!("CARGO_PKG_VERSION").to_string(),
-        base_url: "http://xavamedia.nl:8000".to_string(),
+        base_url: "https://letsauth.xavamedia.nl".to_string(),
         priv_key: PKey::private_key_from_pem(&mut reader).unwrap(),
         store: Client::open("redis://127.0.0.1/5").unwrap(),
         expire_keys: 60 * 15,
