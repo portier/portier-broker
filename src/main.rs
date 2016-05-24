@@ -6,6 +6,7 @@ extern crate redis;
 extern crate router;
 extern crate rustc_serialize;
 extern crate serde_json;
+extern crate time;
 extern crate url;
 extern crate urlencoded;
 
@@ -16,17 +17,20 @@ use iron::status;
 use lettre::email::EmailBuilder;
 use lettre::transport::smtp::SmtpTransportBuilder;
 use lettre::transport::EmailTransport;
-use urlencoded::UrlEncodedBody;
+use urlencoded::{UrlEncodedBody, UrlEncodedQuery};
 use openssl::bn::BigNum;
 use openssl::crypto::pkey::PKey;
+use openssl::crypto::hash;
 use serde_json::builder::ObjectBuilder;
 use serde_json::value::Value;
 use redis::{Client, Commands, RedisResult};
 use router::Router;
 use rustc_serialize::base64::{self, ToBase64};
+use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
 use std::io::BufReader;
+use time::now_utc;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 
 
@@ -76,6 +80,7 @@ struct AppConfig {
     store: Client,
     expire_keys: usize,
     sender: String,
+    token_validity: i64,
 }
 
 
@@ -164,6 +169,85 @@ impl Handler for AuthHandler {
 }
 
 
+fn create_jwt(key: &PKey, header: &str, payload: &str) -> String {
+    let mut input = Vec::<u8>::new();
+    input.extend(header.as_bytes().to_base64(base64::URL_SAFE).into_bytes());
+    input.push(b'.');
+    input.extend(payload.as_bytes().to_base64(base64::URL_SAFE).into_bytes());
+    let sha256 = hash::hash(hash::Type::SHA256, &input);
+    let sig = key.sign(&sha256);
+    input.push(b'.');
+    input.extend(sig.to_base64(base64::URL_SAFE).into_bytes());
+    return String::from_utf8(input).unwrap();
+}
+
+
+const FORWARD_TEMPLATE: &'static str = r#"<!DOCTYPE html>
+<html>
+  <head>
+    <title>Let's Auth</title>
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        document.getElementById('form').submit();
+      });
+    </script>
+  </head>
+  <body>
+    <form id="form" action="{{ return_url }}" method="post">
+      <input type="hidden" name="id_token" value="{{ jwt }}">
+    </form>
+  </body>
+</html>"#;
+
+
+struct ConfirmHandler { app: AppConfig }
+impl Handler for ConfirmHandler {
+    fn handle(&self, req: &mut Request) -> IronResult<Response> {
+
+        let params = req.get_ref::<UrlEncodedQuery>().unwrap();
+        let email = &params.get("email").unwrap()[0];
+        let origin = &params.get("origin").unwrap()[0];
+        let key = format!("{}:{}", email, origin);
+        let stored: HashMap<String, String> = self.app.store.hgetall(key.clone()).unwrap();
+
+        let req_code = &params.get("code").unwrap()[0];
+        if stored.get("code").is_none() || req_code != stored.get("code").unwrap() {
+            let mut obj = ObjectBuilder::new()
+                .insert("error", "code fail");
+            obj = obj.insert("stored", stored);
+            return json_response(&obj.unwrap());
+        }
+
+        let now = now_utc().to_timespec().sec;
+        let payload = ObjectBuilder::new()
+            .insert("aud", origin)
+            .insert("email", email)
+            .insert("email_verified", email)
+            .insert("exp", now + self.app.token_validity)
+            .insert("iat", now)
+            .insert("iss", &self.app.base_url)
+            .insert("sub", email)
+            .unwrap();
+        let headers = ObjectBuilder::new()
+            .insert("kid", "base")
+            .insert("alg", "RS256")
+            .unwrap();
+        let jwt = create_jwt(&self.app.priv_key,
+                             &serde_json::to_string(&headers).unwrap(),
+                             &serde_json::to_string(&payload).unwrap());
+
+        let redirect = stored.get("redirect").unwrap();
+        let html = FORWARD_TEMPLATE.replace("{{ return_url }}", redirect)
+            .replace("{{ jwt }}", &jwt);
+
+        let mut rsp = Response::with((status::Ok, html));
+        rsp.headers.set(ContentType::html());
+        return Ok(rsp);
+
+    }
+}
+
+
 fn main() {
 
     let priv_key_file = File::open("private.pem").unwrap();
@@ -175,6 +259,7 @@ fn main() {
         store: Client::open("redis://127.0.0.1/5").unwrap(),
         expire_keys: 60 * 15,
         sender: "Let's Auth <letsauth@xavamedia.nl>".to_string(),
+        token_validity: 60 * 10,
     };
 
     let mut router = Router::new();
@@ -182,6 +267,7 @@ fn main() {
     router.get("/.well-known/openid-configuration", OIDConfigHandler { app: app.clone() });
     router.get("/keys.json", KeysHandler { app: app.clone() });
     router.post("/auth", AuthHandler { app: app.clone() });
+    router.get("/confirm", ConfirmHandler { app: app.clone() });
     Iron::new(router).http("0.0.0.0:8000").unwrap();
 
 }
