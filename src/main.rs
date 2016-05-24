@@ -22,6 +22,7 @@ use openssl::bn::BigNum;
 use openssl::crypto::pkey::PKey;
 use openssl::crypto::hash;
 use serde_json::builder::ObjectBuilder;
+use serde_json::de::from_reader;
 use serde_json::value::Value;
 use redis::{Client, Commands, RedisResult};
 use router::Router;
@@ -252,16 +253,21 @@ impl Handler for ConfirmHandler {
 
 fn main() {
 
-    let priv_key_file = File::open("private.pem").unwrap();
+    let config_file = File::open("test.json").unwrap();
+    let config_reader = BufReader::new(config_file);
+    let config: Value = from_reader(config_reader).unwrap();
+
+    let key_file_name = config.find("private_key_file").unwrap().as_string().unwrap();
+    let priv_key_file = File::open(key_file_name).unwrap();
     let mut reader = BufReader::new(priv_key_file);
     let app = AppConfig {
         version: env!("CARGO_PKG_VERSION").to_string(),
-        base_url: "https://letsauth.xavamedia.nl".to_string(),
+        base_url: config.find("base_url").unwrap().as_string().unwrap().to_string(),
         priv_key: PKey::private_key_from_pem(&mut reader).unwrap(),
-        store: Client::open("redis://127.0.0.1/5").unwrap(),
-        expire_keys: 60 * 15,
+        store: Client::open(config.find("redis").unwrap().as_string().unwrap()).unwrap(),
+        expire_keys: config.find("expire_keys").unwrap().as_u64().unwrap() as usize,
         sender: "Let's Auth <letsauth@xavamedia.nl>".to_string(),
-        token_validity: 60 * 10,
+        token_validity: config.find("token_validity").unwrap().as_i64().unwrap(),
     };
 
     let mut router = Router::new();
