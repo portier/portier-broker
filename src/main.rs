@@ -135,21 +135,22 @@ impl Handler for AuthHandler {
         ]);
         let exp_res: RedisResult<bool> = self.app.store.expire(key.clone(), self.app.expire_keys);
 
-        let email = EmailBuilder::new()
-            .to(email_addr.to_string().as_str())
-            .from(self.app.sender.as_str())
-            .body(&format!("code: {}", chars))
-            .subject("Your login code")
-            .build().unwrap();
-        let mut mailer = SmtpTransportBuilder::localhost().unwrap().build();
-        let result = mailer.send(email);
-        mailer.close();
-
         let href = format!("{}/confirm?email={}&origin={}&code={}",
                            self.app.base_url,
                            utf8_percent_encode(&email_addr.to_string(), QUERY_ENCODE_SET),
                            utf8_percent_encode(client_id, QUERY_ENCODE_SET),
                            utf8_percent_encode(&chars, QUERY_ENCODE_SET));
+        let email = EmailBuilder::new()
+            .to(email_addr.to_string().as_str())
+            .from(self.app.sender.as_str())
+            .body(&format!("Enter your login code:\n\n{}\n\nOr click this link:\n\n{}",
+                           chars, href))
+            .subject(&format!("Code: {} - Finish logging in to {}", chars, client_id))
+            .build().unwrap();
+        let mut mailer = SmtpTransportBuilder::localhost().unwrap().build();
+        let result = mailer.send(email);
+        mailer.close();
+
         let mut obj = ObjectBuilder::new()
             .insert("href", href);
         if !result.is_ok() {
