@@ -1,3 +1,4 @@
+extern crate emailaddress;
 extern crate iron;
 extern crate lettre;
 extern crate openssl;
@@ -10,6 +11,7 @@ extern crate time;
 extern crate url;
 extern crate urlencoded;
 
+use emailaddress::EmailAddress;
 use iron::headers::ContentType;
 use iron::middleware::Handler;
 use iron::prelude::*;
@@ -124,7 +126,7 @@ impl Handler for AuthHandler {
 
         let chars: String = (0..6).map(|_| CODE_CHARS[rand::random::<usize>() % CODE_CHARS.len()]).collect();
         let params = req.get_ref::<UrlEncodedBody>().unwrap();
-        let email_addr = &params.get("login_hint").unwrap()[0];
+        let email_addr = EmailAddress::new(&params.get("login_hint").unwrap()[0]);
         let client_id = &params.get("client_id").unwrap()[0];
         let key = format!("{}:{}", email_addr, client_id);
         let set_res: RedisResult<String> = self.app.store.hset_multiple(key.clone(), &[
@@ -134,7 +136,7 @@ impl Handler for AuthHandler {
         let exp_res: RedisResult<bool> = self.app.store.expire(key.clone(), self.app.expire_keys);
 
         let email = EmailBuilder::new()
-            .to(email_addr.as_str())
+            .to(email_addr.to_string().as_str())
             .from(self.app.sender.as_str())
             .body(&format!("code: {}", chars))
             .subject("Your login code")
@@ -145,7 +147,7 @@ impl Handler for AuthHandler {
 
         let href = format!("{}/confirm?email={}&origin={}&code={}",
                            self.app.base_url,
-                           utf8_percent_encode(email_addr, QUERY_ENCODE_SET),
+                           utf8_percent_encode(&email_addr.to_string(), QUERY_ENCODE_SET),
                            utf8_percent_encode(client_id, QUERY_ENCODE_SET),
                            utf8_percent_encode(&chars, QUERY_ENCODE_SET));
         let mut obj = ObjectBuilder::new()
