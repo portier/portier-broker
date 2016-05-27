@@ -29,10 +29,11 @@ use serde_json::value::Value;
 use redis::{Client, Commands, RedisResult};
 use router::Router;
 use rustc_serialize::base64::{self, ToBase64};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
 use std::fs::File;
 use std::io::BufReader;
+use std::iter::Iterator;
 use time::now_utc;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 
@@ -78,6 +79,14 @@ impl Handler for OIDConfigHandler {
 
 
 #[derive(Clone)]
+struct ProviderConfig {
+    discovery: String,
+    client_id: String,
+    secret: String,
+}
+
+
+#[derive(Clone)]
 struct AppConfig {
     version: String,
     base_url: String,
@@ -86,6 +95,7 @@ struct AppConfig {
     expire_keys: usize,
     sender: String,
     token_validity: i64,
+    providers: BTreeMap<String, ProviderConfig>,
 }
 
 
@@ -270,6 +280,16 @@ fn main() {
         expire_keys: config.find("expire_keys").unwrap().as_u64().unwrap() as usize,
         sender: "Let's Auth <letsauth@xavamedia.nl>".to_string(),
         token_validity: config.find("token_validity").unwrap().as_i64().unwrap(),
+        providers: config.find("providers").unwrap().as_object().unwrap().iter()
+            .map(|(host, params)| {
+                let pobj = params.as_object().unwrap();
+                (host.clone(), ProviderConfig {
+                    discovery: pobj["discovery"].as_string().unwrap().to_string(),
+                    client_id: pobj["client_id"].as_string().unwrap().to_string(),
+                    secret: pobj["secret"].as_string().unwrap().to_string(),
+                })
+            })
+            .collect::<BTreeMap<String, ProviderConfig>>(),
     };
 
     let mut router = Router::new();

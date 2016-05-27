@@ -4,5 +4,12 @@
   "redis": "redis://127.0.0.1/5",
   "sender": "Let's Auth <letsauth@xavamedia.nl>",
   "expire_keys": 900,
-  "token_validity": 600
+  "token_validity": 600,
+  "providers": {
+    "gmail.com": {
+      "discovery": "https://accounts.google.com/.well-known/openid-configuration",
+      "client_id": "1234567890-example-client-id.apps.googleusercontent.com",
+      "secret": "<your-secret-goes-here>"
+    }
+  }
 }
