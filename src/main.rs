@@ -151,7 +151,6 @@ impl Handler for AuthHandler {
                            utf8_percent_encode(client_id, QUERY_ENCODE_SET),
                            utf8_percent_encode(&chars, QUERY_ENCODE_SET));
         let mut obj = ObjectBuilder::new()
-            .insert("code", chars)
             .insert("href", href);
         if !result.is_ok() {
             let error = result.unwrap_err();
