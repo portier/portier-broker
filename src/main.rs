@@ -30,9 +30,10 @@ use redis::{Client, Commands, RedisResult};
 use router::Router;
 use rustc_serialize::base64::{self, ToBase64};
 use std::collections::{BTreeMap, HashMap};
+use std::env;
 use std::error::Error;
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{self, BufReader, Write};
 use std::iter::Iterator;
 use time::now_utc;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
@@ -265,7 +266,13 @@ impl Handler for ConfirmHandler {
 
 fn main() {
 
-    let config_file = File::open("test.json").unwrap();
+    let args: Vec<String> = env::args().collect();
+    if args.len() < 2 {
+        io::stderr().write(b"no configuration file specified\n").unwrap();
+        return;
+    }
+
+    let config_file = File::open(&args[1]).unwrap();
     let config_reader = BufReader::new(config_file);
     let config: Value = from_reader(config_reader).unwrap();
 
