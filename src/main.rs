@@ -176,7 +176,9 @@ impl Handler for KeysHandler {
 
 const CODE_CHARS: &'static [char] = &[
     '2', '3', '4', '6', '7', '9', 'a', 'c', 'd', 'e', 'f', 'g', 'h', 'j', 'k',
-    'm', 'n', 'p', 'q', 'r', 't', 'v', 'w', 'x', 'y', 'z',
+    'm', 'n', 'p', 'q', 'r', 't', 'v', 'w', 'x', 'y', 'z', 'A', 'C', 'E', 'F',
+    'G', 'H', 'J', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W',
+    'X', 'Y', 'Z',
 ];
 
 
