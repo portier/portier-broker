@@ -5,6 +5,7 @@ authors = ["Dirkjan Ochtman <dirkjan@ochtman.nl>"]
 
 [dependencies]
 emailaddress = "*"
+hyper = "*"
 iron = "*"
 lettre = "*"
 openssl = "0.7"

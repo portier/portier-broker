@@ -1,4 +1,5 @@
 extern crate emailaddress;
+extern crate hyper;
 extern crate iron;
 extern crate lettre;
 extern crate openssl;
@@ -12,23 +13,31 @@ extern crate url;
 extern crate urlencoded;
 
 use emailaddress::EmailAddress;
+use hyper::client::Client as HttpClient;
+use hyper::header::Headers;
+use hyper::header::ContentType as HyContentType;
 use iron::headers::ContentType;
 use iron::middleware::Handler;
+use iron::modifiers;
 use iron::prelude::*;
 use iron::status;
+use iron::Url;
 use lettre::email::EmailBuilder;
 use lettre::transport::smtp::SmtpTransportBuilder;
 use lettre::transport::EmailTransport;
-use urlencoded::{UrlEncodedBody, UrlEncodedQuery};
+use urlencoded::{QueryMap, UrlEncodedBody, UrlEncodedQuery};
 use openssl::bn::BigNum;
 use openssl::crypto::pkey::PKey;
+use openssl::crypto::rsa::RSA;
 use openssl::crypto::hash;
 use serde_json::builder::ObjectBuilder;
-use serde_json::de::from_reader;
+use serde_json::de::{from_reader, from_slice};
 use serde_json::value::Value;
+use rand::{OsRng, Rng};
 use redis::{Client, Commands, RedisResult};
 use router::Router;
-use rustc_serialize::base64::{self, ToBase64};
+use rustc_serialize::base64::{self, FromBase64, ToBase64};
+use rustc_serialize::hex::ToHex;
 use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::error::Error;
@@ -132,6 +141,50 @@ const CODE_CHARS: &'static [char] = &[
 ];
 
 
+fn oauth_request(app: &AppConfig, params: &QueryMap) -> IronResult<Response> {
+
+    let email_addr = EmailAddress::new(&params.get("login_hint").unwrap()[0]);
+    let client_id = &params.get("client_id").unwrap()[0];
+    let key = format!("{}:{}", email_addr, client_id);
+
+    let mut rng = OsRng::new().unwrap();
+    let mut bytes_iter = rng.gen_iter();
+    let rand_bytes: Vec<u8> = (0..128).map(|_| bytes_iter.next().unwrap()).collect();
+    let state = hash::hash(hash::Type::SHA256, &rand_bytes).to_hex();
+
+    let _: String = app.store.hset_multiple(key.clone(), &[
+        ("state", state.clone()),
+        ("redirect", params.get("redirect_uri").unwrap()[0].clone()),
+    ]).unwrap();
+    let _: bool = app.store.expire(key.clone(), app.expire_keys).unwrap();
+
+    let provider = &app.providers[&email_addr.domain];
+    let client = HttpClient::new();
+    let discovery_rsp = client.get(&provider.discovery).send().unwrap();
+    let discovery: Value = from_reader(discovery_rsp).unwrap();
+    let authz_base = discovery.find("authorization_endpoint").unwrap().as_string().unwrap();
+    let auth_url = Url::parse(&vec![
+        authz_base,
+        "?",
+        "client_id=",
+        &utf8_percent_encode(&provider.client_id, QUERY_ENCODE_SET).to_string(),
+        "&response_type=code",
+        "&scope=",
+        &utf8_percent_encode("openid email", QUERY_ENCODE_SET).to_string(),
+        "&redirect_uri=",
+        &utf8_percent_encode(&format!("{}/callback", &app.base_url),
+                             QUERY_ENCODE_SET).to_string(),
+        "&state=",
+        &utf8_percent_encode(&format!("{}:{}", key, state), QUERY_ENCODE_SET).to_string(),
+        "&login_hint=",
+        &utf8_percent_encode(&email_addr.to_string(), QUERY_ENCODE_SET).to_string(),
+        "\n",
+    ].join("")).unwrap();
+    Ok(Response::with((status::Found, modifiers::Redirect(auth_url))))
+
+}
+
+
 struct AuthHandler { app: AppConfig }
 impl Handler for AuthHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
@@ -139,6 +192,10 @@ impl Handler for AuthHandler {
         let chars: String = (0..6).map(|_| CODE_CHARS[rand::random::<usize>() % CODE_CHARS.len()]).collect();
         let params = req.get_ref::<UrlEncodedBody>().unwrap();
         let email_addr = EmailAddress::new(&params.get("login_hint").unwrap()[0]);
+        if self.app.providers.contains_key(&email_addr.domain) {
+            return oauth_request(&self.app, &params);
+        }
+
         let client_id = &params.get("client_id").unwrap()[0];
         let key = format!("{}:{}", email_addr, client_id);
         let set_res: RedisResult<String> = self.app.store.hset_multiple(key.clone(), &[
@@ -182,6 +239,95 @@ impl Handler for AuthHandler {
             obj = obj.insert("expire", exp_res.unwrap_err().to_string());
         }
         json_response(&obj.unwrap())
+
+    }
+}
+
+struct CallbackHandler { app: AppConfig }
+impl Handler for CallbackHandler {
+    fn handle(&self, req: &mut Request) -> IronResult<Response> {
+
+        let params = req.get_ref::<UrlEncodedQuery>().unwrap();
+        let state: Vec<&str> = params.get("state").unwrap()[0].split(":").collect();
+        let email_addr = EmailAddress::new(state[0]);
+        let origin = state[1..state.len() - 1].join(":");
+        let nonce = state[state.len() - 1];
+
+        let key = format!("{}:{}", state[0], origin);
+        let stored: HashMap<String, String> = self.app.store.hgetall(key.clone()).unwrap();
+        if stored.get("state").is_none() || nonce != stored.get("state").unwrap() {
+            let obj = ObjectBuilder::new()
+                .insert("error", "nonce fail")
+                .insert("key", key)
+                .insert("stored", stored);
+            return json_response(&obj.unwrap());
+        }
+
+        let client = HttpClient::new();
+        let provider = &self.app.providers[&email_addr.domain];
+        let discovery_rsp = client.get(&provider.discovery).send().unwrap();
+        let discovery: Value = from_reader(discovery_rsp).unwrap();
+        let token_url = discovery.find("token_endpoint").unwrap().as_string().unwrap();
+        let code = &params.get("code").unwrap()[0];
+        let body: String = vec![
+            "code=",
+            &utf8_percent_encode(code, QUERY_ENCODE_SET).to_string(),
+            "&client_id=",
+            &utf8_percent_encode(&provider.client_id, QUERY_ENCODE_SET).to_string(),
+            "&client_secret=",
+            &utf8_percent_encode(&provider.secret, QUERY_ENCODE_SET).to_string(),
+            "&redirect_uri=",
+            &utf8_percent_encode(&format!("{}/callback", &self.app.base_url),
+                                 QUERY_ENCODE_SET).to_string(),
+            "&grant_type=authorization_code",
+        ].join("");
+
+        let mut headers = Headers::new();
+        headers.set(HyContentType::form_url_encoded());
+        let token_rsp = client.post(token_url).headers(headers).body(&body).send().unwrap();
+        let token_obj: Value = from_reader(token_rsp).unwrap();
+        let id_token = token_obj.find("id_token").unwrap().as_string().unwrap();
+
+        let keys_url = discovery.find("jwks_uri").unwrap().as_string().unwrap();
+        let keys_rsp = client.get(keys_url).send().unwrap();
+        let keys_doc: Value = from_reader(keys_rsp).unwrap();
+        let parts: Vec<&str> = id_token.split(".").collect();
+        let jwt_header: Value = from_slice(&parts[0].from_base64().unwrap()).unwrap();
+        let kid = jwt_header.find("kid").unwrap().as_string().unwrap();
+        let keys = keys_doc.find("keys").unwrap().as_array().unwrap().iter()
+            .filter(|key_obj| {
+                key_obj.find("kid").unwrap().as_string().unwrap() == kid &&
+                key_obj.find("use").unwrap().as_string().unwrap() == "sig"
+            })
+            .collect::<Vec<&Value>>();
+
+        assert!(keys.len() == 1);
+        let n_b64 = keys[0].find("n").unwrap().as_string().unwrap();
+        let e_b64 = keys[0].find("e").unwrap().as_string().unwrap();
+        let n = BigNum::new_from_slice(&n_b64.from_base64().unwrap()).unwrap();
+        let e = BigNum::new_from_slice(&e_b64.from_base64().unwrap()).unwrap();
+        let mut pub_key = PKey::new();
+        pub_key.set_rsa(&RSA::from_public_components(n, e).unwrap());
+        let message = format!("{}.{}", parts[0], parts[1]);
+        let sha256 = hash::hash(hash::Type::SHA256, &message.as_bytes());
+        let sig = parts[2].from_base64().unwrap();
+        let verified = pub_key.verify(&sha256, &sig);
+        assert!(verified);
+
+        let jwt_payload: Value = from_slice(&parts[1].from_base64().unwrap()).unwrap();
+        let iss = jwt_payload.find("iss").unwrap().as_string().unwrap();
+        let issuer_origin = vec!["https://", &provider.issuer].join("");
+        assert!(iss == provider.issuer || iss == issuer_origin);
+        let aud = jwt_payload.find("aud").unwrap().as_string().unwrap();
+        assert!(aud == provider.client_id);
+        let token_addr = jwt_payload.find("email").unwrap().as_string().unwrap();
+        assert!(token_addr == state[0]);
+        let now = now_utc().to_timespec().sec;
+        let exp = jwt_payload.find("exp").unwrap().as_i64().unwrap();
+        assert!(now < exp);
+
+        let redirect = stored.get("redirect").unwrap();
+        send_jwt_response(state[0], &origin, redirect, &self.app)
 
     }
 }
@@ -315,6 +461,7 @@ fn main() {
     router.get("/keys.json", KeysHandler { app: app.clone() });
     router.post("/auth", AuthHandler { app: app.clone() });
     router.get("/confirm", ConfirmHandler { app: app.clone() });
+    router.get("/callback", CallbackHandler { app: app.clone() });
     Iron::new(router).http("0.0.0.0:3333").unwrap();
 
 }
