@@ -84,6 +84,7 @@ struct ProviderConfig {
     discovery: String,
     client_id: String,
     secret: String,
+    issuer: String,
 }
 
 
@@ -301,6 +302,7 @@ fn main() {
                     discovery: pobj["discovery"].as_string().unwrap().to_string(),
                     client_id: pobj["client_id"].as_string().unwrap().to_string(),
                     secret: pobj["secret"].as_string().unwrap().to_string(),
+                    issuer: pobj["issuer"].as_string().unwrap().to_string(),
                 })
             })
             .collect::<BTreeMap<String, ProviderConfig>>(),
