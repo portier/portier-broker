@@ -367,7 +367,7 @@ impl Handler for CallbackHandler {
         assert!(now < exp);
 
         let redirect = stored.get("redirect").unwrap();
-        send_jwt_response(state[0], &origin, redirect, &self.app)
+        send_jwt_response(&self.app, state[0], &origin, redirect)
 
     }
 }
@@ -404,7 +404,7 @@ const FORWARD_TEMPLATE: &'static str = r#"<!DOCTYPE html>
 </html>"#;
 
 
-fn send_jwt_response(email: &str, origin: &str, redirect: &str, app: &AppConfig) -> IronResult<Response> {
+fn send_jwt_response(app: &AppConfig, email: &str, origin: &str, redirect: &str) -> IronResult<Response> {
 
     let now = now_utc().to_timespec().sec;
     let payload = ObjectBuilder::new()
@@ -451,7 +451,7 @@ impl Handler for ConfirmHandler {
         }
 
         let redirect = stored.get("redirect").unwrap();
-        send_jwt_response(email, origin, redirect, &self.app)
+        send_jwt_response(&self.app, email, origin, redirect)
 
     }
 }
