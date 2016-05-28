@@ -217,7 +217,6 @@ fn oauth_request(app: &AppConfig, params: &QueryMap) -> IronResult<Response> {
         &utf8_percent_encode(&format!("{}:{}", key, state), QUERY_ENCODE_SET).to_string(),
         "&login_hint=",
         &utf8_percent_encode(&email_addr.to_string(), QUERY_ENCODE_SET).to_string(),
-        "\n",
     ].join("")).unwrap();
     Ok(Response::with((status::Found, modifiers::Redirect(auth_url))))
 
