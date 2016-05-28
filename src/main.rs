@@ -110,6 +110,45 @@ struct AppConfig {
 }
 
 
+impl AppConfig {
+    fn from_json_file(file_name: &str) -> AppConfig {
+
+        let config_file = File::open(file_name).unwrap();
+        let config_value: Value = from_reader(BufReader::new(config_file)).unwrap();
+        let config = config_value.as_object().unwrap();
+
+        let key_file_name = config["private_key_file"].as_string().unwrap();
+        let priv_key_file = File::open(key_file_name).unwrap();
+        let mut reader = BufReader::new(priv_key_file);
+        let sender = config["sender"].as_object().unwrap();
+        AppConfig {
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            base_url: config["base_url"].as_string().unwrap().to_string(),
+            priv_key: PKey::private_key_from_pem(&mut reader).unwrap(),
+            store: Client::open(config["redis"].as_string().unwrap()).unwrap(),
+            expire_keys: config["expire_keys"].as_u64().unwrap() as usize,
+            sender: (
+                sender["address"].as_string().unwrap().to_string(),
+                sender["name"].as_string().unwrap().to_string(),
+            ),
+            token_validity: config["token_validity"].as_i64().unwrap(),
+            providers: config["providers"].as_object().unwrap().iter()
+                .map(|(host, params)| {
+                    let pobj = params.as_object().unwrap();
+                    (host.clone(), ProviderConfig {
+                        discovery: pobj["discovery"].as_string().unwrap().to_string(),
+                        client_id: pobj["client_id"].as_string().unwrap().to_string(),
+                        secret: pobj["secret"].as_string().unwrap().to_string(),
+                        issuer: pobj["issuer"].as_string().unwrap().to_string(),
+                    })
+                })
+                .collect::<BTreeMap<String, ProviderConfig>>(),
+        }
+
+    }
+}
+
+
 fn json_big_num(n: &BigNum) -> String {
     n.to_vec().to_base64(base64::URL_SAFE)
 }
@@ -426,38 +465,7 @@ fn main() {
         return;
     }
 
-    let config_file = File::open(&args[1]).unwrap();
-    let config_value: Value = from_reader(BufReader::new(config_file)).unwrap();
-    let config = config_value.as_object().unwrap();
-
-    let key_file_name = config["private_key_file"].as_string().unwrap();
-    let priv_key_file = File::open(key_file_name).unwrap();
-    let mut reader = BufReader::new(priv_key_file);
-    let sender = config["sender"].as_object().unwrap();
-    let app = AppConfig {
-        version: env!("CARGO_PKG_VERSION").to_string(),
-        base_url: config["base_url"].as_string().unwrap().to_string(),
-        priv_key: PKey::private_key_from_pem(&mut reader).unwrap(),
-        store: Client::open(config["redis"].as_string().unwrap()).unwrap(),
-        expire_keys: config["expire_keys"].as_u64().unwrap() as usize,
-        sender: (
-            sender["address"].as_string().unwrap().to_string(),
-            sender["name"].as_string().unwrap().to_string(),
-        ),
-        token_validity: config["token_validity"].as_i64().unwrap(),
-        providers: config["providers"].as_object().unwrap().iter()
-            .map(|(host, params)| {
-                let pobj = params.as_object().unwrap();
-                (host.clone(), ProviderConfig {
-                    discovery: pobj["discovery"].as_string().unwrap().to_string(),
-                    client_id: pobj["client_id"].as_string().unwrap().to_string(),
-                    secret: pobj["secret"].as_string().unwrap().to_string(),
-                    issuer: pobj["issuer"].as_string().unwrap().to_string(),
-                })
-            })
-            .collect::<BTreeMap<String, ProviderConfig>>(),
-    };
-
+    let app = AppConfig::from_json_file(&args[1]);
     let mut router = Router::new();
     router.get("/", WelcomeHandler { app: app.clone() });
     router.get("/.well-known/openid-configuration",
