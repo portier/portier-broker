@@ -56,38 +56,6 @@ fn json_response(obj: &Value) -> IronResult<Response> {
 }
 
 
-struct WelcomeHandler { app: AppConfig }
-impl Handler for WelcomeHandler {
-    fn handle(&self, _: &mut Request) -> IronResult<Response> {
-        json_response(&ObjectBuilder::new()
-            .insert("ladaemon", "Welcome")
-            .insert("version", &self.app.version)
-            .unwrap())
-    }
-}
-
-
-struct OIDConfigHandler { app: AppConfig }
-impl Handler for OIDConfigHandler {
-    fn handle(&self, _: &mut Request) -> IronResult<Response> {
-        json_response(&ObjectBuilder::new()
-            .insert("issuer", &self.app.base_url)
-            .insert("authorization_endpoint",
-                    format!("{}/auth", self.app.base_url))
-            .insert("jwks_uri", format!("{}/keys.json", self.app.base_url))
-            .insert("scopes_supported", vec!["openid", "email"])
-            .insert("claims_supported",
-                    vec!["aud", "email", "email_verified", "exp", "iat", "iss", "sub"])
-            .insert("response_types_supported", vec!["id_token"])
-            .insert("response_modes_supported", vec!["form_post"])
-            .insert("grant_types_supported", vec!["implicit"])
-            .insert("subject_types_supported", vec!["public"])
-            .insert("id_token_signing_alg_values_supported", vec!["RS256"])
-            .unwrap())
-    }
-}
-
-
 #[derive(Clone)]
 struct ProviderConfig {
     discovery: String,
@@ -145,6 +113,38 @@ impl AppConfig {
                 .collect::<BTreeMap<String, ProviderConfig>>(),
         }
 
+    }
+}
+
+
+struct WelcomeHandler { app: AppConfig }
+impl Handler for WelcomeHandler {
+    fn handle(&self, _: &mut Request) -> IronResult<Response> {
+        json_response(&ObjectBuilder::new()
+            .insert("ladaemon", "Welcome")
+            .insert("version", &self.app.version)
+            .unwrap())
+    }
+}
+
+
+struct OIDConfigHandler { app: AppConfig }
+impl Handler for OIDConfigHandler {
+    fn handle(&self, _: &mut Request) -> IronResult<Response> {
+        json_response(&ObjectBuilder::new()
+            .insert("issuer", &self.app.base_url)
+            .insert("authorization_endpoint",
+                    format!("{}/auth", self.app.base_url))
+            .insert("jwks_uri", format!("{}/keys.json", self.app.base_url))
+            .insert("scopes_supported", vec!["openid", "email"])
+            .insert("claims_supported",
+                    vec!["aud", "email", "email_verified", "exp", "iat", "iss", "sub"])
+            .insert("response_types_supported", vec!["id_token"])
+            .insert("response_modes_supported", vec!["form_post"])
+            .insert("grant_types_supported", vec!["implicit"])
+            .insert("subject_types_supported", vec!["public"])
+            .insert("id_token_signing_alg_values_supported", vec!["RS256"])
+            .unwrap())
     }
 }
 
