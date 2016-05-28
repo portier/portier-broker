@@ -201,9 +201,10 @@ fn oauth_request(app: &AppConfig, params: &QueryMap) -> IronResult<Response> {
 
     let provider = &app.providers[&email_addr.domain];
     let client = HttpClient::new();
-    let discovery_rsp = client.get(&provider.discovery).send().unwrap();
-    let discovery: Value = from_reader(discovery_rsp).unwrap();
-    let authz_base = discovery.find("authorization_endpoint").unwrap().as_string().unwrap();
+    let rsp = client.get(&provider.discovery).send().unwrap();
+    let val: Value = from_reader(rsp).unwrap();
+    let config = val.as_object().unwrap();
+    let authz_base = config["authorization_endpoint"].as_string().unwrap();
     let auth_url = Url::parse(&vec![
         authz_base,
         "?",
@@ -305,9 +306,10 @@ impl Handler for CallbackHandler {
 
         let client = HttpClient::new();
         let provider = &self.app.providers[&email_addr.domain];
-        let discovery_rsp = client.get(&provider.discovery).send().unwrap();
-        let discovery: Value = from_reader(discovery_rsp).unwrap();
-        let token_url = discovery.find("token_endpoint").unwrap().as_string().unwrap();
+        let rsp = client.get(&provider.discovery).send().unwrap();
+        let val: Value = from_reader(rsp).unwrap();
+        let config = val.as_object().unwrap();
+        let token_url = config["token_endpoint"].as_string().unwrap();
         let code = &params.get("code").unwrap()[0];
         let body: String = vec![
             "code=",
@@ -328,7 +330,7 @@ impl Handler for CallbackHandler {
         let token_obj: Value = from_reader(token_rsp).unwrap();
         let id_token = token_obj.find("id_token").unwrap().as_string().unwrap();
 
-        let keys_url = discovery.find("jwks_uri").unwrap().as_string().unwrap();
+        let keys_url = config["jwks_uri"].as_string().unwrap();
         let keys_rsp = client.get(keys_url).send().unwrap();
         let keys_doc: Value = from_reader(keys_rsp).unwrap();
         let parts: Vec<&str> = id_token.split(".").collect();
