@@ -427,25 +427,25 @@ fn main() {
     }
 
     let config_file = File::open(&args[1]).unwrap();
-    let config_reader = BufReader::new(config_file);
-    let config: Value = from_reader(config_reader).unwrap();
+    let config_value: Value = from_reader(BufReader::new(config_file)).unwrap();
+    let config = config_value.as_object().unwrap();
 
-    let key_file_name = config.find("private_key_file").unwrap().as_string().unwrap();
+    let key_file_name = config["private_key_file"].as_string().unwrap();
     let priv_key_file = File::open(key_file_name).unwrap();
     let mut reader = BufReader::new(priv_key_file);
-    let sender = config.find("sender").unwrap().as_object().unwrap();
+    let sender = config["sender"].as_object().unwrap();
     let app = AppConfig {
         version: env!("CARGO_PKG_VERSION").to_string(),
-        base_url: config.find("base_url").unwrap().as_string().unwrap().to_string(),
+        base_url: config["base_url"].as_string().unwrap().to_string(),
         priv_key: PKey::private_key_from_pem(&mut reader).unwrap(),
-        store: Client::open(config.find("redis").unwrap().as_string().unwrap()).unwrap(),
-        expire_keys: config.find("expire_keys").unwrap().as_u64().unwrap() as usize,
+        store: Client::open(config["redis"].as_string().unwrap()).unwrap(),
+        expire_keys: config["expire_keys"].as_u64().unwrap() as usize,
         sender: (
             sender["address"].as_string().unwrap().to_string(),
             sender["name"].as_string().unwrap().to_string(),
         ),
-        token_validity: config.find("token_validity").unwrap().as_i64().unwrap(),
-        providers: config.find("providers").unwrap().as_object().unwrap().iter()
+        token_validity: config["token_validity"].as_i64().unwrap(),
+        providers: config["providers"].as_object().unwrap().iter()
             .map(|(host, params)| {
                 let pobj = params.as_object().unwrap();
                 (host.clone(), ProviderConfig {
