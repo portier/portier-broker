@@ -104,7 +104,7 @@ struct AppConfig {
     priv_key: PKey,
     store: Client,
     expire_keys: usize,
-    sender: String,
+    sender: (String, String),
     token_validity: i64,
     providers: BTreeMap<String, ProviderConfig>,
 }
@@ -211,7 +211,7 @@ impl Handler for AuthHandler {
                            utf8_percent_encode(&chars, QUERY_ENCODE_SET));
         let email = EmailBuilder::new()
             .to(email_addr.to_string().as_str())
-            .from(self.app.sender.as_str())
+            .from((self.app.sender.0.as_str(), self.app.sender.1.as_str()))
             .body(&format!("Enter your login code:\n\n{}\n\nOr click this link:\n\n{}",
                            chars, href))
             .subject(&format!("Code: {} - Finish logging in to {}", chars, client_id))
@@ -433,13 +433,17 @@ fn main() {
     let key_file_name = config.find("private_key_file").unwrap().as_string().unwrap();
     let priv_key_file = File::open(key_file_name).unwrap();
     let mut reader = BufReader::new(priv_key_file);
+    let sender = config.find("sender").unwrap().as_object().unwrap();
     let app = AppConfig {
         version: env!("CARGO_PKG_VERSION").to_string(),
         base_url: config.find("base_url").unwrap().as_string().unwrap().to_string(),
         priv_key: PKey::private_key_from_pem(&mut reader).unwrap(),
         store: Client::open(config.find("redis").unwrap().as_string().unwrap()).unwrap(),
         expire_keys: config.find("expire_keys").unwrap().as_u64().unwrap() as usize,
-        sender: "Let's Auth <letsauth@xavamedia.nl>".to_string(),
+        sender: (
+            sender["address"].as_string().unwrap().to_string(),
+            sender["name"].as_string().unwrap().to_string(),
+        ),
         token_validity: config.find("token_validity").unwrap().as_i64().unwrap(),
         providers: config.find("providers").unwrap().as_object().unwrap().iter()
             .map(|(host, params)| {
