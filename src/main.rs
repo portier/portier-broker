@@ -14,8 +14,8 @@ extern crate urlencoded;
 
 use emailaddress::EmailAddress;
 use hyper::client::Client as HttpClient;
-use hyper::header::Headers;
 use hyper::header::ContentType as HyContentType;
+use hyper::header::Headers;
 use iron::headers::ContentType;
 use iron::middleware::Handler;
 use iron::modifiers;
@@ -23,13 +23,12 @@ use iron::prelude::*;
 use iron::status;
 use iron::Url;
 use lettre::email::EmailBuilder;
-use lettre::transport::smtp::SmtpTransportBuilder;
 use lettre::transport::EmailTransport;
-use urlencoded::{QueryMap, UrlEncodedBody, UrlEncodedQuery};
+use lettre::transport::smtp::SmtpTransportBuilder;
 use openssl::bn::BigNum;
+use openssl::crypto::hash;
 use openssl::crypto::pkey::PKey;
 use openssl::crypto::rsa::RSA;
-use openssl::crypto::hash;
 use serde_json::builder::ObjectBuilder;
 use serde_json::de::{from_reader, from_slice};
 use serde_json::value::Value;
@@ -46,6 +45,7 @@ use std::io::{self, BufReader, Write};
 use std::iter::Iterator;
 use time::now_utc;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
+use urlencoded::{QueryMap, UrlEncodedBody, UrlEncodedQuery};
 
 
 fn json_response(obj: &Value) -> IronResult<Response> {
