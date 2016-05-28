@@ -217,6 +217,35 @@ const FORWARD_TEMPLATE: &'static str = r#"<!DOCTYPE html>
 </html>"#;
 
 
+fn send_jwt_response(email: &str, origin: &str, redirect: &str, app: &AppConfig) -> IronResult<Response> {
+
+    let now = now_utc().to_timespec().sec;
+    let payload = ObjectBuilder::new()
+        .insert("aud", origin)
+        .insert("email", email)
+        .insert("email_verified", email)
+        .insert("exp", now + app.token_validity)
+        .insert("iat", now)
+        .insert("iss", &app.base_url)
+        .insert("sub", email)
+        .unwrap();
+    let headers = ObjectBuilder::new()
+        .insert("kid", "base")
+        .insert("alg", "RS256")
+        .unwrap();
+    let jwt = create_jwt(&app.priv_key,
+                         &serde_json::to_string(&headers).unwrap(),
+                         &serde_json::to_string(&payload).unwrap());
+
+    let html = FORWARD_TEMPLATE.replace("{{ return_url }}", redirect)
+        .replace("{{ jwt }}", &jwt);
+    let mut rsp = Response::with((status::Ok, html));
+    rsp.headers.set(ContentType::html());
+    Ok(rsp)
+
+}
+
+
 struct ConfirmHandler { app: AppConfig }
 impl Handler for ConfirmHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
@@ -234,34 +263,12 @@ impl Handler for ConfirmHandler {
             return json_response(&obj.unwrap());
         }
 
-        let now = now_utc().to_timespec().sec;
-        let payload = ObjectBuilder::new()
-            .insert("aud", origin)
-            .insert("email", email)
-            .insert("email_verified", email)
-            .insert("exp", now + self.app.token_validity)
-            .insert("iat", now)
-            .insert("iss", &self.app.base_url)
-            .insert("sub", email)
-            .unwrap();
-        let headers = ObjectBuilder::new()
-            .insert("kid", "base")
-            .insert("alg", "RS256")
-            .unwrap();
-        let jwt = create_jwt(&self.app.priv_key,
-                             &serde_json::to_string(&headers).unwrap(),
-                             &serde_json::to_string(&payload).unwrap());
-
         let redirect = stored.get("redirect").unwrap();
-        let html = FORWARD_TEMPLATE.replace("{{ return_url }}", redirect)
-            .replace("{{ jwt }}", &jwt);
-
-        let mut rsp = Response::with((status::Ok, html));
-        rsp.headers.set(ContentType::html());
-        Ok(rsp)
+        send_jwt_response(email, origin, redirect, &self.app)
 
     }
 }
+
 
 
 fn main() {
