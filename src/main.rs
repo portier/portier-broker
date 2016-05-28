@@ -329,13 +329,13 @@ impl Handler for CallbackHandler {
         let token_rsp = client.post(token_url).headers(headers).body(&body).send().unwrap();
         let token_obj: Value = from_reader(token_rsp).unwrap();
         let id_token = token_obj.find("id_token").unwrap().as_string().unwrap();
+        let parts: Vec<&str> = id_token.split(".").collect();
+        let jwt_header: Value = from_slice(&parts[0].from_base64().unwrap()).unwrap();
+        let kid = jwt_header.find("kid").unwrap().as_string().unwrap();
 
         let keys_url = config["jwks_uri"].as_string().unwrap();
         let keys_rsp = client.get(keys_url).send().unwrap();
         let keys_doc: Value = from_reader(keys_rsp).unwrap();
-        let parts: Vec<&str> = id_token.split(".").collect();
-        let jwt_header: Value = from_slice(&parts[0].from_base64().unwrap()).unwrap();
-        let kid = jwt_header.find("kid").unwrap().as_string().unwrap();
         let keys = keys_doc.find("keys").unwrap().as_array().unwrap().iter()
             .filter(|key_obj| {
                 key_obj.find("kid").unwrap().as_string().unwrap() == kid &&
@@ -350,6 +350,7 @@ impl Handler for CallbackHandler {
         let e = BigNum::new_from_slice(&e_b64.from_base64().unwrap()).unwrap();
         let mut pub_key = PKey::new();
         pub_key.set_rsa(&RSA::from_public_components(n, e).unwrap());
+
         let message = format!("{}.{}", parts[0], parts[1]);
         let sha256 = hash::hash(hash::Type::SHA256, &message.as_bytes());
         let sig = parts[2].from_base64().unwrap();
@@ -360,6 +361,7 @@ impl Handler for CallbackHandler {
         let iss = jwt_payload.find("iss").unwrap().as_string().unwrap();
         let issuer_origin = vec!["https://", &provider.issuer].join("");
         assert!(iss == provider.issuer || iss == issuer_origin);
+
         let aud = jwt_payload.find("aud").unwrap().as_string().unwrap();
         assert!(aud == provider.client_id);
         let token_addr = jwt_payload.find("email").unwrap().as_string().unwrap();
