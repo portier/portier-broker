@@ -184,7 +184,7 @@ const CODE_CHARS: &'static [char] = &[
 
 fn oauth_request(app: &AppConfig, params: &QueryMap) -> IronResult<Response> {
 
-    let email_addr = EmailAddress::new(&params.get("login_hint").unwrap()[0]);
+    let email_addr = EmailAddress::new(&params.get("login_hint").unwrap()[0]).unwrap();
     let client_id = &params.get("client_id").unwrap()[0];
     let key = format!("{}:{}", email_addr, client_id);
 
@@ -232,7 +232,7 @@ impl Handler for AuthHandler {
 
         let chars: String = (0..6).map(|_| CODE_CHARS[rand::random::<usize>() % CODE_CHARS.len()]).collect();
         let params = req.get_ref::<UrlEncodedBody>().unwrap();
-        let email_addr = EmailAddress::new(&params.get("login_hint").unwrap()[0]);
+        let email_addr = EmailAddress::new(&params.get("login_hint").unwrap()[0]).unwrap();
         if self.app.providers.contains_key(&email_addr.domain) {
             return oauth_request(&self.app, &params);
         }
@@ -290,7 +290,7 @@ impl Handler for CallbackHandler {
 
         let params = req.get_ref::<UrlEncodedQuery>().unwrap();
         let state: Vec<&str> = params.get("state").unwrap()[0].split(":").collect();
-        let email_addr = EmailAddress::new(state[0]);
+        let email_addr = EmailAddress::new(state[0]).unwrap();
         let origin = state[1..state.len() - 1].join(":");
         let nonce = state[state.len() - 1];
 
