@@ -218,20 +218,6 @@ impl Handler for KeysHandler {
 }
 
 
-/// Characters eligible for inclusion in the email loop one-time pad.
-///
-/// Currently includes all numbers, lower- and upper-case ASCII letters,
-/// except those that could potentially cause confusion when reading back.
-/// (That is, '1', '5', '8', '0', 'b', 'i', 'l', 'o', 's', 'u', 'B', 'D', 'I'
-/// and 'O'.)
-const CODE_CHARS: &'static [char] = &[
-    '2', '3', '4', '6', '7', '9', 'a', 'c', 'd', 'e', 'f', 'g', 'h', 'j', 'k',
-    'm', 'n', 'p', 'q', 'r', 't', 'v', 'w', 'x', 'y', 'z', 'A', 'C', 'E', 'F',
-    'G', 'H', 'J', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W',
-    'X', 'Y', 'Z',
-];
-
-
 /// Helper method to issue an OAuth authorization request.
 ///
 /// When an authentication request comes in and matches one of the "famous"
@@ -297,6 +283,20 @@ fn oauth_request(app: &AppConfig, params: &QueryMap) -> IronResult<Response> {
     Ok(Response::with((status::Found, modifiers::Redirect(auth_url))))
 
 }
+
+
+/// Characters eligible for inclusion in the email loop one-time pad.
+///
+/// Currently includes all numbers, lower- and upper-case ASCII letters,
+/// except those that could potentially cause confusion when reading back.
+/// (That is, '1', '5', '8', '0', 'b', 'i', 'l', 'o', 's', 'u', 'B', 'D', 'I'
+/// and 'O'.)
+const CODE_CHARS: &'static [char] = &[
+    '2', '3', '4', '6', '7', '9', 'a', 'c', 'd', 'e', 'f', 'g', 'h', 'j', 'k',
+    'm', 'n', 'p', 'q', 'r', 't', 'v', 'w', 'x', 'y', 'z', 'A', 'C', 'E', 'F',
+    'G', 'H', 'J', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W',
+    'X', 'Y', 'Z',
+];
 
 
 /// Iron handler for authentication requests from the RP.
