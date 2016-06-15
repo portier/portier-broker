@@ -309,13 +309,14 @@ struct AuthHandler { app: AppConfig }
 impl Handler for AuthHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
 
-        // Generate a 6-character one-time pad.
-        let chars: String = (0..6).map(|_| CODE_CHARS[rand::random::<usize>() % CODE_CHARS.len()]).collect();
         let params = req.get_ref::<UrlEncodedBody>().unwrap();
         let email_addr = EmailAddress::new(&params.get("login_hint").unwrap()[0]).unwrap();
         if self.app.providers.contains_key(&email_addr.domain) {
             return oauth_request(&self.app, &params);
         }
+
+        // Generate a 6-character one-time pad.
+        let chars: String = (0..6).map(|_| CODE_CHARS[rand::random::<usize>() % CODE_CHARS.len()]).collect();
 
         // Store data for this request in Redis, to reference when user uses
         // the generated link. TODO: the Redis key here and elsewhere scope by
