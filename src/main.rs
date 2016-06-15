@@ -36,7 +36,6 @@ use rand::{OsRng, Rng};
 use redis::{Client, Commands, RedisResult};
 use router::Router;
 use rustc_serialize::base64::{self, FromBase64, ToBase64};
-use rustc_serialize::hex::ToHex;
 use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::error::Error;
@@ -192,6 +191,24 @@ fn json_big_num(n: &BigNum) -> String {
 }
 
 
+/// Helper function to build a session ID for a login attempt.
+///
+/// Put the email address, the client ID (RP origin) and some randomness into
+/// a SHA256 hash, and encode it with URL-safe bas64 encoding. This is used
+/// as the key in Redis, as well as the state for OAuth authentication.
+fn session_id(email: &EmailAddress, client_id: &str) -> String {
+    let mut rng = OsRng::new().unwrap();
+    let mut bytes_iter = rng.gen_iter();
+    let rand_bytes: Vec<u8> = (0..16).map(|_| bytes_iter.next().unwrap()).collect();
+
+    let mut hasher = hash::Hasher::new(hash::Type::SHA256);
+    hasher.write(email.to_string().as_bytes()).unwrap();
+    hasher.write(client_id.as_bytes()).unwrap();
+    hasher.write(&rand_bytes).unwrap();
+    hasher.finish().to_base64(base64::URL_SAFE)
+}
+
+
 /// Iron handler for the JSON Web Key Set document.
 ///
 /// Currently only supports a single RSA key (as configured), which is
@@ -232,18 +249,14 @@ fn oauth_request(app: &AppConfig, params: &QueryMap) -> IronResult<Response> {
 
     let email_addr = EmailAddress::new(&params.get("login_hint").unwrap()[0]).unwrap();
     let client_id = &params.get("client_id").unwrap()[0];
-    let key = format!("{}:{}", email_addr, client_id);
-
-    // Generate random bytes in hex to act as our nonce.
-    let mut rng = OsRng::new().unwrap();
-    let mut bytes_iter = rng.gen_iter();
-    let rand_bytes: Vec<u8> = (0..128).map(|_| bytes_iter.next().unwrap()).collect();
-    let state = hash::hash(hash::Type::SHA256, &rand_bytes).to_hex();
+    let session = session_id(&email_addr, client_id);
 
     // Store the nonce and the RP's `redirect_uri` in Redis for use in the
     // callback handler.
+    let key = format!("session:{}", session);
     let _: String = app.store.hset_multiple(key.clone(), &[
-        ("state", state.clone()),
+        ("email", email_addr.to_string()),
+        ("client_id", client_id.clone()),
         ("redirect", params.get("redirect_uri").unwrap()[0].clone()),
     ]).unwrap();
     let _: bool = app.store.expire(key.clone(), app.expire_keys).unwrap();
@@ -273,7 +286,7 @@ fn oauth_request(app: &AppConfig, params: &QueryMap) -> IronResult<Response> {
         &utf8_percent_encode(&format!("{}/callback", &app.base_url),
                              QUERY_ENCODE_SET).to_string(),
         "&state=",
-        &utf8_percent_encode(&format!("{}:{}", key, state), QUERY_ENCODE_SET).to_string(),
+        &utf8_percent_encode(&session, QUERY_ENCODE_SET).to_string(),
         "&login_hint=",
         &utf8_percent_encode(&email_addr.to_string(), QUERY_ENCODE_SET).to_string(),
     ].join("")).unwrap();
@@ -319,23 +332,22 @@ impl Handler for AuthHandler {
         let chars: String = (0..6).map(|_| CODE_CHARS[rand::random::<usize>() % CODE_CHARS.len()]).collect();
 
         // Store data for this request in Redis, to reference when user uses
-        // the generated link. TODO: the Redis key here and elsewhere scope by
-        // RP origin and user email. This means separate login attempts cannot
-        // be distinguished. Origin and email are also exposed in the generated
-        // URL. It might be better to hash or HMAC the key.
+        // the generated link.
         let client_id = &params.get("client_id").unwrap()[0];
-        let key = format!("{}:{}", email_addr, client_id);
+        let session = session_id(&email_addr, client_id);
+        let key = format!("session:{}", session);
         let set_res: RedisResult<String> = self.app.store.hset_multiple(key.clone(), &[
+            ("email", email_addr.to_string()),
+            ("client_id", client_id.clone()),
             ("code", chars.clone()),
             ("redirect", params.get("redirect_uri").unwrap()[0].clone()),
         ]);
         let exp_res: RedisResult<bool> = self.app.store.expire(key.clone(), self.app.expire_keys);
 
         // Generate the URL used to verify email address ownership.
-        let href = format!("{}/confirm?email={}&origin={}&code={}",
+        let href = format!("{}/confirm?session={}&code={}",
                            self.app.base_url,
-                           utf8_percent_encode(&email_addr.to_string(), QUERY_ENCODE_SET),
-                           utf8_percent_encode(client_id, QUERY_ENCODE_SET),
+                           utf8_percent_encode(&session, QUERY_ENCODE_SET),
                            utf8_percent_encode(&chars, QUERY_ENCODE_SET));
 
         // Generate a simple email and send it through the SMTP server running
@@ -392,21 +404,20 @@ impl Handler for CallbackHandler {
 
         // Extract arguments from the query string.
         let params = req.get_ref::<UrlEncodedQuery>().unwrap();
-        let state: Vec<&str> = params.get("state").unwrap()[0].split(":").collect();
-        let email_addr = EmailAddress::new(state[0]).unwrap();
-        let origin = state[1..state.len() - 1].join(":");
-        let nonce = state[state.len() - 1];
+        let session = &params.get("state").unwrap()[0];
 
         // Validate that the callback matches an auth request in Redis.
-        let key = format!("{}:{}", state[0], origin);
+        let key = format!("session:{}", session);
         let stored: HashMap<String, String> = self.app.store.hgetall(key.clone()).unwrap();
-        if stored.get("state").is_none() || nonce != stored.get("state").unwrap() {
+        if stored.len() == 0 {
             let obj = ObjectBuilder::new()
                 .insert("error", "nonce fail")
-                .insert("key", key)
-                .insert("stored", stored);
+                .insert("key", key);
             return json_response(&obj.unwrap());
         }
+
+        let email_addr = EmailAddress::new(stored.get("email").unwrap()).unwrap();
+        let origin = stored.get("client_id").unwrap();
 
         // Request the provider's Discovery document to get the
         // `token_endpoint` and `jwks_uri` values from it. TODO: save these
@@ -489,7 +500,7 @@ impl Handler for CallbackHandler {
         let aud = jwt_payload.find("aud").unwrap().as_string().unwrap();
         assert!(aud == provider.client_id);
         let token_addr = jwt_payload.find("email").unwrap().as_string().unwrap();
-        assert!(token_addr == state[0]);
+        assert!(token_addr == email_addr.to_string());
         let now = now_utc().to_timespec().sec;
         let exp = jwt_payload.find("exp").unwrap().as_i64().unwrap();
         assert!(now < exp);
@@ -497,7 +508,7 @@ impl Handler for CallbackHandler {
         // If everything is okay, build a new identity token and send it
         // to the relying party.
         let redirect = stored.get("redirect").unwrap();
-        send_jwt_response(&self.app, state[0], &origin, redirect)
+        send_jwt_response(&self.app, &email_addr.to_string(), &origin, redirect)
 
     }
 }
@@ -586,20 +597,25 @@ impl Handler for ConfirmHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
 
         let params = req.get_ref::<UrlEncodedQuery>().unwrap();
-        let email = &params.get("email").unwrap()[0];
-        let origin = &params.get("origin").unwrap()[0];
-        let key = format!("{}:{}", email, origin);
+        let session = &params.get("session").unwrap()[0];
+        let key = format!("session:{}", session);
         let stored: HashMap<String, String> = self.app.store.hgetall(key.clone()).unwrap();
+        if stored.len() == 0 {
+            let obj = ObjectBuilder::new().insert("error", "not found");
+            return json_response(&obj.unwrap());
+        }
 
         let req_code = &params.get("code").unwrap()[0];
-        if stored.get("code").is_none() || req_code != stored.get("code").unwrap() {
+        if req_code != stored.get("code").unwrap() {
             let mut obj = ObjectBuilder::new().insert("error", "code fail");
             obj = obj.insert("stored", stored);
             return json_response(&obj.unwrap());
         }
 
+        let email = stored.get("email").unwrap();
+        let client_id = stored.get("client_id").unwrap();
         let redirect = stored.get("redirect").unwrap();
-        send_jwt_response(&self.app, email, origin, redirect)
+        send_jwt_response(&self.app, email, client_id, redirect)
 
     }
 }
