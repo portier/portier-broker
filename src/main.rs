@@ -352,11 +352,9 @@ impl Handler for AuthHandler {
         mailer.close();
 
         // TODO: for debugging, this part returns a JSON response with some
-        // debugging stuff/diagnostics. Since it currently also inserts the
-        // generated link, users do not actually have to own the email
-        // address... 
-        let mut obj = ObjectBuilder::new()
-            .insert("href", href);
+        // debugging stuff/diagnostics. Instead, it should return a form that
+        // allows the user to enter the code they have received.
+        let mut obj = ObjectBuilder::new();
         if !result.is_ok() {
             let error = result.unwrap_err();
             obj = obj.insert("error", error.to_string());
