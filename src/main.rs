@@ -4,7 +4,7 @@ extern crate router;
 
 use iron::prelude::Iron;
 use ladaemon::AppConfig;
-use ladaemon::handlers::{Welcome, OIDConfigHandler, KeysHandler, AuthHandler, ConfirmHandler, CallbackHandler};
+use ladaemon::handlers;
 use router::Router;
 use std::env;
 use std::io::{self, Write};
@@ -28,13 +28,13 @@ fn main() {
     // if the handlers could just be a function, instead of single-method
     // impls.
     let mut router = Router::new();
-    router.get("/", Welcome { app: app.clone() });
+    router.get("/", handlers::Welcome { app: app.clone() });
     router.get("/.well-known/openid-configuration",
-               OIDConfigHandler { app: app.clone() });
-    router.get("/keys.json", KeysHandler { app: app.clone() });
-    router.post("/auth", AuthHandler { app: app.clone() });
-    router.get("/confirm", ConfirmHandler { app: app.clone() });
-    router.get("/callback", CallbackHandler { app: app.clone() });
+               handlers::OIDCConfig { app: app.clone() });
+    router.get("/keys.json", handlers::Keys { app: app.clone() });
+    router.post("/auth", handlers::Auth { app: app.clone() });
+    router.get("/confirm", handlers::Confirm { app: app.clone() });
+    router.get("/callback", handlers::Callback { app: app.clone() });
 
     // Iron will take care of stuff from here. It should spin up a number of
     // threads according to the number of cores available. TODO: make the

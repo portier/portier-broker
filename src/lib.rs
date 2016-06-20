@@ -22,7 +22,6 @@ use iron::prelude::{IronResult, Response};
 use iron::status;
 use iron::Url;
 use lettre::transport::EmailTransport;
-use openssl::bn::BigNum;
 use openssl::crypto::hash;
 use openssl::crypto::pkey::PKey;
 use serde_json::builder::ObjectBuilder;
@@ -38,17 +37,6 @@ use std::iter::Iterator;
 use time::now_utc;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 use urlencoded::QueryMap;
-
-/// Helper function for returning an Iron response with JSON data.
-///
-/// Serializes the argument value to JSON and returns a HTTP 200 response
-/// code with the serialized JSON as the body.
-fn json_response(obj: &Value) -> IronResult<Response> {
-    let content = serde_json::to_string(&obj).unwrap();
-    let mut rsp = Response::with((status::Ok, content));
-    rsp.headers.set(ContentType::json());
-    Ok(rsp)
-}
 
 
 /// Configuration data for a "famous" identity provider.
@@ -136,15 +124,6 @@ impl AppConfig {
 }
 
 
-/// Helper function to encode a `BigNum` as URL-safe base64-encoded bytes.
-///
-/// This is used for the public RSA key components returned by the
-/// `KeysHandler`.
-fn json_big_num(n: &BigNum) -> String {
-    n.to_vec().to_base64(base64::URL_SAFE)
-}
-
-
 /// Helper function to build a session ID for a login attempt.
 ///
 /// Put the email address, the client ID (RP origin) and some randomness into
@@ -163,8 +142,6 @@ fn session_id(email: &EmailAddress, client_id: &str) -> String {
 }
 
 
-
-
 /// Helper method to issue an OAuth authorization request.
 ///
 /// When an authentication request comes in and matches one of the "famous"
@@ -176,7 +153,6 @@ fn session_id(email: &EmailAddress, client_id: &str) -> String {
 /// Authentication Request. Included in the request is a nonce which we can
 /// later use to definitively match the callback to this request.
 fn oauth_request(app: &AppConfig, params: &QueryMap) -> IronResult<Response> {
-
     let email_addr = EmailAddress::new(&params.get("login_hint").unwrap()[0]).unwrap();
     let client_id = &params.get("client_id").unwrap()[0];
     let session = session_id(&email_addr, client_id);
@@ -224,7 +200,6 @@ fn oauth_request(app: &AppConfig, params: &QueryMap) -> IronResult<Response> {
     // agent MAY change the request method from POST to GET for the subsequent
     // request.
     Ok(Response::with((status::Found, modifiers::Redirect(auth_url))))
-
 }
 
 
@@ -286,7 +261,6 @@ const FORWARD_TEMPLATE: &'static str = r#"<!DOCTYPE html>
 /// in a form that's POSTed to the RP's `redirect_uri` as soon as the page
 /// is loaded.
 fn send_jwt_response(app: &AppConfig, email: &str, origin: &str, redirect: &str) -> IronResult<Response> {
-
     let now = now_utc().to_timespec().sec;
     let payload = ObjectBuilder::new()
         .insert("aud", origin)
@@ -310,5 +284,4 @@ fn send_jwt_response(app: &AppConfig, email: &str, origin: &str, redirect: &str)
     let mut rsp = Response::with((status::Ok, html));
     rsp.headers.set(ContentType::html());
     Ok(rsp)
-
 }
