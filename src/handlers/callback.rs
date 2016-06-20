@@ -22,8 +22,8 @@ use std::iter::Iterator;
 use time::now_utc;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 use urlencoded::UrlEncodedQuery;
-use {AppConfig, send_jwt_response};
-use super::json_response;
+use AppConfig;
+use super::{json_response, send_jwt_response};
 
 /// Iron handler for OAuth callbacks
 ///

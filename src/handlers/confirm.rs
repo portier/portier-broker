@@ -7,8 +7,8 @@ use serde_json::builder::ObjectBuilder;
 use redis::Commands;
 use std::collections::HashMap;
 use urlencoded::UrlEncodedQuery;
-use {AppConfig, send_jwt_response};
-use super::json_response;
+use AppConfig;
+use super::{json_response, send_jwt_response};
 
 /// Iron handler for one-time pad email loop confirmation.
 ///
