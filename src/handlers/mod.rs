@@ -33,7 +33,7 @@ pub use self::confirm::Confirm;
 ///
 /// Serializes the argument value to JSON and returns a HTTP 200 response
 /// code with the serialized JSON as the body.
-fn json_response(obj: &Value) -> IronResult<Response> {
+pub fn json_response(obj: &Value) -> IronResult<Response> {
     let content = serde_json::to_string(&obj).unwrap();
     let mut rsp = Response::with((status::Ok, content));
     rsp.headers.set(ContentType::json());
