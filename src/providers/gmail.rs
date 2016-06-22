@@ -20,7 +20,6 @@ use iron::modifiers;
 use iron::prelude::{IronResult, Response};
 use iron::status;
 use iron::Url;
-use lettre::transport::EmailTransport;
 use serde_json::de::from_reader;
 use serde_json::value::Value;
 use redis::Commands;

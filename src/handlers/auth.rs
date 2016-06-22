@@ -5,7 +5,6 @@ use iron::middleware::Handler;
 use iron::prelude::*;
 use providers::gmail;
 use providers::smtp;
-use redis::Commands;
 use urlencoded::UrlEncodedBody;
 use {AppConfig};
 
@@ -21,7 +20,7 @@ impl Handler for Auth {
         let params = req.get_ref::<UrlEncodedBody>().unwrap();
         let email_addr = EmailAddress::new(&params.get("login_hint").unwrap()[0]).unwrap();
         if self.app.providers.contains_key(&email_addr.domain) {
-            gmail::authenticate(&self.app, &params)
+            gmail::authenticate(&self.app, params)
         } else {
             smtp::authenticate(&email_addr,
                                &self.app,

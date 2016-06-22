@@ -24,7 +24,7 @@ impl Handler for Confirm {
         let session = &params.get("session").unwrap()[0];
         let key = format!("session:{}", session);
         let stored: HashMap<String, String> = self.app.store.hgetall(key.clone()).unwrap();
-        if stored.len() == 0 {
+        if stored.is_empty() {
             let obj = ObjectBuilder::new().insert("error", "not found");
             return json_response(&obj.unwrap());
         }

@@ -31,19 +31,19 @@ const CODE_CHARS: &'static [char] = &[
 ];
 
 
-pub fn authenticate(email: &EmailAddress, app: &AppConfig, client_id: &String, redirect_uri: &String) -> IronResult<Response> {
+pub fn authenticate(email: &EmailAddress, app: &AppConfig, client_id: &str, redirect_uri: &str) -> IronResult<Response> {
     // Generate a 6-character one-time pad.
     let chars: String = (0..6).map(|_| CODE_CHARS[rand::random::<usize>() % CODE_CHARS.len()]).collect();
 
     // Store data for this request in Redis, to reference when user uses
     // the generated link.
-    let session = session_id(&email, &client_id);
+    let session = session_id(email, client_id);
     let key = format!("session:{}", session);
     let set_res: RedisResult<String> = app.store.hset_multiple(key.clone(), &[
         ("email", email.to_string()),
-        ("client_id", client_id.clone()),
+        ("client_id", client_id.to_string()),
         ("code", chars.clone()),
-        ("redirect", redirect_uri.clone())
+        ("redirect", redirect_uri.to_string())
     ]);
     let exp_res: RedisResult<bool> = app.store.expire(key.clone(), app.expire_keys);
 
