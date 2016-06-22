@@ -1,35 +1,34 @@
+extern crate docopt;
 extern crate iron;
 extern crate ladaemon;
-
 #[macro_use(router)]
 extern crate router;
+extern crate rustc_serialize;
 
+use docopt::Docopt;
 use iron::prelude::Iron;
 use ladaemon::AppConfig;
 use ladaemon::handlers;
-use std::env;
-use std::io::{self, Write};
-use std::process::exit;
 
-const USAGE: &'static str = "Usage: ladaemon file";
+// Usage string, parsed according to http://docopt.org/
+const USAGE: &'static str = "
+Let's Auth.
+
+Usage: ladaemon CONFIG
+";
+
+#[derive(RustcDecodable)]
+#[allow(non_snake_case)]
+struct Args {
+    arg_CONFIG: String,
+}
 
 fn main() {
+    let args: Args = Docopt::new(USAGE)
+        .and_then(|d| d.decode())
+        .unwrap_or_else(|e| e.exit());
 
-    // Make sure we get a file name where we can find configuration.
-    let args = env::args().collect::<Vec<String>>();
-    if args.len() != 2 {
-        let error = if args.len() < 2 {
-                "Error: No configuration file specified"
-            } else {
-                "Error: Too many parameters specified"
-            };
-
-        write!(io::stderr(), "{}\n{}\n", error, USAGE).unwrap_or(());
-        exit(1);
-    }
-
-    // Read the configuration from the provided file.
-    let app = AppConfig::from_json_file(&args[1]);
+    let app = AppConfig::from_json_file(&args.arg_CONFIG);
 
     let router = router!{
         // Website Endpoints
