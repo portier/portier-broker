@@ -14,13 +14,23 @@ use iron::prelude::Iron;
 use ladaemon::AppConfig;
 use ladaemon::handlers;
 
+/// Defines the program's version, as set by Cargo at compile time.
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
 /// Defines the program's usage string.
 ///
 /// [Docopt](http://docopt.org) parses this and generates a custom argv parser.
 const USAGE: &'static str = "
 Let's Auth.
 
-Usage: ladaemon CONFIG
+Usage:
+  ladaemon CONFIG
+  ladaemon -V | --version
+  ladaemon -h | --help
+
+Options:
+  -V, --version  Print version information and exit
+  -h, --help     Print this help message and exit
 ";
 
 /// Holds parsed command line parameters.
@@ -33,7 +43,7 @@ struct Args {
 /// Starts the server.
 fn main() {
     let args: Args = Docopt::new(USAGE)
-                         .and_then(|d| d.decode())
+                         .and_then(|d| d.version(Some(VERSION.to_string())).decode())
                          .unwrap_or_else(|e| e.exit());
 
     let app = AppConfig::from_json_file(&args.arg_CONFIG);
