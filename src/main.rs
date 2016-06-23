@@ -48,7 +48,8 @@ fn main() {
                          .unwrap_or_else(|e| e.exit());
 
     let app = AppConfig::from_json_file(&args.arg_CONFIG).unwrap_or_else(|e| {
-        write!(stderr(), "Failed to read configuration: {}\n", e).ok();
+        // FIXME: Replace {:?} with {} when from_json_file returns Errors
+        write!(stderr(), "Failed to read configuration: {:?}\n", e).ok();
         std::process::exit(1)
     });
 
