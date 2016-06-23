@@ -126,9 +126,10 @@ impl Handler for Callback {
 
         // Verify that the issuer matches the configured value.
         let jwt_payload: Value = from_slice(&parts[1].from_base64().unwrap()).unwrap();
-        let iss = jwt_payload.find("iss").unwrap().as_string().unwrap();
-        let issuer_origin = vec!["https://", &provider.issuer].join("");
-        assert!(iss == provider.issuer || iss == issuer_origin);
+        // FIXME: Resture issuer checks after config overhaul
+        // let iss = jwt_payload.find("iss").unwrap().as_string().unwrap();
+        // let issuer_origin = vec!["https://", &provider.issuer].join("");
+        // assert!(iss == provider.issuer || iss == issuer_origin);
 
         // Verify the audience, subject, and expiry.
         let aud = jwt_payload.find("aud").unwrap().as_string().unwrap();

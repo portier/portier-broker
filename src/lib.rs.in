@@ -22,27 +22,10 @@ use serde_json::de::from_reader;
 use rand::{OsRng, Rng};
 use redis::Client;
 use rustc_serialize::base64::{self, ToBase64};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, Write};
 use std::iter::Iterator;
-
-
-/// Configuration data for a "famous" identity provider.
-///
-/// Used as part of the `AppConfig` struct.
-#[derive(Clone)]
-struct ProviderConfig {
-    /// URL pointing to the OpenID configuration document.
-    discovery: String,
-    /// Client ID issued for this daemon instance by the provider.
-    client_id: String,
-    /// Secret issued for this daemon instance by the provider.
-    secret: String,
-    /// Issuer origin as used in identity tokens issued by the provider.
-    /// Used to check that the issuer in the token matches expectations.
-    issuer: String,
-}
 
 
 /// Configuration data for this daemon instance.
@@ -66,11 +49,11 @@ pub struct AppConfig {
     /// A map of "famous" identity providers. Each key is an email domain,
     /// the value holds the configuration required to act as an application
     /// doing OpenID Connect against the provider.
-    providers: BTreeMap<String, ProviderConfig>,
+    providers: HashMap<String, Provider>,
 }
 
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct Config {
     base_url: String,
     private_key_file: String,
@@ -81,7 +64,7 @@ pub struct Config {
     providers: HashMap<String, Provider>,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct Provider {
     discovery: String,
     client_id: String,
@@ -100,15 +83,6 @@ impl AppConfig {
 
         let store = Client::open(&*config.redis).unwrap();
 
-        let providers = config.providers.into_iter().map(|(host, params)|
-            (host, ProviderConfig {
-                discovery: params.discovery,
-                client_id: params.client_id,
-                secret: params.secret,
-                issuer: "".to_string(), // FIXME, not present in test.json, but checked by previous code
-            })
-        ).collect::<BTreeMap<String, ProviderConfig>>();
-
         Ok(AppConfig {
             version: env!("CARGO_PKG_VERSION").to_string(),
             base_url: config.base_url,
@@ -117,7 +91,7 @@ impl AppConfig {
             store: store,
             expire_keys: config.expire_keys,
             token_validity: config.token_validity as i64, // FIXME: Why was this an i64?
-            providers: providers,
+            providers: config.providers,
         })
     }
 }
