@@ -13,6 +13,7 @@ use docopt::Docopt;
 use iron::prelude::Iron;
 use ladaemon::AppConfig;
 use ladaemon::handlers;
+use std::io::{Write, stderr};
 
 /// Defines the program's version, as set by Cargo at compile time.
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -46,7 +47,10 @@ fn main() {
                          .and_then(|d| d.version(Some(VERSION.to_string())).decode())
                          .unwrap_or_else(|e| e.exit());
 
-    let app = AppConfig::from_json_file(&args.arg_CONFIG);
+    let app = AppConfig::from_json_file(&args.arg_CONFIG).unwrap_or_else(|e| {
+        write!(stderr(), "Failed to read configuration: {}\n", e).ok();
+        std::process::exit(1)
+    });
 
     let router = router!{
         // Website Endpoints

@@ -25,7 +25,7 @@ use redis::Client;
 use rustc_serialize::base64::{self, ToBase64};
 use std::collections::BTreeMap;
 use std::fs::File;
-use std::io::{BufReader, Write};
+use std::io::{BufReader, Error, Write};
 use std::iter::Iterator;
 
 
@@ -73,9 +73,9 @@ pub struct AppConfig {
 
 /// Implementation with single method to read configuration from JSON.
 impl AppConfig {
-    pub fn from_json_file(file_name: &str) -> AppConfig {
+    pub fn from_json_file(file_name: &str) -> Result<AppConfig, Error> {
 
-        let config_file = File::open(file_name).unwrap();
+        let config_file = try!(File::open(file_name));
         let config_value: Value = from_reader(BufReader::new(config_file)).unwrap();
         let config = config_value.as_object().unwrap();
 
@@ -85,7 +85,7 @@ impl AppConfig {
         let priv_key_file = File::open(key_file_name).unwrap();
         let mut reader = BufReader::new(priv_key_file);
         let sender = config["sender"].as_object().unwrap();
-        AppConfig {
+        Ok(AppConfig {
             // Use the crate's version as defined in Cargo.toml.
             version: env!("CARGO_PKG_VERSION").to_string(),
             base_url: config["base_url"].as_string().unwrap().to_string(),
@@ -108,7 +108,7 @@ impl AppConfig {
                     })
                 })
                 .collect::<BTreeMap<String, ProviderConfig>>(),
-        }
+        })
 
     }
 }
