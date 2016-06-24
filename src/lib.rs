@@ -15,6 +15,7 @@ pub mod oidc;
 use emailaddress::EmailAddress;
 use iron::headers::ContentType;
 use iron::middleware::Handler;
+use iron::modifiers;
 use iron::prelude::*;
 use iron::status;
 use openssl::bn::BigNum;
@@ -233,12 +234,22 @@ impl Handler for AuthHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
         let params = req.get_ref::<UrlEncodedBody>().unwrap();
         let email_addr = EmailAddress::new(&params.get("login_hint").unwrap()[0]).unwrap();
-        let helper = if self.app.providers.contains_key(&email_addr.domain) {
-            oidc::request
+        if self.app.providers.contains_key(&email_addr.domain) {
+
+            // OIDC authentication. Using 302 Found for redirection here. Note
+            // that, per RFC 7231, a user agent MAY change the request method
+            // from POST to GET for the subsequent request.
+            let auth_url = oidc::request(&self.app, params);
+            Ok(Response::with((status::Found, modifiers::Redirect(auth_url))))
+
         } else {
-            email::request
-        };
-        helper(&self.app, params)
+
+            // Email loop authentication. For now, returns a JSON response;
+            // empty if successful, otherwise contains an error.
+            let obj = email::request(&self.app, params);
+            json_response(&obj)
+
+        }
     }
 }
 

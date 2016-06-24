@@ -2,9 +2,7 @@ extern crate hyper;
 
 use emailaddress::EmailAddress;
 use iron::middleware::Handler;
-use iron::modifiers;
 use iron::prelude::*;
-use iron::status;
 use iron::Url;
 use openssl::bn::BigNum;
 use openssl::crypto::hash;
@@ -36,7 +34,7 @@ use urlencoded::{QueryMap, UrlEncodedQuery};
 /// user will be redirected back to after confirming (or denying) the
 /// Authentication Request. Included in the request is a nonce which we can
 /// later use to definitively match the callback to this request.
-pub fn request(app: &AppConfig, params: &QueryMap) -> IronResult<Response> {
+pub fn request(app: &AppConfig, params: &QueryMap) -> Url {
 
     let email_addr = EmailAddress::new(&params.get("login_hint").unwrap()[0]).unwrap();
     let client_id = &params.get("client_id").unwrap()[0];
@@ -65,7 +63,7 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> IronResult<Response> {
     let authz_base = config["authorization_endpoint"].as_string().unwrap();
 
     // Create the URL to redirect to, properly escaping all parameters.
-    let auth_url = Url::parse(&vec![
+    Url::parse(&vec![
         authz_base,
         "?",
         "client_id=",
@@ -80,11 +78,7 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> IronResult<Response> {
         &utf8_percent_encode(&session, QUERY_ENCODE_SET).to_string(),
         "&login_hint=",
         &utf8_percent_encode(&email_addr.to_string(), QUERY_ENCODE_SET).to_string(),
-    ].join("")).unwrap();
-    // Using 302 Found for redirection here. Note that, per RFC 7231, a user
-    // agent MAY change the request method from POST to GET for the subsequent
-    // request.
-    Ok(Response::with((status::Found, modifiers::Redirect(auth_url))))
+    ].join("")).unwrap()
 
 }
 

@@ -9,6 +9,7 @@ use self::lettre::email::EmailBuilder;
 use self::lettre::transport::EmailTransport;
 use self::lettre::transport::smtp::SmtpTransportBuilder;
 use serde_json::builder::ObjectBuilder;
+use serde_json::value::Value;
 use super::{AppConfig, session_id, json_response, send_jwt_response};
 use std::collections::HashMap;
 use std::error::Error;
@@ -37,7 +38,7 @@ const CODE_CHARS: &'static [char] = &[
 /// authentication, create a randomly-generated one-time pad. Then, send
 /// an email containing a link with the secret. Clicking the link will trigger
 /// the `ConfirmHandler`, returning an authentication result to the RP.
-pub fn request(app: &AppConfig, params: &QueryMap) -> IronResult<Response> {
+pub fn request(app: &AppConfig, params: &QueryMap) -> Value {
 
     // Generate a 6-character one-time pad.
     let email_addr = EmailAddress::new(&params.get("login_hint").unwrap()[0]).unwrap();
@@ -96,7 +97,7 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> IronResult<Response> {
     if !exp_res.is_ok() {
         obj = obj.insert("expire", exp_res.unwrap_err().to_string());
     }
-    json_response(&obj.unwrap())
+    obj.unwrap()
 
 }
 
