@@ -28,13 +28,20 @@ fn main() {
     // if the handlers could just be a function, instead of single-method
     // impls.
     let router = router!{
+
+        // Human-targeted endpoints
         get "/" => ladaemon::WelcomeHandler { app: app.clone() },
+        get "/confirm" => ladaemon::ConfirmHandler { app: app.clone() },
+
+        // OpenID Connect provider endpoints
         get "/.well-known/openid-configuration" =>
                ladaemon::OIDConfigHandler { app: app.clone() },
         get "/keys.json" => ladaemon::KeysHandler { app: app.clone() },
         post "/auth" => ladaemon::AuthHandler { app: app.clone() },
-        get "/confirm" => ladaemon::ConfirmHandler { app: app.clone() },
+
+        // OpenID Connect relying party endpoints
         get "/callback" => ladaemon::CallbackHandler { app: app.clone() },
+
     };
 
     // Iron will take care of stuff from here. It should spin up a number of
