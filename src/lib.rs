@@ -32,7 +32,7 @@ use std::fs::File;
 use std::io::{BufReader, Write};
 use std::iter::Iterator;
 use time::now_utc;
-use urlencoded::UrlEncodedBody;
+use urlencoded::{UrlEncodedBody, UrlEncodedQuery};
 
 
 /// Helper function for returning an Iron response with JSON data.
@@ -326,4 +326,28 @@ fn send_jwt_response(jwt: &str, redirect: &str) -> IronResult<Response> {
     let mut rsp = Response::with((status::Ok, html));
     rsp.headers.set(ContentType::html());
     Ok(rsp)
+}
+
+
+/// Iron handler for one-time pad email loop confirmation.
+///
+/// Retrieves the session based session ID and the expected one-time pad. If
+/// an error occurs, returns a JSON object with an error message. Otherwise,
+/// send an identity token to the RP. TODO: the former is obviously wrong.
+pub struct ConfirmHandler { pub app: AppConfig }
+impl Handler for ConfirmHandler {
+    fn handle(&self, req: &mut Request) -> IronResult<Response> {
+        let params = req.get_ref::<UrlEncodedQuery>().unwrap();
+        let session_id = &params.get("session").unwrap()[0];
+        let code = &params.get("code").unwrap()[0];
+        let res = email::verify(&self.app, session_id, code);
+        if res.is_err() {
+            json_response(&ObjectBuilder::new()
+                          .insert("error", res.unwrap_err())
+                          .unwrap())
+        } else {
+            let (jwt, redirect) = res.unwrap();
+            send_jwt_response(&jwt, &redirect)
+        }
+    }
 }

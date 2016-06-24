@@ -2,20 +2,18 @@ extern crate lettre;
 extern crate rand;
 
 use emailaddress::EmailAddress;
-use iron::middleware::Handler;
-use iron::prelude::*;
 use redis::{Commands, RedisResult};
 use self::lettre::email::EmailBuilder;
 use self::lettre::transport::EmailTransport;
 use self::lettre::transport::smtp::SmtpTransportBuilder;
 use serde_json::builder::ObjectBuilder;
 use serde_json::value::Value;
-use super::{AppConfig, create_jwt, session_id, json_response, send_jwt_response};
+use super::{AppConfig, create_jwt, session_id};
 use std::collections::HashMap;
 use std::error::Error;
 use std::iter::Iterator;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
-use urlencoded::{QueryMap, UrlEncodedQuery};
+use urlencoded::QueryMap;
 
 
 /// Characters eligible for inclusion in the email loop one-time pad.
@@ -101,37 +99,25 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> Value {
 
 }
 
-/// Iron handler for one-time pad email loop confirmation.
+/// Helper function for verification of one-time pad sent through email.
 ///
-/// Verifies the one-time pad as provided in the query string arguments against
-/// the data saved in Redis. If the code matches, send an identity token to the
-/// RP using `send_jwt_response()`. Otherwise, returns a JSON response with an
-/// error message. TODO: the latter is obviously wrong.
-pub struct ConfirmHandler { pub app: AppConfig }
-impl Handler for ConfirmHandler {
-    fn handle(&self, req: &mut Request) -> IronResult<Response> {
+/// Checks that the session exists and matches the one-time pad. If so,
+/// returns the Identity Token; otherwise, returns an error message.
+pub fn verify(app: &AppConfig, session: &str, code: &str)
+              -> Result<(String, String), &'static str> {
 
-        let params = req.get_ref::<UrlEncodedQuery>().unwrap();
-        let session = &params.get("session").unwrap()[0];
-        let key = format!("session:{}", session);
-        let stored: HashMap<String, String> = self.app.store.hgetall(key.clone()).unwrap();
-        if stored.is_empty() {
-            let obj = ObjectBuilder::new().insert("error", "not found");
-            return json_response(&obj.unwrap());
-        }
-
-        let req_code = &params.get("code").unwrap()[0];
-        if req_code != stored.get("code").unwrap() {
-            let mut obj = ObjectBuilder::new().insert("error", "code fail");
-            obj = obj.insert("stored", stored);
-            return json_response(&obj.unwrap());
-        }
-
-        let email = stored.get("email").unwrap();
-        let client_id = stored.get("client_id").unwrap();
-        let redirect = stored.get("redirect").unwrap();
-        let id_token = create_jwt(&self.app, email, client_id);
-        send_jwt_response(&id_token, redirect)
-
+    let key = format!("session:{}", session);
+    let stored: HashMap<String, String> = app.store.hgetall(key.clone()).unwrap();
+    if stored.is_empty() {
+        return Err("session not found");
+    } else if code != stored.get("code").unwrap() {
+        return Err("incorrect code");
     }
+
+    let email = stored.get("email").unwrap();
+    let client_id = stored.get("client_id").unwrap();
+    let id_token = create_jwt(app, email, client_id);
+    let redirect = stored.get("redirect").unwrap().to_string();
+    Ok((id_token, redirect))
+
 }
