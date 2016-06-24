@@ -66,7 +66,7 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> Value {
     // using templates for the email message.
     let email = EmailBuilder::new()
         .to(email_addr.to_string().as_str())
-        .from((app.sender.0.as_str(), app.sender.1.as_str()))
+        .from((&*app.sender.address, &*app.sender.name))
         .body(&format!("Enter your login code:\n\n{}\n\nOr click this link:\n\n{}",
                        chars, href))
         .subject(&format!("Code: {} - Finish logging in to {}", chars, client_id))

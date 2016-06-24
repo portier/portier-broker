@@ -22,7 +22,6 @@ use serde_json::builder::ObjectBuilder;
 use serde_json::de::from_reader;
 use serde_json::value::Value;
 use rand::{OsRng, Rng};
-use redis::Client;
 use rustc_serialize::base64::{self, ToBase64};
 use std::collections::HashMap;
 use std::fs::File;
@@ -47,87 +46,104 @@ fn json_response(obj: &Value) -> IronResult<Response> {
 }
 
 
-/// Configuration data for a "famous" identity provider.
-///
-/// Used as part of the `AppConfig` struct.
+/// Holds runtime configuration data for this daemon instance.
 #[derive(Clone)]
-struct ProviderConfig {
-    /// URL pointing to the OpenID configuration document.
+pub struct AppConfig {
+    base_url: String, // Origin of this instance, used for constructing URLs
+    priv_key: PKey, // Signing key
+    store: redis::Client, // Redis Client
+    expire_keys: usize, // Redis key TTL, in seconds
+    sender: Email, // From address for email
+    token_validity: usize, // JWT validity duration, in seconds
+    providers: HashMap<String, Provider>, // Mapping of Domain -> OIDC Provider
+}
+
+
+/// Represents an OpenID Connect provider.
+#[derive(Clone, Deserialize)]
+pub struct Provider {
     discovery: String,
-    /// Client ID issued for this daemon instance by the provider.
     client_id: String,
-    /// Secret issued for this daemon instance by the provider.
     secret: String,
-    /// Issuer origin as used in identity tokens issued by the provider.
-    /// Used to check that the issuer in the token matches expectations.
     issuer: String,
 }
 
 
-/// Configuration data for this daemon instance.
-#[derive(Clone)]
-pub struct AppConfig {
-    /// Version of the daemon (used in the `WelcomeHandler`).
-    version: String,
-    /// Base URL where this daemon can be found. This is used to construct
-    /// callback URLs.
+/// Represents an email address.
+#[derive(Clone, Deserialize)]
+pub struct Email {
+    address: String,
+    name: String,
+}
+
+
+/// Represents a JSON-based configuration file.
+#[derive(Clone, Deserialize)]
+pub struct JsonConfig {
     base_url: String,
-    /// Private key used to sign identity tokens.
-    priv_key: PKey,
-    /// Redis database connector.
-    store: Client,
-    /// Duration in seconds for expiry of data stored in Redis.
+    private_key_file: String,
+    redis_url: String,
+    sender: Email,
     expire_keys: usize,
-    /// Email sender (email address, then human-readable name).
-    sender: (String, String),
-    /// Duration in seconds for expiration of identity tokens.
-    token_validity: i64,
-    /// A map of "famous" identity providers. Each key is an email domain,
-    /// the value holds the configuration required to act as an application
-    /// doing OpenID Connect against the provider.
-    providers: HashMap<String, ProviderConfig>,
+    token_validity: usize,
+    providers: HashMap<String, Provider>,
+}
+
+
+/// Union of all possible error types seen while parsing.
+#[derive(Debug)]
+pub enum Error {
+    Io(std::io::Error),
+    De(serde_json::error::Error),
+    Ssl(openssl::ssl::error::SslError),
+    Redis(redis::RedisError),
+}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Error {
+        Error::Io(err)
+    }
+}
+
+impl From<serde_json::error::Error> for Error {
+    fn from(err: serde_json::error::Error) -> Error {
+        Error::De(err)
+    }
+}
+
+impl From<openssl::ssl::error::SslError> for Error {
+    fn from(err: openssl::ssl::error::SslError) -> Error {
+        Error::Ssl(err)
+    }
+}
+
+impl From<redis::RedisError> for Error {
+    fn from(err: redis::RedisError) -> Error {
+        Error::Redis(err)
+    }
 }
 
 
 /// Implementation with single method to read configuration from JSON.
 impl AppConfig {
-    pub fn from_json_file(file_name: &str) -> AppConfig {
+    pub fn from_json_file(file_name: &str) -> Result<AppConfig, Error> {
+        let file = try!(File::open(file_name));
+        let config: JsonConfig = try!(from_reader(BufReader::new(file)));
 
-        let config_file = File::open(file_name).unwrap();
-        let config_value: Value = from_reader(BufReader::new(config_file)).unwrap();
-        let config = config_value.as_object().unwrap();
+        let private_key_file = try!(File::open(config.private_key_file));
+        let priv_key = try!(PKey::private_key_from_pem(&mut BufReader::new(private_key_file)));
 
-        // The `private_key_file` key in the JSON object should hold a file
-        // name pointing to a PEM-encoded private RSA key.
-        let key_file_name = config["private_key_file"].as_string().unwrap();
-        let priv_key_file = File::open(key_file_name).unwrap();
-        let mut reader = BufReader::new(priv_key_file);
-        let sender = config["sender"].as_object().unwrap();
-        AppConfig {
-            // Use the crate's version as defined in Cargo.toml.
-            version: env!("CARGO_PKG_VERSION").to_string(),
-            base_url: config["base_url"].as_string().unwrap().to_string(),
-            priv_key: PKey::private_key_from_pem(&mut reader).unwrap(),
-            store: Client::open(config["redis"].as_string().unwrap()).unwrap(),
-            expire_keys: config["expire_keys"].as_u64().unwrap() as usize,
-            sender: (
-                sender["address"].as_string().unwrap().to_string(),
-                sender["name"].as_string().unwrap().to_string(),
-            ),
-            token_validity: config["token_validity"].as_i64().unwrap(),
-            providers: config["providers"].as_object().unwrap().iter()
-                .map(|(host, params)| {
-                    let pobj = params.as_object().unwrap();
-                    (host.clone(), ProviderConfig {
-                        discovery: pobj["discovery"].as_string().unwrap().to_string(),
-                        client_id: pobj["client_id"].as_string().unwrap().to_string(),
-                        secret: pobj["secret"].as_string().unwrap().to_string(),
-                        issuer: pobj["issuer"].as_string().unwrap().to_string(),
-                    })
-                })
-                .collect::<HashMap<String, ProviderConfig>>(),
-        }
+        let store = try!(redis::Client::open(&*config.redis_url));
 
+        Ok(AppConfig {
+            base_url: config.base_url,
+            priv_key: priv_key,
+            sender: config.sender,
+            store: store,
+            expire_keys: config.expire_keys,
+            token_validity: config.token_validity,
+            providers: config.providers,
+        })
     }
 }
 
@@ -140,7 +156,7 @@ impl Handler for WelcomeHandler {
     fn handle(&self, _: &mut Request) -> IronResult<Response> {
         json_response(&ObjectBuilder::new()
             .insert("ladaemon", "Welcome")
-            .insert("version", &self.app.version)
+            .insert("version", env!("CARGO_PKG_VERSION"))
             .unwrap())
     }
 }
@@ -268,7 +284,7 @@ fn create_jwt(app: &AppConfig, email: &str, origin: &str) -> String {
             .insert("aud", origin)
             .insert("email", email)
             .insert("email_verified", email)
-            .insert("exp", now + app.token_validity)
+            .insert("exp", now + app.token_validity as i64)
             .insert("iat", now)
             .insert("iss", &app.base_url)
             .insert("sub", email)
