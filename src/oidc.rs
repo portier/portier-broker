@@ -185,7 +185,7 @@ pub fn verify(app: &AppConfig, session_id: &str, code: &str)
 
     // If everything is okay, build a new identity token and send it
     // to the relying party.
-    let id_token = create_jwt(&app, &email_addr.to_string(), origin);
+    let id_token = create_jwt(app, &email_addr.to_string(), origin);
     let redirect = stored.get("redirect").unwrap();
     Ok((id_token, redirect.to_string()))
 
