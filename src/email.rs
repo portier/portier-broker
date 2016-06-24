@@ -10,7 +10,7 @@ use self::lettre::transport::EmailTransport;
 use self::lettre::transport::smtp::SmtpTransportBuilder;
 use serde_json::builder::ObjectBuilder;
 use serde_json::value::Value;
-use super::{AppConfig, session_id, json_response, send_jwt_response};
+use super::{AppConfig, create_jwt, session_id, json_response, send_jwt_response};
 use std::collections::HashMap;
 use std::error::Error;
 use std::iter::Iterator;
@@ -130,7 +130,8 @@ impl Handler for ConfirmHandler {
         let email = stored.get("email").unwrap();
         let client_id = stored.get("client_id").unwrap();
         let redirect = stored.get("redirect").unwrap();
-        send_jwt_response(&self.app, email, client_id, redirect)
+        let id_token = create_jwt(&self.app, email, client_id);
+        send_jwt_response(&id_token, redirect)
 
     }
 }

@@ -16,7 +16,7 @@ use rustc_serialize::base64::FromBase64;
 use self::hyper::client::Client as HttpClient;
 use self::hyper::header::ContentType as HyContentType;
 use self::hyper::header::Headers;
-use super::{AppConfig, session_id, json_response, send_jwt_response};
+use super::{AppConfig, create_jwt, session_id, json_response, send_jwt_response};
 use std::collections::HashMap;
 use std::iter::Iterator;
 use time::now_utc;
@@ -201,7 +201,8 @@ impl Handler for CallbackHandler {
         // If everything is okay, build a new identity token and send it
         // to the relying party.
         let redirect = stored.get("redirect").unwrap();
-        send_jwt_response(&self.app, &email_addr.to_string(), origin, redirect)
+        let id_token = create_jwt(&self.app, &email_addr.to_string(), origin);
+        send_jwt_response(&id_token, redirect)
 
     }
 }

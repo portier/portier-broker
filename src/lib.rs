@@ -320,10 +320,9 @@ const FORWARD_TEMPLATE: &'static str = r#"<!DOCTYPE html>
 /// configured private RSA key. Then uses `FORWARD_TEMPLATE` to embed the token
 /// in a form that's POSTed to the RP's `redirect_uri` as soon as the page
 /// is loaded.
-fn send_jwt_response(app: &AppConfig, email: &str, origin: &str, redirect: &str) -> IronResult<Response> {
-    let jwt = create_jwt(app, email, origin);
+fn send_jwt_response(jwt: &str, redirect: &str) -> IronResult<Response> {
     let html = FORWARD_TEMPLATE.replace("{{ return_url }}", redirect)
-        .replace("{{ jwt }}", &jwt);
+        .replace("{{ jwt }}", jwt);
     let mut rsp = Response::with((status::Ok, html));
     rsp.headers.set(ContentType::html());
     Ok(rsp)
