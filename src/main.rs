@@ -31,7 +31,7 @@ fn main() {
 
         // Human-targeted endpoints
         get "/" => ladaemon::WelcomeHandler { app: app.clone() },
-        get "/confirm" => ladaemon::ConfirmHandler { app: app.clone() },
+        get "/confirm" => ladaemon::email::ConfirmHandler { app: app.clone() },
 
         // OpenID Connect provider endpoints
         get "/.well-known/openid-configuration" =>
