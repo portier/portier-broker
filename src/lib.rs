@@ -314,42 +314,44 @@ const FORWARD_TEMPLATE: &'static str = r#"<!DOCTYPE html>
 </html>"#;
 
 
-/// Helper function for sending an identity token to the Relying Party.
+/// Helper function for returning result to the Relying Party.
 ///
-/// Builds the JWT header and payload JSON data and signs it with the
-/// configured private RSA key. Then uses `FORWARD_TEMPLATE` to embed the token
-/// in a form that's POSTed to the RP's `redirect_uri` as soon as the page
-/// is loaded.
-fn send_jwt_response(jwt: &str, redirect: &str) -> IronResult<Response> {
-    let html = FORWARD_TEMPLATE.replace("{{ return_url }}", redirect)
-        .replace("{{ jwt }}", jwt);
+/// Takes a `Result` from one of the verification functions and embeds it in
+/// a form in the `FORWARD_TEMPLATE`, from where it's POSTED to the RP's
+/// `redirect_ur` as soon as the page has loaded. Result can either be an error
+/// message or a JWT asserting the user's email address identity.
+/// TODO: return error to RP instead of in a simple HTTP response.
+fn return_to_relier(result: Result<(String, String), &'static str>)
+                    -> IronResult<Response> {
+
+    if result.is_err() {
+        return json_response(&ObjectBuilder::new()
+                            .insert("error", result.unwrap_err())
+                            .unwrap());
+    }
+
+    let (jwt, redirect) = result.unwrap();
+    let html = FORWARD_TEMPLATE.replace("{{ return_url }}", &redirect)
+        .replace("{{ jwt }}", &jwt);
     let mut rsp = Response::with((status::Ok, html));
     rsp.headers.set(ContentType::html());
     Ok(rsp)
+
 }
 
 
 
 /// Iron handler for one-time pad email loop confirmation.
 ///
-/// Retrieves the session based session ID and the expected one-time pad. If
-/// an error occurs, returns a JSON object with an error message. Otherwise,
-/// send an identity token to the RP. TODO: the former is obviously wrong.
+/// Retrieves the session based session ID and the expected one-time pad.
+/// Verify the code and return the resulting token or error to the RP.
 pub struct ConfirmHandler { pub app: AppConfig }
 impl Handler for ConfirmHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
         let params = req.get_ref::<UrlEncodedQuery>().unwrap();
         let session_id = &params.get("session").unwrap()[0];
         let code = &params.get("code").unwrap()[0];
-        let res = email::verify(&self.app, session_id, code);
-        if res.is_err() {
-            json_response(&ObjectBuilder::new()
-                          .insert("error", res.unwrap_err())
-                          .unwrap())
-        } else {
-            let (jwt, redirect) = res.unwrap();
-            send_jwt_response(&jwt, &redirect)
-        }
+        return_to_relier(email::verify(&self.app, session_id, code))
     }
 }
 
@@ -365,14 +367,6 @@ impl Handler for CallbackHandler {
         let params = req.get_ref::<UrlEncodedQuery>().unwrap();
         let session = &params.get("state").unwrap()[0];
         let code = &params.get("code").unwrap()[0];
-        let res = oidc::verify(&self.app, session, code);
-        if res.is_err() {
-            json_response(&ObjectBuilder::new()
-                          .insert("error", res.unwrap_err())
-                          .unwrap())
-        } else {
-            let (jwt, redirect) = res.unwrap();
-            send_jwt_response(&jwt, &redirect)
-        }
+        return_to_relier(oidc::verify(&self.app, session, code))
     }
 }
