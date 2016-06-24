@@ -40,7 +40,7 @@ fn main() {
         post "/auth" => ladaemon::AuthHandler { app: app.clone() },
 
         // OpenID Connect relying party endpoints
-        get "/callback" => ladaemon::oidc::CallbackHandler { app: app.clone() },
+        get "/callback" => ladaemon::CallbackHandler { app: app.clone() },
 
     };
 

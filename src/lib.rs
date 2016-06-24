@@ -329,6 +329,7 @@ fn send_jwt_response(jwt: &str, redirect: &str) -> IronResult<Response> {
 }
 
 
+
 /// Iron handler for one-time pad email loop confirmation.
 ///
 /// Retrieves the session based session ID and the expected one-time pad. If
@@ -341,6 +342,30 @@ impl Handler for ConfirmHandler {
         let session_id = &params.get("session").unwrap()[0];
         let code = &params.get("code").unwrap()[0];
         let res = email::verify(&self.app, session_id, code);
+        if res.is_err() {
+            json_response(&ObjectBuilder::new()
+                          .insert("error", res.unwrap_err())
+                          .unwrap())
+        } else {
+            let (jwt, redirect) = res.unwrap();
+            send_jwt_response(&jwt, &redirect)
+        }
+    }
+}
+
+
+/// Iron handler for OAuth callbacks
+///
+/// After the user allows or denies the Authentication Request with the famous
+/// identity provider, they will be redirected back to the callback handler.
+/// Verify the callback data and return the resulting token or error.
+pub struct CallbackHandler { pub app: AppConfig }
+impl Handler for CallbackHandler {
+    fn handle(&self, req: &mut Request) -> IronResult<Response> {
+        let params = req.get_ref::<UrlEncodedQuery>().unwrap();
+        let session = &params.get("state").unwrap()[0];
+        let code = &params.get("code").unwrap()[0];
+        let res = oidc::verify(&self.app, session, code);
         if res.is_err() {
             json_response(&ObjectBuilder::new()
                           .insert("error", res.unwrap_err())
