@@ -1,10 +1,18 @@
 [package]
 name = "ladaemon"
 version = "0.1.0"
-authors = ["Dirkjan Ochtman <dirkjan@ochtman.nl>"]
+authors = [
+    "Dirkjan Ochtman <dirkjan@ochtman.nl>",
+    "Dan Callahan <dan.callahan@gmail.com>",
+]
+build = "build.rs"
+
+[build-dependencies]
+serde_codegen = "0.7.10"
 
 [dependencies]
 emailaddress = "0.3.0"
+docopt = "0.6"
 hyper = "0.9.6"
 iron = "0.3.0"
 lettre = "0.5.1"
@@ -13,6 +21,7 @@ rand = "0.3.14"
 redis = "0.5.3"
 router = "0.1.1"
 rustc-serialize = "0.3.19"
+serde = "0.7.10"
 serde_json = "0.7.0"
 time = "0.1.35"
 url = "1.1.0"

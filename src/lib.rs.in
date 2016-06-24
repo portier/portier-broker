@@ -1,0 +1,162 @@
+extern crate emailaddress;
+extern crate hyper;
+extern crate iron;
+extern crate lettre;
+extern crate openssl;
+extern crate rand;
+extern crate redis;
+extern crate router;
+extern crate rustc_serialize;
+extern crate serde_json;
+extern crate time;
+extern crate url;
+extern crate urlencoded;
+
+use emailaddress::EmailAddress;
+use openssl::crypto::hash;
+use openssl::crypto::pkey::PKey;
+use serde_json::de::from_reader;
+use rand::{OsRng, Rng};
+use rustc_serialize::base64::{self, ToBase64};
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::{BufReader, Write};
+use std::iter::Iterator;
+
+pub mod handlers;
+pub mod providers;
+
+
+/// Holds runtime configuration data for this daemon instance.
+#[derive(Clone)]
+pub struct AppConfig {
+    base_url: String, // Origin of this instance, used for constructing URLs
+    priv_key: PKey, // Signing key
+    store: redis::Client, // Redis Client
+    expire_keys: usize, // Redis key TTL, in seconds
+    sender: (String, String), // Tuple of (Email Address, Name) for sent mail
+    token_validity: usize, // JWT validity duration, in seconds
+    providers: HashMap<String, Provider>, // Mapping of Domain -> OIDC Provider
+}
+
+
+/// Represents an OpenID Connect provider.
+#[derive(Clone, Deserialize)]
+pub struct Provider {
+    discovery: String,
+    client_id: String,
+    secret: String,
+}
+
+
+/// Represents a JSON-based configuration file.
+#[derive(Clone, Deserialize)]
+pub struct JsonConfig {
+    base_url: String,
+    private_key_file: String,
+    redis_url: String,
+    sender: String,
+    expire_keys: usize,
+    token_validity: usize,
+    providers: HashMap<String, Provider>,
+}
+
+
+/// Union of all possible error types seen while parsing.
+#[derive(Debug)]
+pub enum AppError {
+    Io(std::io::Error),
+    De(serde_json::error::Error),
+    Ssl(openssl::ssl::error::SslError),
+    Redis(redis::RedisError),
+}
+
+impl From<std::io::Error> for AppError {
+    fn from(err: std::io::Error) -> AppError {
+        AppError::Io(err)
+    }
+}
+
+impl From<serde_json::error::Error> for AppError {
+    fn from(err: serde_json::error::Error) -> AppError {
+        AppError::De(err)
+    }
+}
+
+impl From<openssl::ssl::error::SslError> for AppError {
+    fn from(err: openssl::ssl::error::SslError) -> AppError {
+        AppError::Ssl(err)
+    }
+}
+
+impl From<redis::RedisError> for AppError {
+    fn from(err: redis::RedisError) -> AppError {
+        AppError::Redis(err)
+    }
+}
+
+
+/// Implementation with single method to read configuration from JSON.
+impl AppConfig {
+    pub fn from_json_file(file_name: &str) -> Result<AppConfig, AppError> {
+        // TODO: Implement custom deserializers for redis and the private key?
+        // Since these are external structs, they would have to be wrapped in a
+        // custom newtype of struct in order to implement serde::Deserializer.
+        //
+        // The upside is that we could eliminate the entire AppConfig struct.
+        //
+        // See example deserializer at https://users.rust-lang.org/t/5424/
+        let file = try!(File::open(file_name));
+        let config: JsonConfig = try!(from_reader(BufReader::new(file)));
+
+        let private_key_file = try!(File::open(config.private_key_file));
+        let priv_key = try!(PKey::private_key_from_pem(&mut BufReader::new(private_key_file)));
+
+        let store = try!(redis::Client::open(&*config.redis_url));
+
+        Ok(AppConfig {
+            base_url: config.base_url,
+            priv_key: priv_key,
+            sender: ("".to_string(), "".to_string()), // FIXME, single string in test.json, but (addr, name) tuple in previous code
+            store: store,
+            expire_keys: config.expire_keys,
+            token_validity: config.token_validity,
+            providers: config.providers,
+        })
+    }
+}
+
+
+/// Helper function to build a session ID for a login attempt.
+///
+/// Put the email address, the client ID (RP origin) and some randomness into
+/// a SHA256 hash, and encode it with URL-safe base64 encoding. This is used
+/// as the key in Redis, as well as the state for OAuth authentication.
+fn session_id(email: &EmailAddress, client_id: &str) -> String {
+    let mut rng = OsRng::new().unwrap();
+    let mut bytes_iter = rng.gen_iter();
+    let rand_bytes: Vec<u8> = (0..16).map(|_| bytes_iter.next().unwrap()).collect();
+
+    let mut hasher = hash::Hasher::new(hash::Type::SHA256);
+    hasher.write(email.to_string().as_bytes()).unwrap();
+    hasher.write(client_id.as_bytes()).unwrap();
+    hasher.write(&rand_bytes).unwrap();
+    hasher.finish().to_base64(base64::URL_SAFE)
+}
+
+
+/// Helper method to create a JWT from given header and payload.
+///
+/// Takes care of UTF-8 and (URL-safe) base64-encoding, then hashing and
+/// signing with the provided private key. Returns the full JWT.
+fn create_jwt(key: &PKey, header: &str, payload: &str) -> String {
+    let mut input = Vec::<u8>::new();
+    input.extend(header.as_bytes().to_base64(base64::URL_SAFE).into_bytes());
+    input.push(b'.');
+    input.extend(payload.as_bytes().to_base64(base64::URL_SAFE).into_bytes());
+    let sha256 = hash::hash(hash::Type::SHA256, &input);
+    let sig = key.sign(&sha256);
+    input.push(b'.');
+    input.extend(sig.to_base64(base64::URL_SAFE).into_bytes());
+    String::from_utf8(input).unwrap()
+}

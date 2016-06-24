@@ -1,7 +1,7 @@
 {
   "base_url": "https://letsauth.xavamedia.nl",
   "private_key_file": "private.pem",
-  "redis": "redis://127.0.0.1/5",
+  "redis_url": "redis://127.0.0.1/5",
   "sender": "Let's Auth <letsauth@xavamedia.nl>",
   "expire_keys": 900,
   "token_validity": 600,
