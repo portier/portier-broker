@@ -1,9 +1,10 @@
 extern crate iron;
 extern crate ladaemon;
+
+#[macro_use(router)]
 extern crate router;
 
 use iron::Iron;
-use router::Router;
 use std::env;
 use std::io::{self, Write};
 
@@ -26,14 +27,15 @@ fn main() {
     // the way the Iron `Handler` trait is defined. Also, it would be cleaner
     // if the handlers could just be a function, instead of single-method
     // impls.
-    let mut router = Router::new();
-    router.get("/", ladaemon::WelcomeHandler { app: app.clone() });
-    router.get("/.well-known/openid-configuration",
-               ladaemon::OIDConfigHandler { app: app.clone() });
-    router.get("/keys.json", ladaemon::KeysHandler { app: app.clone() });
-    router.post("/auth", ladaemon::AuthHandler { app: app.clone() });
-    router.get("/confirm", ladaemon::ConfirmHandler { app: app.clone() });
-    router.get("/callback", ladaemon::CallbackHandler { app: app.clone() });
+    let router = router!{
+        get "/" => ladaemon::WelcomeHandler { app: app.clone() },
+        get "/.well-known/openid-configuration" =>
+               ladaemon::OIDConfigHandler { app: app.clone() },
+        get "/keys.json" => ladaemon::KeysHandler { app: app.clone() },
+        post "/auth" => ladaemon::AuthHandler { app: app.clone() },
+        get "/confirm" => ladaemon::ConfirmHandler { app: app.clone() },
+        get "/callback" => ladaemon::CallbackHandler { app: app.clone() },
+    };
 
     // Iron will take care of stuff from here. It should spin up a number of
     // threads according to the number of cores available. TODO: make the
