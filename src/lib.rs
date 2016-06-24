@@ -255,20 +255,42 @@ impl Handler for AuthHandler {
 
 
 
-/// Helper method to create a JWT from given header and payload.
+/// Helper method to create a JWT for a given email address and origin.
 ///
-/// Takes care of UTF-8 and (URL-safe) base64-encoding, then hashing and
-/// signing with the provided private key. Returns the full JWT.
-fn create_jwt(key: &PKey, header: &str, payload: &str) -> String {
+/// Builds the JSON payload and header, encoding with (URL-safe)
+/// base64-encoding, then hashing and signing with the provided private key.
+/// Returns the full JWT.
+fn create_jwt(app: &AppConfig, email: &str, origin: &str) -> String {
+
+    let now = now_utc().to_timespec().sec;
+    let payload = serde_json::to_string(
+        &ObjectBuilder::new()
+            .insert("aud", origin)
+            .insert("email", email)
+            .insert("email_verified", email)
+            .insert("exp", now + app.token_validity)
+            .insert("iat", now)
+            .insert("iss", &app.base_url)
+            .insert("sub", email)
+            .unwrap()
+        ).unwrap();
+    let header = serde_json::to_string(
+        &ObjectBuilder::new()
+            .insert("kid", "base")
+            .insert("alg", "RS256")
+            .unwrap()
+        ).unwrap();
+
     let mut input = Vec::<u8>::new();
     input.extend(header.as_bytes().to_base64(base64::URL_SAFE).into_bytes());
     input.push(b'.');
     input.extend(payload.as_bytes().to_base64(base64::URL_SAFE).into_bytes());
     let sha256 = hash::hash(hash::Type::SHA256, &input);
-    let sig = key.sign(&sha256);
+    let sig = app.priv_key.sign(&sha256);
     input.push(b'.');
     input.extend(sig.to_base64(base64::URL_SAFE).into_bytes());
     String::from_utf8(input).unwrap()
+
 }
 
 
@@ -292,36 +314,17 @@ const FORWARD_TEMPLATE: &'static str = r#"<!DOCTYPE html>
 </html>"#;
 
 
-/// Iron handler for sending an identity token to the Relying Party.
+/// Helper function for sending an identity token to the Relying Party.
 ///
 /// Builds the JWT header and payload JSON data and signs it with the
 /// configured private RSA key. Then uses `FORWARD_TEMPLATE` to embed the token
 /// in a form that's POSTed to the RP's `redirect_uri` as soon as the page
 /// is loaded.
 fn send_jwt_response(app: &AppConfig, email: &str, origin: &str, redirect: &str) -> IronResult<Response> {
-
-    let now = now_utc().to_timespec().sec;
-    let payload = ObjectBuilder::new()
-        .insert("aud", origin)
-        .insert("email", email)
-        .insert("email_verified", email)
-        .insert("exp", now + app.token_validity)
-        .insert("iat", now)
-        .insert("iss", &app.base_url)
-        .insert("sub", email)
-        .unwrap();
-    let headers = ObjectBuilder::new()
-        .insert("kid", "base")
-        .insert("alg", "RS256")
-        .unwrap();
-    let jwt = create_jwt(&app.priv_key,
-                         &serde_json::to_string(&headers).unwrap(),
-                         &serde_json::to_string(&payload).unwrap());
-
+    let jwt = create_jwt(app, email, origin);
     let html = FORWARD_TEMPLATE.replace("{{ return_url }}", redirect)
         .replace("{{ jwt }}", &jwt);
     let mut rsp = Response::with((status::Ok, html));
     rsp.headers.set(ContentType::html());
     Ok(rsp)
-
 }
