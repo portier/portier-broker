@@ -12,7 +12,7 @@ impl Handler for Welcome {
     fn handle(&self, _: &mut Request) -> IronResult<Response> {
         json_response(&ObjectBuilder::new()
             .insert("ladaemon", "Welcome")
-            .insert("version", &self.app.version)
+            .insert("version", env!("CARGO_PKG_VERSION"))
             .unwrap())
     }
 }

@@ -1,6 +1,3 @@
-pub mod handlers;
-pub mod providers;
-
 extern crate emailaddress;
 extern crate hyper;
 extern crate iron;
@@ -20,50 +17,30 @@ use openssl::crypto::hash;
 use openssl::crypto::pkey::PKey;
 use serde_json::de::from_reader;
 use rand::{OsRng, Rng};
-use redis::Client;
 use rustc_serialize::base64::{self, ToBase64};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, Write};
 use std::iter::Iterator;
 
+pub mod handlers;
+pub mod providers;
 
-/// Configuration data for this daemon instance.
+
+/// Holds runtime configuration data for this daemon instance.
 #[derive(Clone)]
 pub struct AppConfig {
-    /// Version of the daemon (used in the `Welcome` Handler).
-    version: String,
-    /// Base URL where this daemon can be found. This is used to construct
-    /// callback URLs.
-    base_url: String,
-    /// Private key used to sign identity tokens.
-    priv_key: PKey,
-    /// Redis database connector.
-    store: Client,
-    /// Duration in seconds for expiry of data stored in Redis.
-    expire_keys: usize,
-    /// Email sender (email address, then human-readable name).
-    sender: (String, String),
-    /// Duration in seconds for expiration of identity tokens.
-    token_validity: i64,
-    /// A map of "famous" identity providers. Each key is an email domain,
-    /// the value holds the configuration required to act as an application
-    /// doing OpenID Connect against the provider.
-    providers: HashMap<String, Provider>,
+    base_url: String, // Origin of this instance, used for constructing URLs
+    priv_key: PKey, // Signing key
+    store: redis::Client, // Redis Client
+    expire_keys: usize, // Redis key TTL, in seconds
+    sender: (String, String), // Tuple of (Email Address, Name) for sent mail
+    token_validity: usize, // JWT validity duration, in seconds
+    providers: HashMap<String, Provider>, // Mapping of Domain -> OIDC Provider
 }
 
 
-#[derive(Clone, Deserialize)]
-pub struct Config {
-    base_url: String,
-    private_key_file: String,
-    redis: String,
-    sender: String,
-    expire_keys: usize,
-    token_validity: usize,
-    providers: HashMap<String, Provider>,
-}
-
+/// Represents an OpenID Connect provider.
 #[derive(Clone, Deserialize)]
 pub struct Provider {
     discovery: String,
@@ -71,26 +48,79 @@ pub struct Provider {
     secret: String,
 }
 
+
+/// Represents a JSON-based configuration file.
+#[derive(Clone, Deserialize)]
+pub struct JsonConfig {
+    base_url: String,
+    private_key_file: String,
+    redis_url: String,
+    sender: String,
+    expire_keys: usize,
+    token_validity: usize,
+    providers: HashMap<String, Provider>,
+}
+
+
+/// Union of all possible error types seen while parsing.
+#[derive(Debug)]
+pub enum AppError {
+    Io(std::io::Error),
+    De(serde_json::error::Error),
+    Ssl(openssl::ssl::error::SslError),
+    Redis(redis::RedisError),
+}
+
+impl From<std::io::Error> for AppError {
+    fn from(err: std::io::Error) -> AppError {
+        AppError::Io(err)
+    }
+}
+
+impl From<serde_json::error::Error> for AppError {
+    fn from(err: serde_json::error::Error) -> AppError {
+        AppError::De(err)
+    }
+}
+
+impl From<openssl::ssl::error::SslError> for AppError {
+    fn from(err: openssl::ssl::error::SslError) -> AppError {
+        AppError::Ssl(err)
+    }
+}
+
+impl From<redis::RedisError> for AppError {
+    fn from(err: redis::RedisError) -> AppError {
+        AppError::Redis(err)
+    }
+}
+
+
 /// Implementation with single method to read configuration from JSON.
 impl AppConfig {
-    pub fn from_json_file(file_name: &str) -> Result<AppConfig, ()> {
-        // TODO: Clean up these unwraps(), return an Error type
-        let file = File::open(file_name).unwrap();
-        let config: Config = from_reader(BufReader::new(file)).unwrap();
+    pub fn from_json_file(file_name: &str) -> Result<AppConfig, AppError> {
+        // TODO: Implement custom deserializers for redis and the private key?
+        // Since these are external structs, they would have to be wrapped in a
+        // custom newtype of struct in order to implement serde::Deserializer.
+        //
+        // The upside is that we could eliminate the entire AppConfig struct.
+        //
+        // See example deserializer at https://users.rust-lang.org/t/5424/
+        let file = try!(File::open(file_name));
+        let config: JsonConfig = try!(from_reader(BufReader::new(file)));
 
-        let private_key_file = File::open(config.private_key_file).unwrap();
-        let priv_key = PKey::private_key_from_pem(&mut BufReader::new(private_key_file)).unwrap();
+        let private_key_file = try!(File::open(config.private_key_file));
+        let priv_key = try!(PKey::private_key_from_pem(&mut BufReader::new(private_key_file)));
 
-        let store = Client::open(&*config.redis).unwrap();
+        let store = try!(redis::Client::open(&*config.redis_url));
 
         Ok(AppConfig {
-            version: env!("CARGO_PKG_VERSION").to_string(),
             base_url: config.base_url,
             priv_key: priv_key,
             sender: ("".to_string(), "".to_string()), // FIXME, single string in test.json, but (addr, name) tuple in previous code
             store: store,
             expire_keys: config.expire_keys,
-            token_validity: config.token_validity as i64, // FIXME: Why was this an i64?
+            token_validity: config.token_validity,
             providers: config.providers,
         })
     }
