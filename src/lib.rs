@@ -322,7 +322,7 @@ impl Handler for AuthHandler {
         let params = req.get_ref::<UrlEncodedBody>().unwrap();
         let email_addr = EmailAddress::new(&params.get("login_hint").unwrap()[0]).unwrap();
         if self.app.providers.contains_key(&email_addr.domain) {
-            return oauth_request(&self.app, &params);
+            return oauth_request(&self.app, params);
         }
 
         // Generate a 6-character one-time pad.
@@ -406,7 +406,7 @@ impl Handler for CallbackHandler {
         // Validate that the callback matches an auth request in Redis.
         let key = format!("session:{}", session);
         let stored: HashMap<String, String> = self.app.store.hgetall(key.clone()).unwrap();
-        if stored.len() == 0 {
+        if stored.is_empty() {
             let obj = ObjectBuilder::new()
                 .insert("error", "nonce fail")
                 .insert("key", key);
@@ -454,7 +454,7 @@ impl Handler for CallbackHandler {
         // Extract the header from the JWT structure. First order of business
         // is to determine what key was used to sign the token, so we can then
         // verify the signature.
-        let parts: Vec<&str> = id_token.split(".").collect();
+        let parts: Vec<&str> = id_token.split('.').collect();
         let jwt_header: Value = from_slice(&parts[0].from_base64().unwrap()).unwrap();
         let kid = jwt_header.find("kid").unwrap().as_string().unwrap();
 
@@ -482,7 +482,7 @@ impl Handler for CallbackHandler {
 
         // Verify the identity token's signature.
         let message = format!("{}.{}", parts[0], parts[1]);
-        let sha256 = hash::hash(hash::Type::SHA256, &message.as_bytes());
+        let sha256 = hash::hash(hash::Type::SHA256, message.as_bytes());
         let sig = parts[2].from_base64().unwrap();
         let verified = pub_key.verify(&sha256, &sig);
         assert!(verified);
@@ -505,7 +505,7 @@ impl Handler for CallbackHandler {
         // If everything is okay, build a new identity token and send it
         // to the relying party.
         let redirect = stored.get("redirect").unwrap();
-        send_jwt_response(&self.app, &email_addr.to_string(), &origin, redirect)
+        send_jwt_response(&self.app, &email_addr.to_string(), origin, redirect)
 
     }
 }
@@ -597,7 +597,7 @@ impl Handler for ConfirmHandler {
         let session = &params.get("session").unwrap()[0];
         let key = format!("session:{}", session);
         let stored: HashMap<String, String> = self.app.store.hgetall(key.clone()).unwrap();
-        if stored.len() == 0 {
+        if stored.is_empty() {
             let obj = ObjectBuilder::new().insert("error", "not found");
             return json_response(&obj.unwrap());
         }
