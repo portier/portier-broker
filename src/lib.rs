@@ -309,80 +309,92 @@ const CODE_CHARS: &'static [char] = &[
 ];
 
 
+/// Helper method to provide authentication through an email loop.
+///
+/// If the email address' host does not support any native form of
+/// authentication, create a randomly-generated one-time pad. Then, send
+/// an email containing a link with the secret. Clicking the link will trigger
+/// the `ConfirmHandler`, returning an authentication result to the RP.
+fn email_request(app: &AppConfig, params: &QueryMap) -> IronResult<Response> {
+
+    // Generate a 6-character one-time pad.
+    let email_addr = EmailAddress::new(&params.get("login_hint").unwrap()[0]).unwrap();
+    let chars: String = (0..6).map(|_| CODE_CHARS[rand::random::<usize>() % CODE_CHARS.len()]).collect();
+
+    // Store data for this request in Redis, to reference when user uses
+    // the generated link.
+    let client_id = &params.get("client_id").unwrap()[0];
+    let session = session_id(&email_addr, client_id);
+    let key = format!("session:{}", session);
+    let set_res: RedisResult<String> = app.store.hset_multiple(key.clone(), &[
+        ("email", email_addr.to_string()),
+        ("client_id", client_id.clone()),
+        ("code", chars.clone()),
+        ("redirect", params.get("redirect_uri").unwrap()[0].clone()),
+    ]);
+    let exp_res: RedisResult<bool> = app.store.expire(key.clone(), app.expire_keys);
+
+    // Generate the URL used to verify email address ownership.
+    let href = format!("{}/confirm?session={}&code={}",
+                       app.base_url,
+                       utf8_percent_encode(&session, QUERY_ENCODE_SET),
+                       utf8_percent_encode(&chars, QUERY_ENCODE_SET));
+
+    // Generate a simple email and send it through the SMTP server running
+    // on localhost. TODO: make the SMTP host configurable. Also, consider
+    // using templates for the email message.
+    let email = EmailBuilder::new()
+        .to(email_addr.to_string().as_str())
+        .from((app.sender.0.as_str(), app.sender.1.as_str()))
+        .body(&format!("Enter your login code:\n\n{}\n\nOr click this link:\n\n{}",
+                       chars, href))
+        .subject(&format!("Code: {} - Finish logging in to {}", chars, client_id))
+        .build().unwrap();
+    let mut mailer = SmtpTransportBuilder::localhost().unwrap().build();
+    let result = mailer.send(email);
+    mailer.close();
+
+    // TODO: for debugging, this part returns a JSON response with some
+    // debugging stuff/diagnostics. Instead, it should return a form that
+    // allows the user to enter the code they have received.
+    let mut obj = ObjectBuilder::new();
+    if !result.is_ok() {
+        let error = result.unwrap_err();
+        obj = obj.insert("error", error.to_string());
+        obj = match error {
+            lettre::transport::error::Error::IoError(inner) => {
+                obj.insert("cause", inner.description())
+            }
+            _ => obj,
+        }
+    }
+    if !set_res.is_ok() {
+        obj = obj.insert("hset_multiple", set_res.unwrap_err().to_string());
+    }
+    if !exp_res.is_ok() {
+        obj = obj.insert("expire", exp_res.unwrap_err().to_string());
+    }
+    json_response(&obj.unwrap())
+
+}
+
+
 /// Iron handler for authentication requests from the RP.
 ///
 /// Calls the `oauth_request()` function if the provided email address's
-/// domain matches one of the configured famous providers. Otherwise, sends an
-/// email to the user with a randomly generated one-time pad. This code is
-/// stored in Redis (with timeout) for later verification.
+/// domain matches one of the configured famous providers. Otherwise, calls the
+/// `email_request()` function to allow authentication through the email loop.
 pub struct AuthHandler { pub app: AppConfig }
 impl Handler for AuthHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
-
         let params = req.get_ref::<UrlEncodedBody>().unwrap();
         let email_addr = EmailAddress::new(&params.get("login_hint").unwrap()[0]).unwrap();
-        if self.app.providers.contains_key(&email_addr.domain) {
-            return oauth_request(&self.app, params);
-        }
-
-        // Generate a 6-character one-time pad.
-        let chars: String = (0..6).map(|_| CODE_CHARS[rand::random::<usize>() % CODE_CHARS.len()]).collect();
-
-        // Store data for this request in Redis, to reference when user uses
-        // the generated link.
-        let client_id = &params.get("client_id").unwrap()[0];
-        let session = session_id(&email_addr, client_id);
-        let key = format!("session:{}", session);
-        let set_res: RedisResult<String> = self.app.store.hset_multiple(key.clone(), &[
-            ("email", email_addr.to_string()),
-            ("client_id", client_id.clone()),
-            ("code", chars.clone()),
-            ("redirect", params.get("redirect_uri").unwrap()[0].clone()),
-        ]);
-        let exp_res: RedisResult<bool> = self.app.store.expire(key.clone(), self.app.expire_keys);
-
-        // Generate the URL used to verify email address ownership.
-        let href = format!("{}/confirm?session={}&code={}",
-                           self.app.base_url,
-                           utf8_percent_encode(&session, QUERY_ENCODE_SET),
-                           utf8_percent_encode(&chars, QUERY_ENCODE_SET));
-
-        // Generate a simple email and send it through the SMTP server running
-        // on localhost. TODO: make the SMTP host configurable. Also, consider
-        // using templates for the email message.
-        let email = EmailBuilder::new()
-            .to(email_addr.to_string().as_str())
-            .from((self.app.sender.0.as_str(), self.app.sender.1.as_str()))
-            .body(&format!("Enter your login code:\n\n{}\n\nOr click this link:\n\n{}",
-                           chars, href))
-            .subject(&format!("Code: {} - Finish logging in to {}", chars, client_id))
-            .build().unwrap();
-        let mut mailer = SmtpTransportBuilder::localhost().unwrap().build();
-        let result = mailer.send(email);
-        mailer.close();
-
-        // TODO: for debugging, this part returns a JSON response with some
-        // debugging stuff/diagnostics. Instead, it should return a form that
-        // allows the user to enter the code they have received.
-        let mut obj = ObjectBuilder::new();
-        if !result.is_ok() {
-            let error = result.unwrap_err();
-            obj = obj.insert("error", error.to_string());
-            obj = match error {
-                lettre::transport::error::Error::IoError(inner) => {
-                    obj.insert("cause", inner.description())
-                }
-                _ => obj,
-            }
-        }
-        if !set_res.is_ok() {
-            obj = obj.insert("hset_multiple", set_res.unwrap_err().to_string());
-        }
-        if !exp_res.is_ok() {
-            obj = obj.insert("expire", exp_res.unwrap_err().to_string());
-        }
-        json_response(&obj.unwrap())
-
+        let helper = if self.app.providers.contains_key(&email_addr.domain) {
+            oauth_request
+        } else {
+            email_request
+        };
+        helper(&self.app, params)
     }
 }
 
