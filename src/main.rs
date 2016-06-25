@@ -52,13 +52,10 @@ fn main() {
     // Read the configuration from the provided file.
     let app = ladaemon::AppConfig::from_json_file(&args.arg_CONFIG);
 
-    // Register all handlers with a router object. TODO: cloning the
-    // configuration object is kind of ugly, but is apparently needed with
-    // the way the Iron `Handler` trait is defined. Also, it would be cleaner
-    // if the handlers could just be a function, instead of single-method
-    // impls.
+    // TODO: cloning the configuration object is ugly, but apparently necessary
+    // with how the Iron `Handler` trait is defined. Also, it would be cleaner
+    // if the handlers could just be functions, instead of single-method impls.
     let router = router!{
-
         // Human-targeted endpoints
         get "/" => ladaemon::WelcomeHandler { app: app.clone() },
         get "/confirm" => ladaemon::ConfirmHandler { app: app.clone() },
@@ -71,7 +68,6 @@ fn main() {
 
         // OpenID Connect relying party endpoints
         get "/callback" => ladaemon::CallbackHandler { app: app.clone() },
-
     };
 
     let ip_address = std::net::IpAddr::from_str(&args.flag_address).unwrap();
