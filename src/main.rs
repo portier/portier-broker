@@ -7,6 +7,7 @@ extern crate rustc_serialize;
 
 use docopt::Docopt;
 use iron::Iron;
+use std::str::FromStr;
 
 
 /// Defines the program's version, as set by Cargo at compile time.
@@ -20,11 +21,13 @@ const USAGE: &'static str = r#"
 Let's Auth.
 
 Usage:
-  ladaemon CONFIG
+  ladaemon [options] CONFIG
   ladaemon --version
   ladaemon --help
 
 Options:
+  --address=<ip>  Address to listen on [default: 127.0.0.1]
+  --port=<port>   Port to listen on [default: 3333]
   --version       Print version information and exit
   --help          Print this help message and exit
 "#;
@@ -35,6 +38,8 @@ Options:
 #[allow(non_snake_case)]
 struct Args {
     arg_CONFIG: String,
+    flag_address: String,
+    flag_port: u16,
 }
 
 
@@ -69,8 +74,10 @@ fn main() {
 
     };
 
-    // Iron will take care of stuff from here. It should spin up a number of
-    // threads according to the number of cores available. TODO: make the
-    // interface on which we listen configurable.
+    let ip_address = std::net::IpAddr::from_str(&args.flag_address).unwrap();
+    let socket = std::net::SocketAddr::new(ip_address, args.flag_port);
+
+    println!("Listening on http://{}", socket);
+
     Iron::new(router).http("0.0.0.0:3333").unwrap();
 }
