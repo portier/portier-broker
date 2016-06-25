@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["Dirkjan Ochtman <dirkjan@ochtman.nl>"]
 
 [dependencies]
+docopt = "0.6.81"
 emailaddress = "0.3.0"
 hyper = "0.9.6"
 iron = "0.3.0"
