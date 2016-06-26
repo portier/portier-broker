@@ -2,14 +2,15 @@
   "base_url": "https://letsauth.xavamedia.nl",
   "private_key_file": "private.pem",
   "redis": "redis://127.0.0.1/5",
-  "sender": "Let's Auth <letsauth@xavamedia.nl>",
+  "sender": {"name": "Let's Auth", "address": "letsauth@xavamedia.nl>"},
   "expire_keys": 900,
   "token_validity": 600,
   "providers": {
     "gmail.com": {
       "discovery": "https://accounts.google.com/.well-known/openid-configuration",
       "client_id": "1234567890-example-client-id.apps.googleusercontent.com",
-      "secret": "<your-secret-goes-here>"
+      "secret": "<your-secret-goes-here>",
+      "issuer": "accounts.google.com"
     }
   }
 }
