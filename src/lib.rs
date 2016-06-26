@@ -27,7 +27,7 @@ use serde_json::value::Value;
 use rand::{OsRng, Rng};
 use redis::Client;
 use rustc_serialize::base64::{self, ToBase64};
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufReader, Write};
 use std::iter::Iterator;
@@ -85,7 +85,7 @@ pub struct AppConfig {
     /// A map of "famous" identity providers. Each key is an email domain,
     /// the value holds the configuration required to act as an application
     /// doing OpenID Connect against the provider.
-    providers: BTreeMap<String, ProviderConfig>,
+    providers: HashMap<String, ProviderConfig>,
 }
 
 
@@ -125,7 +125,7 @@ impl AppConfig {
                         issuer: pobj["issuer"].as_string().unwrap().to_string(),
                     })
                 })
-                .collect::<BTreeMap<String, ProviderConfig>>(),
+                .collect::<HashMap<String, ProviderConfig>>(),
         }
 
     }
