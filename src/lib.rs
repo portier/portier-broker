@@ -9,9 +9,6 @@ extern crate time;
 extern crate url;
 extern crate urlencoded;
 
-pub mod email;
-pub mod oidc;
-
 use emailaddress::EmailAddress;
 use iron::headers::ContentType;
 use iron::middleware::Handler;
@@ -33,6 +30,9 @@ use std::io::{BufReader, Write};
 use std::iter::Iterator;
 use time::now_utc;
 use urlencoded::{UrlEncodedBody, UrlEncodedQuery};
+
+pub mod email;
+pub mod oidc;
 
 
 /// Helper function for returning an Iron response with JSON data.
