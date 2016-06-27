@@ -50,7 +50,7 @@ fn main() {
                          .unwrap_or_else(|e| e.exit());
 
     // Read the configuration from the provided file.
-    let app = ladaemon::AppConfig::from_json_file(&args.arg_CONFIG);
+    let app = ladaemon::AppConfig::from_json_file(&args.arg_CONFIG).unwrap();
 
     // TODO: cloning the configuration object is ugly, but apparently necessary
     // with how the Iron `Handler` trait is defined. Also, it would be cleaner

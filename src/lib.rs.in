@@ -1,0 +1,388 @@
+extern crate emailaddress;
+extern crate iron;
+extern crate openssl;
+extern crate rand;
+extern crate redis;
+extern crate rustc_serialize;
+extern crate serde_json;
+extern crate time;
+extern crate url;
+extern crate urlencoded;
+
+use emailaddress::EmailAddress;
+use iron::headers::ContentType;
+use iron::middleware::Handler;
+use iron::modifiers;
+use iron::prelude::*;
+use iron::status;
+use openssl::bn::BigNum;
+use openssl::crypto::hash;
+use openssl::crypto::pkey::PKey;
+use serde_json::builder::ObjectBuilder;
+use serde_json::de::from_reader;
+use serde_json::value::Value;
+use rand::{OsRng, Rng};
+use rustc_serialize::base64::{self, ToBase64};
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::{BufReader, Write};
+use std::iter::Iterator;
+use time::now_utc;
+use urlencoded::{UrlEncodedBody, UrlEncodedQuery};
+
+pub mod email;
+pub mod oidc;
+
+
+/// Helper function for returning an Iron response with JSON data.
+///
+/// Serializes the argument value to JSON and returns a HTTP 200 response
+/// code with the serialized JSON as the body.
+fn json_response(obj: &Value) -> IronResult<Response> {
+    let content = serde_json::to_string(&obj).unwrap();
+    let mut rsp = Response::with((status::Ok, content));
+    rsp.headers.set(ContentType::json());
+    Ok(rsp)
+}
+
+
+/// Holds runtime configuration data for this daemon instance.
+#[derive(Clone)]
+pub struct AppConfig {
+    base_url: String, // Origin of this instance, used for constructing URLs
+    priv_key: PKey, // Signing key
+    store: redis::Client, // Redis Client
+    expire_keys: usize, // Redis key TTL, in seconds
+    sender: Email, // From address for email
+    token_validity: usize, // JWT validity duration, in seconds
+    providers: HashMap<String, Provider>, // Mapping of Domain -> OIDC Provider
+}
+
+
+/// Represents an OpenID Connect provider.
+#[derive(Clone, Deserialize)]
+pub struct Provider {
+    discovery: String,
+    client_id: String,
+    secret: String,
+    issuer: String,
+}
+
+
+/// Represents an email address.
+#[derive(Clone, Deserialize)]
+pub struct Email {
+    address: String,
+    name: String,
+}
+
+
+/// Represents a JSON-based configuration file.
+#[derive(Clone, Deserialize)]
+pub struct JsonConfig {
+    base_url: String,
+    private_key_file: String,
+    redis_url: String,
+    sender: Email,
+    expire_keys: usize,
+    token_validity: usize,
+    providers: HashMap<String, Provider>,
+}
+
+
+/// Union of all possible error types seen while parsing.
+#[derive(Debug)]
+pub enum Error {
+    Io(std::io::Error),
+    De(serde_json::error::Error),
+    Ssl(openssl::ssl::error::SslError),
+    Redis(redis::RedisError),
+}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Error {
+        Error::Io(err)
+    }
+}
+
+impl From<serde_json::error::Error> for Error {
+    fn from(err: serde_json::error::Error) -> Error {
+        Error::De(err)
+    }
+}
+
+impl From<openssl::ssl::error::SslError> for Error {
+    fn from(err: openssl::ssl::error::SslError) -> Error {
+        Error::Ssl(err)
+    }
+}
+
+impl From<redis::RedisError> for Error {
+    fn from(err: redis::RedisError) -> Error {
+        Error::Redis(err)
+    }
+}
+
+
+/// Implementation with single method to read configuration from JSON.
+impl AppConfig {
+    pub fn from_json_file(file_name: &str) -> Result<AppConfig, Error> {
+        let file = try!(File::open(file_name));
+        let config: JsonConfig = try!(from_reader(BufReader::new(file)));
+
+        let private_key_file = try!(File::open(config.private_key_file));
+        let priv_key = try!(PKey::private_key_from_pem(&mut BufReader::new(private_key_file)));
+
+        let store = try!(redis::Client::open(&*config.redis_url));
+
+        Ok(AppConfig {
+            base_url: config.base_url,
+            priv_key: priv_key,
+            sender: config.sender,
+            store: store,
+            expire_keys: config.expire_keys,
+            token_validity: config.token_validity,
+            providers: config.providers,
+        })
+    }
+}
+
+
+/// Iron handler for the root path, returns human-friendly message.
+///
+/// This is not actually used in the protocol.
+pub struct WelcomeHandler { pub app: AppConfig }
+impl Handler for WelcomeHandler {
+    fn handle(&self, _: &mut Request) -> IronResult<Response> {
+        json_response(&ObjectBuilder::new()
+            .insert("ladaemon", "Welcome")
+            .insert("version", env!("CARGO_PKG_VERSION"))
+            .unwrap())
+    }
+}
+
+
+/// Iron handler to return the OpenID Discovery document.
+///
+/// Most of this is hard-coded for now, although the URLs are constructed by
+/// using the base URL as configured in the `base_url` configuration value.
+pub struct OIDConfigHandler { pub app: AppConfig }
+impl Handler for OIDConfigHandler {
+    fn handle(&self, _: &mut Request) -> IronResult<Response> {
+        json_response(&ObjectBuilder::new()
+            .insert("issuer", &self.app.base_url)
+            .insert("authorization_endpoint",
+                    format!("{}/auth", self.app.base_url))
+            .insert("jwks_uri", format!("{}/keys.json", self.app.base_url))
+            .insert("scopes_supported", vec!["openid", "email"])
+            .insert("claims_supported",
+                    vec!["aud", "email", "email_verified", "exp", "iat", "iss", "sub"])
+            .insert("response_types_supported", vec!["id_token"])
+            .insert("response_modes_supported", vec!["form_post"])
+            .insert("grant_types_supported", vec!["implicit"])
+            .insert("subject_types_supported", vec!["public"])
+            .insert("id_token_signing_alg_values_supported", vec!["RS256"])
+            .unwrap())
+    }
+}
+
+
+/// Helper function to encode a `BigNum` as URL-safe base64-encoded bytes.
+///
+/// This is used for the public RSA key components returned by the
+/// `KeysHandler`.
+fn json_big_num(n: &BigNum) -> String {
+    n.to_vec().to_base64(base64::URL_SAFE)
+}
+
+
+/// Helper function to build a session ID for a login attempt.
+///
+/// Put the email address, the client ID (RP origin) and some randomness into
+/// a SHA256 hash, and encode it with URL-safe bas64 encoding. This is used
+/// as the key in Redis, as well as the state for OAuth authentication.
+fn session_id(email: &EmailAddress, client_id: &str) -> String {
+    let mut rng = OsRng::new().unwrap();
+    let mut bytes_iter = rng.gen_iter();
+    let rand_bytes: Vec<u8> = (0..16).map(|_| bytes_iter.next().unwrap()).collect();
+
+    let mut hasher = hash::Hasher::new(hash::Type::SHA256);
+    hasher.write(email.to_string().as_bytes()).unwrap();
+    hasher.write(client_id.as_bytes()).unwrap();
+    hasher.write(&rand_bytes).unwrap();
+    hasher.finish().to_base64(base64::URL_SAFE)
+}
+
+
+/// Iron handler for the JSON Web Key Set document.
+///
+/// Currently only supports a single RSA key (as configured), which is
+/// published with the `"base"` key ID, scoped to signing usage. Relying
+/// Parties will need to fetch this data to be able to verify identity tokens
+/// issued by this daemon instance.
+pub struct KeysHandler { pub app: AppConfig }
+impl Handler for KeysHandler {
+    fn handle(&self, _: &mut Request) -> IronResult<Response> {
+        let rsa = self.app.priv_key.get_rsa();
+        json_response(&ObjectBuilder::new()
+            .insert_array("keys", |builder| {
+                builder.push_object(|builder| {
+                    builder.insert("kty", "RSA")
+                        .insert("alg", "RS256")
+                        .insert("use", "sig")
+                        .insert("kid", "base")
+                        .insert("n", json_big_num(&rsa.n().unwrap()))
+                        .insert("e", json_big_num(&rsa.e().unwrap()))
+                })
+            })
+            .unwrap())
+    }
+}
+
+
+/// Iron handler for authentication requests from the RP.
+///
+/// Calls the `oidc::request()` function if the provided email address's
+/// domain matches one of the configured famous providers. Otherwise, calls the
+/// `email::request()` function to allow authentication through the email loop.
+pub struct AuthHandler { pub app: AppConfig }
+impl Handler for AuthHandler {
+    fn handle(&self, req: &mut Request) -> IronResult<Response> {
+        let params = req.get_ref::<UrlEncodedBody>().unwrap();
+        let email_addr = EmailAddress::new(&params.get("login_hint").unwrap()[0]).unwrap();
+        if self.app.providers.contains_key(&email_addr.domain) {
+
+            // OIDC authentication. Using 302 Found for redirection here. Note
+            // that, per RFC 7231, a user agent MAY change the request method
+            // from POST to GET for the subsequent request.
+            let auth_url = oidc::request(&self.app, params);
+            Ok(Response::with((status::Found, modifiers::Redirect(auth_url))))
+
+        } else {
+
+            // Email loop authentication. For now, returns a JSON response;
+            // empty if successful, otherwise contains an error.
+            let obj = email::request(&self.app, params);
+            json_response(&obj)
+
+        }
+    }
+}
+
+
+
+/// Helper method to create a JWT for a given email address and origin.
+///
+/// Builds the JSON payload and header, encoding with (URL-safe)
+/// base64-encoding, then hashing and signing with the provided private key.
+/// Returns the full JWT.
+fn create_jwt(app: &AppConfig, email: &str, origin: &str) -> String {
+
+    let now = now_utc().to_timespec().sec;
+    let payload = serde_json::to_string(
+        &ObjectBuilder::new()
+            .insert("aud", origin)
+            .insert("email", email)
+            .insert("email_verified", email)
+            .insert("exp", now + app.token_validity as i64)
+            .insert("iat", now)
+            .insert("iss", &app.base_url)
+            .insert("sub", email)
+            .unwrap()
+        ).unwrap();
+    let header = serde_json::to_string(
+        &ObjectBuilder::new()
+            .insert("kid", "base")
+            .insert("alg", "RS256")
+            .unwrap()
+        ).unwrap();
+
+    let mut input = Vec::<u8>::new();
+    input.extend(header.as_bytes().to_base64(base64::URL_SAFE).into_bytes());
+    input.push(b'.');
+    input.extend(payload.as_bytes().to_base64(base64::URL_SAFE).into_bytes());
+    let sha256 = hash::hash(hash::Type::SHA256, &input);
+    let sig = app.priv_key.sign(&sha256);
+    input.push(b'.');
+    input.extend(sig.to_base64(base64::URL_SAFE).into_bytes());
+    String::from_utf8(input).unwrap()
+
+}
+
+
+/// HTML template used to have the user agent POST the identity token built
+/// by the daemon instance to the RP's `redirect_uri`.
+const FORWARD_TEMPLATE: &'static str = r#"<!DOCTYPE html>
+<html>
+  <head>
+    <title>Let's Auth</title>
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        document.getElementById('form').submit();
+      });
+    </script>
+  </head>
+  <body>
+    <form id="form" action="{{ return_url }}" method="post">
+      <input type="hidden" name="id_token" value="{{ jwt }}">
+    </form>
+  </body>
+</html>"#;
+
+
+/// Helper function for returning result to the Relying Party.
+///
+/// Takes a `Result` from one of the verification functions and embeds it in
+/// a form in the `FORWARD_TEMPLATE`, from where it's POSTED to the RP's
+/// `redirect_ur` as soon as the page has loaded. Result can either be an error
+/// message or a JWT asserting the user's email address identity.
+/// TODO: return error to RP instead of in a simple HTTP response.
+fn return_to_relier(result: Result<(String, String), &'static str>)
+                    -> IronResult<Response> {
+
+    if result.is_err() {
+        return json_response(&ObjectBuilder::new()
+                            .insert("error", result.unwrap_err())
+                            .unwrap());
+    }
+
+    let (jwt, redirect) = result.unwrap();
+    let html = FORWARD_TEMPLATE.replace("{{ return_url }}", &redirect)
+        .replace("{{ jwt }}", &jwt);
+    let mut rsp = Response::with((status::Ok, html));
+    rsp.headers.set(ContentType::html());
+    Ok(rsp)
+
+}
+
+
+
+/// Iron handler for one-time pad email loop confirmation.
+///
+/// Retrieves the session based session ID and the expected one-time pad.
+/// Verify the code and return the resulting token or error to the RP.
+pub struct ConfirmHandler { pub app: AppConfig }
+impl Handler for ConfirmHandler {
+    fn handle(&self, req: &mut Request) -> IronResult<Response> {
+        let params = req.get_ref::<UrlEncodedQuery>().unwrap();
+        let session_id = &params.get("session").unwrap()[0];
+        let code = &params.get("code").unwrap()[0];
+        return_to_relier(email::verify(&self.app, session_id, code))
+    }
+}
+
+
+/// Iron handler for OAuth callbacks
+///
+/// After the user allows or denies the Authentication Request with the famous
+/// identity provider, they will be redirected back to the callback handler.
+/// Verify the callback data and return the resulting token or error.
+pub struct CallbackHandler { pub app: AppConfig }
+impl Handler for CallbackHandler {
+    fn handle(&self, req: &mut Request) -> IronResult<Response> {
+        let params = req.get_ref::<UrlEncodedQuery>().unwrap();
+        let session = &params.get("state").unwrap()[0];
+        let code = &params.get("code").unwrap()[0];
+        return_to_relier(oidc::verify(&self.app, session, code))
+    }
+}
