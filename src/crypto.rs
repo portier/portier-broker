@@ -7,6 +7,7 @@ use openssl::crypto::pkey::PKey;
 use openssl::crypto::rsa::RSA;
 use self::rand::{OsRng, Rng};
 use serde_json::builder::ObjectBuilder;
+use serde_json::de::from_slice;
 use serde_json::value::Value;
 use super::AppConfig;
 use rustc_serialize::base64::{self, FromBase64, ToBase64};
@@ -83,4 +84,25 @@ pub fn jwk_key_set_find(set: &Value, kid: &str) -> Result<PKey, ()> {
     let mut pub_key = PKey::new();
     pub_key.set_rsa(&RSA::from_public_components(n, e).unwrap());
     Ok(pub_key)
+}
+
+
+/// Verify a JWS signature, returning the payload as Value if successful.
+pub fn verify_jws(jws: &str, key_set: &Value) -> Result<Value, ()> {
+    // Extract the header from the JWT structure. Determine what key was used
+    // to sign the token, so we can then verify the signature.
+    let parts: Vec<&str> = jws.split('.').collect();
+    let jwt_header: Value = from_slice(&parts[0].from_base64().unwrap()).unwrap();
+    let kid = jwt_header.find("kid").unwrap().as_string().unwrap();
+    let pub_key = try!(jwk_key_set_find(key_set, kid));
+
+    // Verify the identity token's signature.
+    let message = format!("{}.{}", parts[0], parts[1]);
+    let sha256 = hash::hash(hash::Type::SHA256, message.as_bytes());
+    let sig = parts[2].from_base64().unwrap();
+    if !pub_key.verify(&sha256, &sig) {
+        return Err(());
+    }
+
+    Ok(from_slice(&parts[1].from_base64().unwrap()).unwrap())
 }

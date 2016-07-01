@@ -2,16 +2,14 @@ extern crate hyper;
 
 use emailaddress::EmailAddress;
 use iron::Url;
-use openssl::crypto::hash;
-use serde_json::de::{from_reader, from_slice};
+use serde_json::de::from_reader;
 use serde_json::value::Value;
 use redis::Commands;
-use rustc_serialize::base64::FromBase64;
 use self::hyper::client::Client as HttpClient;
 use self::hyper::header::ContentType as HyContentType;
 use self::hyper::header::Headers;
 use super::{AppConfig, create_jwt};
-use super::crypto::{jwk_key_set_find, session_id};
+use super::crypto::{session_id, verify_jws};
 use std::collections::HashMap;
 use std::iter::Iterator;
 use time::now_utc;
@@ -130,28 +128,13 @@ pub fn verify(app: &AppConfig, session_id: &str, code: &str)
     let token_obj: Value = from_reader(token_rsp).unwrap();
     let id_token = token_obj.find("id_token").unwrap().as_string().unwrap();
 
-    // Extract the header from the JWT structure. First order of business
-    // is to determine what key was used to sign the token, so we can then
-    // verify the signature.
-    let parts: Vec<&str> = id_token.split('.').collect();
-    let jwt_header: Value = from_slice(&parts[0].from_base64().unwrap()).unwrap();
-    let kid = jwt_header.find("kid").unwrap().as_string().unwrap();
-
-    // Grab the keys from the provider, extract the one used for this signature.
+    // Grab the keys from the provider, then verify the signature.
     let keys_url = config["jwks_uri"].as_string().unwrap();
     let keys_rsp = client.get(keys_url).send().unwrap();
     let keys_doc: Value = from_reader(keys_rsp).unwrap();
-    let pub_key = jwk_key_set_find(&keys_doc, kid).unwrap();
-
-    // Verify the identity token's signature.
-    let message = format!("{}.{}", parts[0], parts[1]);
-    let sha256 = hash::hash(hash::Type::SHA256, message.as_bytes());
-    let sig = parts[2].from_base64().unwrap();
-    let verified = pub_key.verify(&sha256, &sig);
-    assert!(verified);
+    let jwt_payload = verify_jws(id_token, &keys_doc).unwrap();
 
     // Verify that the issuer matches the configured value.
-    let jwt_payload: Value = from_slice(&parts[1].from_base64().unwrap()).unwrap();
     let iss = jwt_payload.find("iss").unwrap().as_string().unwrap();
     let issuer_origin = vec!["https://", &provider.issuer].join("");
     assert!(iss == provider.issuer || iss == issuer_origin);
