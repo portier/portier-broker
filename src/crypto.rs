@@ -43,14 +43,14 @@ pub fn jwk_key_set(app: &AppConfig) -> Value {
         n.to_vec().to_base64(base64::URL_SAFE)
     }
 
-    let rsa = app.priv_key.get_rsa();
+    let rsa = app.priv_key.key.get_rsa();
     ObjectBuilder::new()
         .insert_array("keys", |builder| {
             builder.push_object(|builder| {
                 builder.insert("kty", "RSA")
                     .insert("alg", "RS256")
                     .insert("use", "sig")
-                    .insert("kid", "base")
+                    .insert("kid", &app.priv_key.id)
                     .insert("n", json_big_num(&rsa.n().unwrap()))
                     .insert("e", json_big_num(&rsa.e().unwrap()))
             })
