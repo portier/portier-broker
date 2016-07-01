@@ -106,3 +106,12 @@ pub fn verify_jws(jws: &str, key_set: &Value) -> Result<Value, ()> {
 
     Ok(from_slice(&parts[1].from_base64().unwrap()).unwrap())
 }
+
+
+/// Append JWS-encoded signature to message contained in data Vector.
+pub fn sign_jws(priv_key: &PKey, data: &mut Vec<u8>) {
+    let sha256 = hash::hash(hash::Type::SHA256, data);
+    let sig = priv_key.sign(&sha256);
+    data.push(b'.');
+    data.extend(sig.to_base64(base64::URL_SAFE).into_bytes());
+}

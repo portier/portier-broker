@@ -14,7 +14,6 @@ use iron::middleware::Handler;
 use iron::modifiers;
 use iron::prelude::*;
 use iron::status;
-use openssl::crypto::hash;
 use openssl::crypto::pkey::PKey;
 use serde_json::builder::ObjectBuilder;
 use serde_json::de::from_reader;
@@ -259,10 +258,7 @@ fn create_jwt(app: &AppConfig, email: &str, origin: &str) -> String {
     input.extend(header.as_bytes().to_base64(base64::URL_SAFE).into_bytes());
     input.push(b'.');
     input.extend(payload.as_bytes().to_base64(base64::URL_SAFE).into_bytes());
-    let sha256 = hash::hash(hash::Type::SHA256, &input);
-    let sig = app.priv_key.sign(&sha256);
-    input.push(b'.');
-    input.extend(sig.to_base64(base64::URL_SAFE).into_bytes());
+    crypto::sign_jws(&app.priv_key, &mut input);
     String::from_utf8(input).unwrap()
 
 }
