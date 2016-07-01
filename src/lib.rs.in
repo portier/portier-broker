@@ -14,7 +14,6 @@ use iron::middleware::Handler;
 use iron::modifiers;
 use iron::prelude::*;
 use iron::status;
-use openssl::bn::BigNum;
 use openssl::crypto::hash;
 use openssl::crypto::pkey::PKey;
 use serde_json::builder::ObjectBuilder;
@@ -185,15 +184,6 @@ impl Handler for OIDConfigHandler {
 }
 
 
-/// Helper function to encode a `BigNum` as URL-safe base64-encoded bytes.
-///
-/// This is used for the public RSA key components returned by the
-/// `KeysHandler`.
-fn json_big_num(n: &BigNum) -> String {
-    n.to_vec().to_base64(base64::URL_SAFE)
-}
-
-
 /// Iron handler for the JSON Web Key Set document.
 ///
 /// Currently only supports a single RSA key (as configured), which is
@@ -203,19 +193,7 @@ fn json_big_num(n: &BigNum) -> String {
 pub struct KeysHandler { pub app: AppConfig }
 impl Handler for KeysHandler {
     fn handle(&self, _: &mut Request) -> IronResult<Response> {
-        let rsa = self.app.priv_key.get_rsa();
-        json_response(&ObjectBuilder::new()
-            .insert_array("keys", |builder| {
-                builder.push_object(|builder| {
-                    builder.insert("kty", "RSA")
-                        .insert("alg", "RS256")
-                        .insert("use", "sig")
-                        .insert("kid", "base")
-                        .insert("n", json_big_num(&rsa.n().unwrap()))
-                        .insert("e", json_big_num(&rsa.e().unwrap()))
-                })
-            })
-            .unwrap())
+        json_response(&crypto::jwk_key_set(&self.app))
     }
 }
 
