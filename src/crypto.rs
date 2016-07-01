@@ -3,11 +3,13 @@ extern crate rand;
 use emailaddress::EmailAddress;
 use openssl::bn::BigNum;
 use openssl::crypto::hash;
+use openssl::crypto::pkey::PKey;
+use openssl::crypto::rsa::RSA;
 use self::rand::{OsRng, Rng};
 use serde_json::builder::ObjectBuilder;
 use serde_json::value::Value;
 use super::AppConfig;
-use rustc_serialize::base64::{self, ToBase64};
+use rustc_serialize::base64::{self, FromBase64, ToBase64};
 use std::io::Write;
 
 
@@ -53,4 +55,32 @@ pub fn jwk_key_set(app: &AppConfig) -> Value {
             })
         })
         .unwrap()
+}
+
+
+/// Helper function to deserialize key from JWK Key Set.
+///
+/// Searches the provided JWK Key Set Value for the key matching the given
+/// id. Returns a usable public key if exactly one key is found.
+pub fn jwk_key_set_find(set: &Value, kid: &str) -> Result<PKey, ()> {
+    let matching = set.find("keys").unwrap().as_array().unwrap().iter()
+        .filter(|key_obj| {
+            key_obj.find("kid").unwrap().as_string().unwrap() == kid &&
+            key_obj.find("use").unwrap().as_string().unwrap() == "sig"
+        })
+        .collect::<Vec<&Value>>();
+
+    // Verify that we found exactly one key matching the key ID.
+    if matching.len() != 1 {
+        return Err(());
+    }
+
+    // Then, use the data to build a public key object for verification.
+    let n_b64 = matching[0].find("n").unwrap().as_string().unwrap();
+    let e_b64 = matching[0].find("e").unwrap().as_string().unwrap();
+    let n = BigNum::new_from_slice(&n_b64.from_base64().unwrap()).unwrap();
+    let e = BigNum::new_from_slice(&e_b64.from_base64().unwrap()).unwrap();
+    let mut pub_key = PKey::new();
+    pub_key.set_rsa(&RSA::from_public_components(n, e).unwrap());
+    Ok(pub_key)
 }

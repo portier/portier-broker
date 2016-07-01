@@ -2,10 +2,7 @@ extern crate hyper;
 
 use emailaddress::EmailAddress;
 use iron::Url;
-use openssl::bn::BigNum;
 use openssl::crypto::hash;
-use openssl::crypto::pkey::PKey;
-use openssl::crypto::rsa::RSA;
 use serde_json::de::{from_reader, from_slice};
 use serde_json::value::Value;
 use redis::Commands;
@@ -14,7 +11,7 @@ use self::hyper::client::Client as HttpClient;
 use self::hyper::header::ContentType as HyContentType;
 use self::hyper::header::Headers;
 use super::{AppConfig, create_jwt};
-use super::crypto::session_id;
+use super::crypto::{jwk_key_set_find, session_id};
 use std::collections::HashMap;
 use std::iter::Iterator;
 use time::now_utc;
@@ -140,27 +137,11 @@ pub fn verify(app: &AppConfig, session_id: &str, code: &str)
     let jwt_header: Value = from_slice(&parts[0].from_base64().unwrap()).unwrap();
     let kid = jwt_header.find("kid").unwrap().as_string().unwrap();
 
-    // Grab the keys from the provider and find keys that match the key ID
-    // used to sign the identity token.
+    // Grab the keys from the provider, extract the one used for this signature.
     let keys_url = config["jwks_uri"].as_string().unwrap();
     let keys_rsp = client.get(keys_url).send().unwrap();
     let keys_doc: Value = from_reader(keys_rsp).unwrap();
-    let keys = keys_doc.find("keys").unwrap().as_array().unwrap().iter()
-        .filter(|key_obj| {
-            key_obj.find("kid").unwrap().as_string().unwrap() == kid &&
-            key_obj.find("use").unwrap().as_string().unwrap() == "sig"
-        })
-        .collect::<Vec<&Value>>();
-
-    // Verify that we found exactly one key matching the key ID.
-    // Then, use the data to build a public key object for verification.
-    assert!(keys.len() == 1);
-    let n_b64 = keys[0].find("n").unwrap().as_string().unwrap();
-    let e_b64 = keys[0].find("e").unwrap().as_string().unwrap();
-    let n = BigNum::new_from_slice(&n_b64.from_base64().unwrap()).unwrap();
-    let e = BigNum::new_from_slice(&e_b64.from_base64().unwrap()).unwrap();
-    let mut pub_key = PKey::new();
-    pub_key.set_rsa(&RSA::from_public_components(n, e).unwrap());
+    let pub_key = jwk_key_set_find(&keys_doc, kid).unwrap();
 
     // Verify the identity token's signature.
     let message = format!("{}.{}", parts[0], parts[1]);
