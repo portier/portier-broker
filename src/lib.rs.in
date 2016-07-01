@@ -1,7 +1,6 @@
 extern crate emailaddress;
 extern crate iron;
 extern crate openssl;
-extern crate rand;
 extern crate redis;
 extern crate rustc_serialize;
 extern crate serde_json;
@@ -21,15 +20,14 @@ use openssl::crypto::pkey::PKey;
 use serde_json::builder::ObjectBuilder;
 use serde_json::de::from_reader;
 use serde_json::value::Value;
-use rand::{OsRng, Rng};
 use rustc_serialize::base64::{self, ToBase64};
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufReader, Write};
-use std::iter::Iterator;
+use std::io::BufReader;
 use time::now_utc;
 use urlencoded::{UrlEncodedBody, UrlEncodedQuery};
 
+pub mod crypto;
 pub mod email;
 pub mod oidc;
 
@@ -193,24 +191,6 @@ impl Handler for OIDConfigHandler {
 /// `KeysHandler`.
 fn json_big_num(n: &BigNum) -> String {
     n.to_vec().to_base64(base64::URL_SAFE)
-}
-
-
-/// Helper function to build a session ID for a login attempt.
-///
-/// Put the email address, the client ID (RP origin) and some randomness into
-/// a SHA256 hash, and encode it with URL-safe bas64 encoding. This is used
-/// as the key in Redis, as well as the state for OAuth authentication.
-fn session_id(email: &EmailAddress, client_id: &str) -> String {
-    let mut rng = OsRng::new().unwrap();
-    let mut bytes_iter = rng.gen_iter();
-    let rand_bytes: Vec<u8> = (0..16).map(|_| bytes_iter.next().unwrap()).collect();
-
-    let mut hasher = hash::Hasher::new(hash::Type::SHA256);
-    hasher.write(email.to_string().as_bytes()).unwrap();
-    hasher.write(client_id.as_bytes()).unwrap();
-    hasher.write(&rand_bytes).unwrap();
-    hasher.finish().to_base64(base64::URL_SAFE)
 }
 
 
