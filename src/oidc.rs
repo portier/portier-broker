@@ -41,7 +41,7 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> Url {
         ("client_id", client_id.clone()),
         ("redirect", params.get("redirect_uri").unwrap()[0].clone()),
     ]).unwrap();
-    let _: bool = app.store.client.expire(key.clone(), app.expire_keys).unwrap();
+    let _: bool = app.store.client.expire(key.clone(), app.store.expire_keys).unwrap();
 
     // Retrieve the provider's Discovery document and extract the
     // `authorization_endpoint` from it.

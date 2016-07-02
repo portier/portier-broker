@@ -46,7 +46,6 @@ pub struct AppConfig {
     base_url: String, // Origin of this instance, used for constructing URLs
     keys: Vec<crypto::NamedKey>, // Signing keys
     store: store::Store, // Redis Client
-    expire_keys: usize, // Redis key TTL, in seconds
     sender: Email, // From address for email
     token_validity: usize, // JWT validity duration, in seconds
     providers: HashMap<String, Provider>, // Mapping of Domain -> OIDC Provider
@@ -133,8 +132,10 @@ impl AppConfig {
             base_url: config.base_url,
             keys: config.keys,
             sender: config.sender,
-            store: store::Store { client: store },
-            expire_keys: config.expire_keys,
+            store: store::Store {
+                client: store,
+                expire_keys: config.expire_keys,
+            },
             token_validity: config.token_validity,
             providers: config.providers,
         })

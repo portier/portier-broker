@@ -54,7 +54,7 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> Value {
         ("code", chars.clone()),
         ("redirect", params.get("redirect_uri").unwrap()[0].clone()),
     ]);
-    let exp_res: RedisResult<bool> = app.store.client.expire(key.clone(), app.expire_keys);
+    let exp_res: RedisResult<bool> = app.store.client.expire(key.clone(), app.store.expire_keys);
 
     // Generate the URL used to verify email address ownership.
     let href = format!("{}/confirm?session={}&code={}",
