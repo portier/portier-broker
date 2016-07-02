@@ -9,6 +9,14 @@ pub struct Store {
 }
 
 impl Store {
+    pub fn new(url: &str, expire_keys: usize) -> Result<Store, &'static str> {
+        let res = redis::Client::open(url);
+        if res.is_err() {
+            return Err("error opening store connection");
+        }
+        Ok(Store { client: res.unwrap(), expire_keys: expire_keys })
+    }
+
     pub fn store_session(&self, key: &str, data: &[(&str, &str)])
                          -> Result<(), String> {
         let res: RedisResult<String> = self.client.hset_multiple(key, data);
