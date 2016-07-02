@@ -18,7 +18,6 @@ use serde::de::Deserialize;
 use serde_json::builder::ObjectBuilder;
 use serde_json::de::from_reader;
 use serde_json::value::Value;
-use rustc_serialize::base64::{self, ToBase64};
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
@@ -232,38 +231,21 @@ impl Handler for AuthHandler {
 
 /// Helper method to create a JWT for a given email address and origin.
 ///
-/// Builds the JSON payload and header, encoding with (URL-safe)
-/// base64-encoding, then hashing and signing with the provided private key.
-/// Returns the full JWT.
+/// Builds the JSON payload and header, then signs it using the last key
+/// provided in the configuration object.
 fn create_jwt(app: &AppConfig, email: &str, origin: &str) -> String {
-
-    let key = app.keys.last().unwrap();
     let now = now_utc().to_timespec().sec;
-    let payload = serde_json::to_string(
-        &ObjectBuilder::new()
-            .insert("aud", origin)
-            .insert("email", email)
-            .insert("email_verified", email)
-            .insert("exp", now + app.token_validity as i64)
-            .insert("iat", now)
-            .insert("iss", &app.base_url)
-            .insert("sub", email)
-            .unwrap()
-        ).unwrap();
-    let header = serde_json::to_string(
-        &ObjectBuilder::new()
-            .insert("kid", &key.id)
-            .insert("alg", "RS256")
-            .unwrap()
-        ).unwrap();
-
-    let mut input = Vec::<u8>::new();
-    input.extend(header.as_bytes().to_base64(base64::URL_SAFE).into_bytes());
-    input.push(b'.');
-    input.extend(payload.as_bytes().to_base64(base64::URL_SAFE).into_bytes());
-    crypto::sign_jws(&key.key, &mut input);
-    String::from_utf8(input).unwrap()
-
+    let payload = &ObjectBuilder::new()
+        .insert("aud", origin)
+        .insert("email", email)
+        .insert("email_verified", email)
+        .insert("exp", now + app.token_validity as i64)
+        .insert("iat", now)
+        .insert("iss", &app.base_url)
+        .insert("sub", email)
+        .unwrap();
+    let key = app.keys.last().unwrap();
+    crypto::sign_jws(&key, &payload)
 }
 
 

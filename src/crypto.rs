@@ -10,6 +10,7 @@ use serde_json::builder::{ArrayBuilder, ObjectBuilder};
 use serde_json::de::from_slice;
 use serde_json::value::Value;
 use super::AppConfig;
+use super::serde_json;
 use rustc_serialize::base64::{self, FromBase64, ToBase64};
 use std::fs::File;
 use std::io::{BufReader, Write};
@@ -132,10 +133,25 @@ pub fn verify_jws(jws: &str, key_set: &Value) -> Result<Value, ()> {
 }
 
 
-/// Append JWS-encoded signature to message contained in data Vector.
-pub fn sign_jws(priv_key: &PKey, data: &mut Vec<u8>) {
-    let sha256 = hash::hash(hash::Type::SHA256, data);
-    let sig = priv_key.sign(&sha256);
-    data.push(b'.');
-    data.extend(sig.to_base64(base64::URL_SAFE).into_bytes());
+/// Create a JSON Web Signature (JWS) for the given JSON structure. The JWS
+/// is signed with the provived `NamedKey`.
+pub fn sign_jws(key: &NamedKey, payload: &Value) -> String {
+    let header = serde_json::to_string(
+        &ObjectBuilder::new()
+            .insert("kid", &key.id)
+            .insert("alg", "RS256")
+            .unwrap()
+        ).unwrap();
+
+    let payload = serde_json::to_string(&payload).unwrap();
+    let mut input = Vec::<u8>::new();
+    input.extend(header.as_bytes().to_base64(base64::URL_SAFE).into_bytes());
+    input.push(b'.');
+    input.extend(payload.as_bytes().to_base64(base64::URL_SAFE).into_bytes());
+
+    let sha256 = hash::hash(hash::Type::SHA256, &input);
+    let sig = key.key.sign(&sha256);
+    input.push(b'.');
+    input.extend(sig.to_base64(base64::URL_SAFE).into_bytes());
+    String::from_utf8(input).unwrap()
 }
