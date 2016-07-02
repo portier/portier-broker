@@ -13,7 +13,7 @@ use iron::modifiers;
 use iron::prelude::*;
 use iron::status;
 use serde::de::Deserialize;
-use serde_json::builder::ObjectBuilder;
+use serde_json::builder::{ArrayBuilder, ObjectBuilder};
 use serde_json::de::from_reader;
 use serde_json::value::Value;
 use std::collections::HashMap;
@@ -184,14 +184,18 @@ impl Handler for OIDConfigHandler {
 
 /// Iron handler for the JSON Web Key Set document.
 ///
-/// Currently only supports a single RSA key (as configured), which is
-/// published with the `"base"` key ID, scoped to signing usage. Relying
-/// Parties will need to fetch this data to be able to verify identity tokens
-/// issued by this daemon instance.
+/// Relying Parties will need to fetch this data to be able to verify identity
+/// tokens issued by this daemon instance.
 pub struct KeysHandler { pub app: AppConfig }
 impl Handler for KeysHandler {
     fn handle(&self, _: &mut Request) -> IronResult<Response> {
-        json_response(&crypto::jwk_key_set(&self.app))
+        let mut keys = ArrayBuilder::new();
+        for key in &self.app.keys {
+            keys = keys.push(key.public_jwk())
+        }
+        json_response(&ObjectBuilder::new()
+                          .insert("keys", keys.unwrap())
+                          .unwrap())
     }
 }
 

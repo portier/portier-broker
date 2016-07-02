@@ -9,10 +9,9 @@ use self::openssl::crypto::pkey::PKey;
 use self::openssl::crypto::rsa::RSA;
 use self::rand::{OsRng, Rng};
 use self::rustc_serialize::base64::{self, FromBase64, ToBase64};
-use serde_json::builder::{ArrayBuilder, ObjectBuilder};
+use serde_json::builder::ObjectBuilder;
 use serde_json::de::from_slice;
 use serde_json::value::Value;
-use super::AppConfig;
 use super::serde_json;
 use std::fs::File;
 use std::io::{BufReader, Write};
@@ -94,20 +93,6 @@ pub fn session_id(email: &EmailAddress, client_id: &str) -> String {
     hasher.write(client_id.as_bytes()).unwrap();
     hasher.write(&rand_bytes).unwrap();
     hasher.finish().to_base64(base64::URL_SAFE)
-}
-
-
-/// Helper function to build a JWK key set JSON Value.
-///
-/// Returns a Value representing the JWK Key Set containing the public
-/// components for the AppConfig's private key, for use in signature
-/// verification.
-pub fn jwk_key_set(app: &AppConfig) -> Value {
-    let mut keys = ArrayBuilder::new();
-    for key in &app.keys {
-        keys = keys.push(key.public_jwk())
-    }
-    ObjectBuilder::new().insert("keys", keys.unwrap()).unwrap()
 }
 
 
