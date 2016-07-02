@@ -11,26 +11,27 @@ use std::io::BufReader;
 use super::{crypto, store};
 
 
-/// Holds runtime configuration data for this daemon instance.
-#[derive(Clone, Deserialize)]
-pub struct AppConfig {
-    pub base_url: String, // Origin of this instance, used for constructing URLs
-    pub keys: Vec<crypto::NamedKey>, // Signing keys
-    pub store: store::Store, // Redis Client
-    pub sender: Email, // From address for email
-    pub token_validity: usize, // JWT validity duration, in seconds
-    pub providers: HashMap<String, Provider>, // Mapping of Domain -> OIDC Provider
+/// Union of all possible error types seen while parsing.
+#[derive(Debug)]
+pub enum Error {
+    Io(std::io::Error),
+    De(serde_json::error::Error),
+    Store(&'static str),
 }
 
-
-/// Represents an OpenID Connect provider.
-#[derive(Clone, Deserialize)]
-pub struct Provider {
-    pub discovery: String,
-    pub client_id: String,
-    pub secret: String,
-    pub issuer: String,
+macro_rules! from_error {
+    ( $orig:ty, $enum_type:ident ) => {
+        impl From<$orig> for Error {
+            fn from(err: $orig) -> Error {
+                Error::$enum_type(err)
+            }
+        }
+    }
 }
+
+from_error!(std::io::Error, Io);
+from_error!(serde_json::error::Error, De);
+from_error!(&'static str, Store);
 
 
 /// Takes a JSON object containing "id" and "file" properties, and attempts
@@ -67,28 +68,26 @@ pub struct Email {
 }
 
 
-/// Union of all possible error types seen while parsing.
-#[derive(Debug)]
-pub enum Error {
-    Io(std::io::Error),
-    De(serde_json::error::Error),
-    Store(&'static str),
+/// Represents an OpenID Connect provider.
+#[derive(Clone, Deserialize)]
+pub struct Provider {
+    pub discovery: String,
+    pub client_id: String,
+    pub secret: String,
+    pub issuer: String,
 }
 
-macro_rules! from_error {
-    ( $orig:ty, $enum_type:ident ) => {
-        impl From<$orig> for Error {
-            fn from(err: $orig) -> Error {
-                Error::$enum_type(err)
-            }
-        }
-    }
+
+/// Holds runtime configuration data for this daemon instance.
+#[derive(Clone, Deserialize)]
+pub struct AppConfig {
+    pub base_url: String, // Origin of this instance, used for constructing URLs
+    pub keys: Vec<crypto::NamedKey>, // Signing keys
+    pub store: store::Store, // Redis Client
+    pub sender: Email, // From address for email
+    pub token_validity: usize, // JWT validity duration, in seconds
+    pub providers: HashMap<String, Provider>, // Mapping of Domain -> OIDC Provider
 }
-
-from_error!(std::io::Error, Io);
-from_error!(serde_json::error::Error, De);
-from_error!(&'static str, Store);
-
 
 /// Implementation with single method to read configuration from JSON.
 impl AppConfig {
