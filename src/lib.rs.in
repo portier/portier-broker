@@ -41,7 +41,7 @@ fn json_response(obj: &Value) -> IronResult<Response> {
 
 
 /// Holds runtime configuration data for this daemon instance.
-#[derive(Clone)]
+#[derive(Clone, Deserialize)]
 pub struct AppConfig {
     base_url: String, // Origin of this instance, used for constructing URLs
     keys: Vec<crypto::NamedKey>, // Signing keys
@@ -96,18 +96,6 @@ pub struct Email {
 }
 
 
-/// Represents a JSON-based configuration file.
-#[derive(Clone, Deserialize)]
-pub struct JsonConfig {
-    base_url: String,
-    keys: Vec<crypto::NamedKey>,
-    store: store::Store,
-    sender: Email,
-    token_validity: usize,
-    providers: HashMap<String, Provider>,
-}
-
-
 /// Union of all possible error types seen while parsing.
 #[derive(Debug)]
 pub enum Error {
@@ -135,15 +123,7 @@ from_error!(&'static str, Store);
 impl AppConfig {
     pub fn from_json_file(file_name: &str) -> Result<AppConfig, Error> {
         let file = try!(File::open(file_name));
-        let config: JsonConfig = try!(from_reader(BufReader::new(file)));
-        Ok(AppConfig {
-            base_url: config.base_url,
-            keys: config.keys,
-            sender: config.sender,
-            store: config.store,
-            token_validity: config.token_validity,
-            providers: config.providers,
-        })
+        Ok(try!(from_reader(BufReader::new(file))))
     }
 }
 
