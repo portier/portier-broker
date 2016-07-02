@@ -126,7 +126,6 @@ impl Handler for AuthHandler {
 }
 
 
-
 /// Helper method to create a JWT for a given email address and origin.
 ///
 /// Builds the JSON payload, then signs it using the last key provided in
@@ -190,7 +189,6 @@ fn return_to_relier(result: Result<(String, String), String>)
     Ok(rsp)
 
 }
-
 
 
 /// Iron handler for one-time pad email loop confirmation.
