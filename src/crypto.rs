@@ -17,6 +17,7 @@ use std::fs::File;
 use std::io::{BufReader, Write};
 
 
+/// A named key pair, for use in JWS signing.
 #[derive(Clone)]
 pub struct NamedKey {
     id: String,
@@ -25,6 +26,8 @@ pub struct NamedKey {
 
 
 impl NamedKey {
+    /// Creates a NamedKey for the given key ID. Reads the key pair from the
+    /// PEM-encoded file named by the `file` argument.
     pub fn from_file(id: &str, file: &str) -> Result<NamedKey, &'static str> {
         let file_res = File::open(file);
         if file_res.is_err() {

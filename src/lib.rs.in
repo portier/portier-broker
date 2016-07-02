@@ -62,6 +62,8 @@ pub struct Provider {
 }
 
 
+/// Takes a JSON object containing "id" and "file" properties, and attempts
+/// to instantiate the `NamedKey` object matching the property values.
 impl Deserialize for crypto::NamedKey {
     fn deserialize<D>(de: &mut D) -> Result<crypto::NamedKey, D::Error>
                       where D: serde::Deserializer {
@@ -184,6 +186,8 @@ impl Handler for OIDConfigHandler {
 
 /// Iron handler for the JSON Web Key Set document.
 ///
+/// Respond with the JWK key set containing all of the configured keys.
+///
 /// Relying Parties will need to fetch this data to be able to verify identity
 /// tokens issued by this daemon instance.
 pub struct KeysHandler { pub app: AppConfig }
@@ -233,8 +237,8 @@ impl Handler for AuthHandler {
 
 /// Helper method to create a JWT for a given email address and origin.
 ///
-/// Builds the JSON payload and header, then signs it using the last key
-/// provided in the configuration object.
+/// Builds the JSON payload, then signs it using the last key provided in
+/// the configuration object.
 fn create_jwt(app: &AppConfig, email: &str, origin: &str) -> String {
     let now = now_utc().to_timespec().sec;
     let payload = &ObjectBuilder::new()
