@@ -11,7 +11,31 @@ use serde_json::de::from_slice;
 use serde_json::value::Value;
 use super::AppConfig;
 use rustc_serialize::base64::{self, FromBase64, ToBase64};
-use std::io::Write;
+use std::fs::File;
+use std::io::{BufReader, Write};
+
+
+#[derive(Clone)]
+pub struct NamedKey {
+    pub id: String,
+    pub key: PKey,
+}
+
+
+impl NamedKey {
+    pub fn from_file(id: &str, file: &str) -> Result<NamedKey, &'static str> {
+        let file_res = File::open(file);
+        if file_res.is_err() {
+            return Err("could not open key file");
+        }
+        let private_key_file = file_res.unwrap();
+        let key_res = PKey::private_key_from_pem(&mut BufReader::new(private_key_file));
+        if key_res.is_err() {
+            return Err("could not instantiate private key");
+        }
+        Ok(NamedKey { id: id.to_string(), key: key_res.unwrap() })
+    }
+}
 
 
 /// Helper function to build a session ID for a login attempt.

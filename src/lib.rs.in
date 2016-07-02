@@ -14,7 +14,6 @@ use iron::middleware::Handler;
 use iron::modifiers;
 use iron::prelude::*;
 use iron::status;
-use openssl::crypto::pkey::PKey;
 use serde::de::Deserialize;
 use serde_json::builder::ObjectBuilder;
 use serde_json::de::from_reader;
@@ -47,35 +46,12 @@ fn json_response(obj: &Value) -> IronResult<Response> {
 #[derive(Clone)]
 pub struct AppConfig {
     base_url: String, // Origin of this instance, used for constructing URLs
-    keys: Vec<NamedKey>, // Signing keys
+    keys: Vec<crypto::NamedKey>, // Signing keys
     store: redis::Client, // Redis Client
     expire_keys: usize, // Redis key TTL, in seconds
     sender: Email, // From address for email
     token_validity: usize, // JWT validity duration, in seconds
     providers: HashMap<String, Provider>, // Mapping of Domain -> OIDC Provider
-}
-
-
-#[derive(Clone)]
-pub struct NamedKey {
-    id: String,
-    key: PKey,
-}
-
-
-impl NamedKey {
-    fn from_file(id: &str, file: &str) -> Result<NamedKey, &'static str> {
-        let file_res = File::open(file);
-        if file_res.is_err() {
-            return Err("could not open key file");
-        }
-        let private_key_file = file_res.unwrap();
-        let key_res = PKey::private_key_from_pem(&mut BufReader::new(private_key_file));
-        if key_res.is_err() {
-            return Err("could not instantiate private key");
-        }
-        Ok(NamedKey { id: id.to_string(), key: key_res.unwrap() })
-    }
 }
 
 
@@ -89,13 +65,13 @@ pub struct Provider {
 }
 
 
-impl Deserialize for NamedKey {
-    fn deserialize<D>(de: &mut D) -> Result<NamedKey, D::Error>
+impl Deserialize for crypto::NamedKey {
+    fn deserialize<D>(de: &mut D) -> Result<crypto::NamedKey, D::Error>
                       where D: serde::Deserializer {
         let value: Value = try!(serde::Deserialize::deserialize(de));
         let id = value.find("id").unwrap().as_string().unwrap();
         let file_name = value.find("file").unwrap().as_string().unwrap();
-        let res = NamedKey::from_file(id, file_name);
+        let res = crypto::NamedKey::from_file(id, file_name);
         res.or_else(|err| Err(serde::de::Error::custom(err)))
     }
 }
@@ -113,7 +89,7 @@ pub struct Email {
 #[derive(Clone, Deserialize)]
 pub struct JsonConfig {
     base_url: String,
-    keys: Vec<NamedKey>,
+    keys: Vec<crypto::NamedKey>,
     redis_url: String,
     sender: Email,
     expire_keys: usize,
