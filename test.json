@@ -3,12 +3,14 @@
   "keys": [
     {"id": "base", "file": "private.pem"}
   ],
-  "redis_url": "redis://127.0.0.1/5",
+  "store": {
+    "redis_url": "redis://127.0.0.1/5",
+    "expire_keys": 900
+  },
   "sender": {
       "name": "Let's Auth",
       "address": "letsauth@xavamedia.nl"
   },
-  "expire_keys": 900,
   "token_validity": 600,
   "providers": {
     "gmail.com": {
