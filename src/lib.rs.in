@@ -244,8 +244,7 @@ fn create_jwt(app: &AppConfig, email: &str, origin: &str) -> String {
         .insert("iss", &app.base_url)
         .insert("sub", email)
         .unwrap();
-    let key = app.keys.last().unwrap();
-    crypto::sign_jws(&key, &payload)
+    app.keys.last().unwrap().sign_jws(&payload)
 }
 
 
