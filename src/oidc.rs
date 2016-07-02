@@ -36,12 +36,11 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> Url {
     // Store the nonce and the RP's `redirect_uri` in Redis for use in the
     // callback handler.
     let key = format!("session:{}", session);
-    let _: String = app.store.client.hset_multiple(key.clone(), &[
-        ("email", email_addr.to_string()),
-        ("client_id", client_id.clone()),
-        ("redirect", params.get("redirect_uri").unwrap()[0].clone()),
+    let _ = app.store.store_session(&key, &[
+        ("email", &email_addr.to_string()),
+        ("client_id", client_id),
+        ("redirect", &params.get("redirect_uri").unwrap()[0]),
     ]).unwrap();
-    let _: bool = app.store.client.expire(key.clone(), app.store.expire_keys).unwrap();
 
     // Retrieve the provider's Discovery document and extract the
     // `authorization_endpoint` from it.

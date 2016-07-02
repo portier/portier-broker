@@ -2,7 +2,7 @@ extern crate lettre;
 extern crate rand;
 
 use emailaddress::EmailAddress;
-use redis::{Commands, RedisResult};
+use redis::Commands;
 use self::lettre::email::EmailBuilder;
 use self::lettre::transport::EmailTransport;
 use self::lettre::transport::smtp::SmtpTransportBuilder;
@@ -48,13 +48,12 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> Value {
     let client_id = &params.get("client_id").unwrap()[0];
     let session = session_id(&email_addr, client_id);
     let key = format!("session:{}", session);
-    let set_res: RedisResult<String> = app.store.client.hset_multiple(key.clone(), &[
-        ("email", email_addr.to_string()),
-        ("client_id", client_id.clone()),
-        ("code", chars.clone()),
-        ("redirect", params.get("redirect_uri").unwrap()[0].clone()),
+    let res = app.store.store_session(&key, &[
+        ("email", &email_addr.to_string()),
+        ("client_id", client_id),
+        ("code", &chars),
+        ("redirect", &params.get("redirect_uri").unwrap()[0]),
     ]);
-    let exp_res: RedisResult<bool> = app.store.client.expire(key.clone(), app.store.expire_keys);
 
     // Generate the URL used to verify email address ownership.
     let href = format!("{}/confirm?session={}&code={}",
@@ -90,11 +89,8 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> Value {
             _ => obj,
         }
     }
-    if !set_res.is_ok() {
-        obj = obj.insert("hset_multiple", set_res.unwrap_err().to_string());
-    }
-    if !exp_res.is_ok() {
-        obj = obj.insert("expire", exp_res.unwrap_err().to_string());
+    if !res.is_ok() {
+        obj = obj.insert("store", res.unwrap_err());
     }
     obj.unwrap()
 
