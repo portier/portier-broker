@@ -10,7 +10,6 @@ use self::hyper::header::ContentType as HyContentType;
 use self::hyper::header::Headers;
 use super::{AppConfig, create_jwt};
 use super::crypto::{session_id, verify_jws};
-use std::collections::HashMap;
 use std::iter::Iterator;
 use time::now_utc;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
@@ -81,15 +80,16 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> Url {
 /// extract the identity token returned by the provider and verify it. Return
 /// an identity token for the RP if successful, or an error message otherwise.
 pub fn verify(app: &AppConfig, session_id: &str, code: &str)
-              -> Result<(String, String), &'static str> {
+              -> Result<(String, String), String> {
 
     // Validate that the callback matches an auth request in Redis.
     let key = format!("session:{}", session_id);
-    let stored: HashMap<String, String> = app.store.client.hgetall(key.clone()).unwrap();
-    if stored.is_empty() {
-        return Err("session not found");
+    let res = app.store.get_session(&key);
+    if res.is_err() {
+        return Err(res.unwrap_err());
     }
 
+    let stored = res.unwrap();
     let email_addr = EmailAddress::new(stored.get("email").unwrap()).unwrap();
     let origin = stored.get("client_id").unwrap();
 

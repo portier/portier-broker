@@ -10,7 +10,6 @@ use serde_json::builder::ObjectBuilder;
 use serde_json::value::Value;
 use super::{AppConfig, create_jwt};
 use super::crypto::session_id;
-use std::collections::HashMap;
 use std::error::Error;
 use std::iter::Iterator;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
@@ -101,14 +100,17 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> Value {
 /// Checks that the session exists and matches the one-time pad. If so,
 /// returns the Identity Token; otherwise, returns an error message.
 pub fn verify(app: &AppConfig, session: &str, code: &str)
-              -> Result<(String, String), &'static str> {
+              -> Result<(String, String), String> {
 
     let key = format!("session:{}", session);
-    let stored: HashMap<String, String> = app.store.client.hgetall(key.clone()).unwrap();
-    if stored.is_empty() {
-        return Err("session not found");
-    } else if code != stored.get("code").unwrap() {
-        return Err("incorrect code");
+    let res = app.store.get_session(&key);
+    if res.is_err() {
+        return Err(res.unwrap_err());
+    }
+
+    let stored = res.unwrap();
+    if code != stored.get("code").unwrap() {
+        return Err("incorrect code".to_string());
     }
 
     let email = stored.get("email").unwrap();

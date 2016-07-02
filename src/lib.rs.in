@@ -279,7 +279,7 @@ const FORWARD_TEMPLATE: &'static str = r#"<!DOCTYPE html>
 /// `redirect_ur` as soon as the page has loaded. Result can either be an error
 /// message or a JWT asserting the user's email address identity.
 /// TODO: return error to RP instead of in a simple HTTP response.
-fn return_to_relier(result: Result<(String, String), &'static str>)
+fn return_to_relier(result: Result<(String, String), String>)
                     -> IronResult<Response> {
 
     if result.is_err() {
