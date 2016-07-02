@@ -60,6 +60,22 @@ impl NamedKey {
         input.extend(sig.to_base64(base64::URL_SAFE).into_bytes());
         String::from_utf8(input).unwrap()
     }
+
+    /// Return JSON represenation of the public key for use in JWK key sets.
+    pub fn public_jwk(&self) -> Value {
+        fn json_big_num(n: &BigNum) -> String {
+            n.to_vec().to_base64(base64::URL_SAFE)
+        }
+        let rsa = self.key.get_rsa();
+        ObjectBuilder::new()
+            .insert("kty", "RSA")
+            .insert("alg", "RS256")
+            .insert("use", "sig")
+            .insert("kid", &self.id)
+            .insert("n", json_big_num(&rsa.n().unwrap()))
+            .insert("e", json_big_num(&rsa.e().unwrap()))
+            .unwrap()
+    }
 }
 
 
@@ -87,22 +103,9 @@ pub fn session_id(email: &EmailAddress, client_id: &str) -> String {
 /// components for the AppConfig's private key, for use in signature
 /// verification.
 pub fn jwk_key_set(app: &AppConfig) -> Value {
-
-    fn json_big_num(n: &BigNum) -> String {
-        n.to_vec().to_base64(base64::URL_SAFE)
-    }
-
     let mut keys = ArrayBuilder::new();
     for key in &app.keys {
-        keys = keys.push_object(|builder| {
-            let rsa = key.key.get_rsa();
-            builder.insert("kty", "RSA")
-                .insert("alg", "RS256")
-                .insert("use", "sig")
-                .insert("kid", &key.id)
-                .insert("n", json_big_num(&rsa.n().unwrap()))
-                .insert("e", json_big_num(&rsa.e().unwrap()))
-        });
+        keys = keys.push(key.public_jwk())
     }
     ObjectBuilder::new().insert("keys", keys.unwrap()).unwrap()
 }
