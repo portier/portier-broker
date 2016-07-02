@@ -1,17 +1,19 @@
+extern crate openssl;
 extern crate rand;
+extern crate rustc_serialize;
 
 use emailaddress::EmailAddress;
-use openssl::bn::BigNum;
-use openssl::crypto::hash;
-use openssl::crypto::pkey::PKey;
-use openssl::crypto::rsa::RSA;
+use self::openssl::bn::BigNum;
+use self::openssl::crypto::hash;
+use self::openssl::crypto::pkey::PKey;
+use self::openssl::crypto::rsa::RSA;
 use self::rand::{OsRng, Rng};
+use self::rustc_serialize::base64::{self, FromBase64, ToBase64};
 use serde_json::builder::{ArrayBuilder, ObjectBuilder};
 use serde_json::de::from_slice;
 use serde_json::value::Value;
 use super::AppConfig;
 use super::serde_json;
-use rustc_serialize::base64::{self, FromBase64, ToBase64};
 use std::fs::File;
 use std::io::{BufReader, Write};
 
