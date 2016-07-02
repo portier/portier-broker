@@ -6,7 +6,7 @@ use openssl::crypto::hash;
 use openssl::crypto::pkey::PKey;
 use openssl::crypto::rsa::RSA;
 use self::rand::{OsRng, Rng};
-use serde_json::builder::ObjectBuilder;
+use serde_json::builder::{ArrayBuilder, ObjectBuilder};
 use serde_json::de::from_slice;
 use serde_json::value::Value;
 use super::AppConfig;
@@ -43,19 +43,19 @@ pub fn jwk_key_set(app: &AppConfig) -> Value {
         n.to_vec().to_base64(base64::URL_SAFE)
     }
 
-    let rsa = app.priv_key.key.get_rsa();
-    ObjectBuilder::new()
-        .insert_array("keys", |builder| {
-            builder.push_object(|builder| {
-                builder.insert("kty", "RSA")
-                    .insert("alg", "RS256")
-                    .insert("use", "sig")
-                    .insert("kid", &app.priv_key.id)
-                    .insert("n", json_big_num(&rsa.n().unwrap()))
-                    .insert("e", json_big_num(&rsa.e().unwrap()))
-            })
-        })
-        .unwrap()
+    let mut keys = ArrayBuilder::new();
+    for key in &app.keys {
+        keys = keys.push_object(|builder| {
+            let rsa = key.key.get_rsa();
+            builder.insert("kty", "RSA")
+                .insert("alg", "RS256")
+                .insert("use", "sig")
+                .insert("kid", &key.id)
+                .insert("n", json_big_num(&rsa.n().unwrap()))
+                .insert("e", json_big_num(&rsa.e().unwrap()))
+        });
+    }
+    ObjectBuilder::new().insert("keys", keys.unwrap()).unwrap()
 }
 
 

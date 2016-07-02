@@ -1,6 +1,8 @@
 {
   "base_url": "https://letsauth.xavamedia.nl",
-  "private_key": {"id": "base", "file": "private.pem"},
+  "keys": [
+    {"id": "base", "file": "private.pem"}
+  ],
   "redis_url": "redis://127.0.0.1/5",
   "sender": {
       "name": "Let's Auth",

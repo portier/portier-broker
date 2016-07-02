@@ -47,7 +47,7 @@ fn json_response(obj: &Value) -> IronResult<Response> {
 #[derive(Clone)]
 pub struct AppConfig {
     base_url: String, // Origin of this instance, used for constructing URLs
-    priv_key: NamedKey, // Signing key
+    keys: Vec<NamedKey>, // Signing keys
     store: redis::Client, // Redis Client
     expire_keys: usize, // Redis key TTL, in seconds
     sender: Email, // From address for email
@@ -107,7 +107,7 @@ pub struct Email {
 #[derive(Clone, Deserialize)]
 pub struct JsonConfig {
     base_url: String,
-    private_key: NamedKey,
+    keys: Vec<NamedKey>,
     redis_url: String,
     sender: Email,
     expire_keys: usize,
@@ -153,7 +153,7 @@ impl AppConfig {
 
         Ok(AppConfig {
             base_url: config.base_url,
-            priv_key: config.private_key,
+            keys: config.keys,
             sender: config.sender,
             store: store,
             expire_keys: config.expire_keys,
@@ -255,6 +255,7 @@ impl Handler for AuthHandler {
 /// Returns the full JWT.
 fn create_jwt(app: &AppConfig, email: &str, origin: &str) -> String {
 
+    let key = app.keys.last().unwrap();
     let now = now_utc().to_timespec().sec;
     let payload = serde_json::to_string(
         &ObjectBuilder::new()
@@ -269,7 +270,7 @@ fn create_jwt(app: &AppConfig, email: &str, origin: &str) -> String {
         ).unwrap();
     let header = serde_json::to_string(
         &ObjectBuilder::new()
-            .insert("kid", &app.priv_key.id)
+            .insert("kid", &key.id)
             .insert("alg", "RS256")
             .unwrap()
         ).unwrap();
@@ -278,7 +279,7 @@ fn create_jwt(app: &AppConfig, email: &str, origin: &str) -> String {
     input.extend(header.as_bytes().to_base64(base64::URL_SAFE).into_bytes());
     input.push(b'.');
     input.extend(payload.as_bytes().to_base64(base64::URL_SAFE).into_bytes());
-    crypto::sign_jws(&app.priv_key.key, &mut input);
+    crypto::sign_jws(&key.key, &mut input);
     String::from_utf8(input).unwrap()
 
 }
