@@ -36,12 +36,12 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> Url {
     // Store the nonce and the RP's `redirect_uri` in Redis for use in the
     // callback handler.
     let key = format!("session:{}", session);
-    let _: String = app.store.hset_multiple(key.clone(), &[
+    let _: String = app.store.client.hset_multiple(key.clone(), &[
         ("email", email_addr.to_string()),
         ("client_id", client_id.clone()),
         ("redirect", params.get("redirect_uri").unwrap()[0].clone()),
     ]).unwrap();
-    let _: bool = app.store.expire(key.clone(), app.expire_keys).unwrap();
+    let _: bool = app.store.client.expire(key.clone(), app.expire_keys).unwrap();
 
     // Retrieve the provider's Discovery document and extract the
     // `authorization_endpoint` from it.
@@ -86,7 +86,7 @@ pub fn verify(app: &AppConfig, session_id: &str, code: &str)
 
     // Validate that the callback matches an auth request in Redis.
     let key = format!("session:{}", session_id);
-    let stored: HashMap<String, String> = app.store.hgetall(key.clone()).unwrap();
+    let stored: HashMap<String, String> = app.store.client.hgetall(key.clone()).unwrap();
     if stored.is_empty() {
         return Err("session not found");
     }

@@ -48,13 +48,13 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> Value {
     let client_id = &params.get("client_id").unwrap()[0];
     let session = session_id(&email_addr, client_id);
     let key = format!("session:{}", session);
-    let set_res: RedisResult<String> = app.store.hset_multiple(key.clone(), &[
+    let set_res: RedisResult<String> = app.store.client.hset_multiple(key.clone(), &[
         ("email", email_addr.to_string()),
         ("client_id", client_id.clone()),
         ("code", chars.clone()),
         ("redirect", params.get("redirect_uri").unwrap()[0].clone()),
     ]);
-    let exp_res: RedisResult<bool> = app.store.expire(key.clone(), app.expire_keys);
+    let exp_res: RedisResult<bool> = app.store.client.expire(key.clone(), app.expire_keys);
 
     // Generate the URL used to verify email address ownership.
     let href = format!("{}/confirm?session={}&code={}",
@@ -108,7 +108,7 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
               -> Result<(String, String), &'static str> {
 
     let key = format!("session:{}", session);
-    let stored: HashMap<String, String> = app.store.hgetall(key.clone()).unwrap();
+    let stored: HashMap<String, String> = app.store.client.hgetall(key.clone()).unwrap();
     if stored.is_empty() {
         return Err("session not found");
     } else if code != stored.get("code").unwrap() {
