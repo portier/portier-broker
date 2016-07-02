@@ -8,8 +8,8 @@
     "expire_keys": 900
   },
   "sender": {
-      "name": "Let's Auth",
-      "address": "letsauth@xavamedia.nl"
+    "name": "Let's Auth",
+    "address": "letsauth@xavamedia.nl"
   },
   "token_validity": 600,
   "providers": {
