@@ -105,23 +105,19 @@ pub enum Error {
     Redis(redis::RedisError),
 }
 
-impl From<std::io::Error> for Error {
-    fn from(err: std::io::Error) -> Error {
-        Error::Io(err)
+macro_rules! from_error {
+    ( $orig:path, $enum_type:ident ) => {
+        impl From<$orig> for Error {
+            fn from(err: $orig) -> Error {
+                Error::$enum_type(err)
+            }
+        }
     }
 }
 
-impl From<serde_json::error::Error> for Error {
-    fn from(err: serde_json::error::Error) -> Error {
-        Error::De(err)
-    }
-}
-
-impl From<redis::RedisError> for Error {
-    fn from(err: redis::RedisError) -> Error {
-        Error::Redis(err)
-    }
-}
+from_error!(std::io::Error, Io);
+from_error!(serde_json::error::Error, De);
+from_error!(redis::RedisError, Redis);
 
 
 /// Implementation with single method to read configuration from JSON.
