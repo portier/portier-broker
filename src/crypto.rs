@@ -19,8 +19,8 @@ use std::io::{BufReader, Write};
 
 #[derive(Clone)]
 pub struct NamedKey {
-    pub id: String,
-    pub key: PKey,
+    id: String,
+    key: PKey,
 }
 
 
