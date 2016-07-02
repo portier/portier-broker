@@ -63,6 +63,22 @@ pub struct NamedKey {
 }
 
 
+impl NamedKey {
+    fn from_file(id: &str, file: &str) -> Result<NamedKey, &'static str> {
+        let file_res = File::open(file);
+        if file_res.is_err() {
+            return Err("could not open key file");
+        }
+        let private_key_file = file_res.unwrap();
+        let key_res = PKey::private_key_from_pem(&mut BufReader::new(private_key_file));
+        if key_res.is_err() {
+            return Err("could not instantiate private key");
+        }
+        Ok(NamedKey { id: id.to_string(), key: key_res.unwrap() })
+    }
+}
+
+
 /// Represents an OpenID Connect provider.
 #[derive(Clone, Deserialize)]
 pub struct Provider {
@@ -79,18 +95,8 @@ impl Deserialize for NamedKey {
         let value: Value = try!(serde::Deserialize::deserialize(de));
         let id = value.find("id").unwrap().as_string().unwrap();
         let file_name = value.find("file").unwrap().as_string().unwrap();
-        let file_res = File::open(file_name);
-        if file_res.is_err() {
-            return Err(serde::de::Error::custom("could not open key file"));
-        }
-
-        let private_key_file = file_res.unwrap();
-        let key_res = PKey::private_key_from_pem(&mut BufReader::new(private_key_file));
-        if key_res.is_err() {
-            return Err(serde::de::Error::custom("could not instantiate private key"));
-        }
-
-        Ok(NamedKey { id: id.to_string(), key: key_res.unwrap() })
+        let res = NamedKey::from_file(id, file_name);
+        res.or_else(|err| Err(serde::de::Error::custom(err)))
     }
 }
 
