@@ -15,6 +15,7 @@ use iron::modifiers;
 use iron::prelude::*;
 use iron::status;
 use openssl::crypto::pkey::PKey;
+use serde::de::Deserialize;
 use serde_json::builder::ObjectBuilder;
 use serde_json::de::from_reader;
 use serde_json::value::Value;
@@ -55,6 +56,13 @@ pub struct AppConfig {
 }
 
 
+#[derive(Clone)]
+pub struct NamedKey {
+    id: String,
+    key: PKey,
+}
+
+
 /// Represents an OpenID Connect provider.
 #[derive(Clone, Deserialize)]
 pub struct Provider {
@@ -62,6 +70,28 @@ pub struct Provider {
     client_id: String,
     secret: String,
     issuer: String,
+}
+
+
+impl Deserialize for NamedKey {
+    fn deserialize<D>(de: &mut D) -> Result<NamedKey, D::Error>
+                      where D: serde::Deserializer {
+        let value: Value = try!(serde::Deserialize::deserialize(de));
+        let id = value.find("id").unwrap().as_string().unwrap();
+        let file_name = value.find("file").unwrap().as_string().unwrap();
+        let file_res = File::open(file_name);
+        if file_res.is_err() {
+            return Err(serde::de::Error::custom("could not open key file"));
+        }
+
+        let private_key_file = file_res.unwrap();
+        let key_res = PKey::private_key_from_pem(&mut BufReader::new(private_key_file));
+        if key_res.is_err() {
+            return Err(serde::de::Error::custom("could not instantiate private key"));
+        }
+
+        Ok(NamedKey { id: id.to_string(), key: key_res.unwrap() })
+    }
 }
 
 
@@ -73,18 +103,11 @@ pub struct Email {
 }
 
 
-#[derive(Clone)]
-pub struct NamedKey {
-    id: String,
-    key: PKey,
-}
-
-
 /// Represents a JSON-based configuration file.
 #[derive(Clone, Deserialize)]
 pub struct JsonConfig {
     base_url: String,
-    private_key_file: String,
+    private_key: NamedKey,
     redis_url: String,
     sender: Email,
     expire_keys: usize,
@@ -98,7 +121,6 @@ pub struct JsonConfig {
 pub enum Error {
     Io(std::io::Error),
     De(serde_json::error::Error),
-    Ssl(openssl::ssl::error::SslError),
     Redis(redis::RedisError),
 }
 
@@ -111,12 +133,6 @@ impl From<std::io::Error> for Error {
 impl From<serde_json::error::Error> for Error {
     fn from(err: serde_json::error::Error) -> Error {
         Error::De(err)
-    }
-}
-
-impl From<openssl::ssl::error::SslError> for Error {
-    fn from(err: openssl::ssl::error::SslError) -> Error {
-        Error::Ssl(err)
     }
 }
 
@@ -133,17 +149,11 @@ impl AppConfig {
         let file = try!(File::open(file_name));
         let config: JsonConfig = try!(from_reader(BufReader::new(file)));
 
-        let private_key_file = try!(File::open(config.private_key_file));
-        let priv_key = try!(PKey::private_key_from_pem(&mut BufReader::new(private_key_file)));
-
         let store = try!(redis::Client::open(&*config.redis_url));
 
         Ok(AppConfig {
             base_url: config.base_url,
-            priv_key: NamedKey {
-                id: "base".to_string(),
-                key: priv_key,
-            },
+            priv_key: config.private_key,
             sender: config.sender,
             store: store,
             expire_keys: config.expire_keys,
