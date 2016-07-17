@@ -104,7 +104,9 @@ impl Handler for KeysHandler {
 pub struct AuthHandler { pub app: AppConfig }
 impl Handler for AuthHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
-        let params = req.get_ref::<UrlEncodedBody>().unwrap();
+        let params = try!(req.get_ref::<UrlEncodedBody>().map_err(
+                          |e| IronError::new(e, (status::BadRequest,
+                                                 "no query string in POST data"))));
         let email_addr = EmailAddress::new(&params.get("login_hint").unwrap()[0]).unwrap();
         if self.app.providers.contains_key(&email_addr.domain) {
 
