@@ -2,7 +2,6 @@ extern crate lettre;
 extern crate rand;
 
 use emailaddress::EmailAddress;
-use redis::Commands;
 use self::lettre::email::EmailBuilder;
 use self::lettre::transport::EmailTransport;
 use self::lettre::transport::smtp::SmtpTransportBuilder;
