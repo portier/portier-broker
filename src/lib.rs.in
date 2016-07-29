@@ -14,6 +14,9 @@ use iron::prelude::*;
 use iron::status;
 use serde_json::builder::{ArrayBuilder, ObjectBuilder};
 use serde_json::value::Value;
+use std::env;
+use std::fs::File;
+use std::io::{BufReader, Read};
 use time::now_utc;
 use urlencoded::{UrlEncodedBody, UrlEncodedQuery};
 
@@ -47,6 +50,28 @@ impl Handler for WelcomeHandler {
             .insert("ladaemon", "Welcome")
             .insert("version", env!("CARGO_PKG_VERSION"))
             .unwrap())
+    }
+}
+
+
+/// Iron handler for files in .well-known.
+///
+/// Mainly directed at Let's Encrypt verification. Returns text/plain always.
+pub struct WellKnownHandler { pub app: AppConfig }
+impl Handler for WellKnownHandler {
+    fn handle(&self, req: &mut Request) -> IronResult<Response> {
+        let mut file_name = env::current_dir().unwrap();
+        file_name.push(req.url.path.join("/"));
+        let file_res = File::open(file_name);
+        if file_res.is_err() {
+            return Ok(Response::with((status::NotFound)));
+        }
+        let mut bytes = Vec::<u8>::new();
+        let mut reader = BufReader::new(file_res.unwrap());
+        let _ = reader.read_to_end(&mut bytes).unwrap();
+        Ok(Response::with((status::Ok,
+                           modifiers::Header(ContentType::plaintext()),
+                           bytes)))
     }
 }
 

@@ -58,6 +58,7 @@ fn main() {
     let router = router!{
         // Human-targeted endpoints
         get "/" => ladaemon::WelcomeHandler { app: app.clone() },
+        get "/.well-known/*" => ladaemon::WellKnownHandler { app: app.clone() },
         get "/confirm" => ladaemon::ConfirmHandler { app: app.clone() },
 
         // OpenID Connect provider endpoints
