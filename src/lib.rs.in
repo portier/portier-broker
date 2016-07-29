@@ -49,7 +49,7 @@ impl Handler for WelcomeHandler {
         json_response(&ObjectBuilder::new()
             .insert("ladaemon", "Welcome")
             .insert("version", env!("CARGO_PKG_VERSION"))
-            .unwrap())
+            .build())
     }
 }
 
@@ -96,7 +96,7 @@ impl Handler for OIDConfigHandler {
             .insert("grant_types_supported", vec!["implicit"])
             .insert("subject_types_supported", vec!["public"])
             .insert("id_token_signing_alg_values_supported", vec!["RS256"])
-            .unwrap())
+            .build())
     }
 }
 
@@ -115,8 +115,8 @@ impl Handler for KeysHandler {
             keys = keys.push(key.public_jwk())
         }
         json_response(&ObjectBuilder::new()
-                          .insert("keys", keys.unwrap())
-                          .unwrap())
+                          .insert("keys", keys.build())
+                          .build())
     }
 }
 
@@ -167,7 +167,7 @@ fn create_jwt(app: &AppConfig, email: &str, origin: &str) -> String {
         .insert("iat", now)
         .insert("iss", &app.base_url)
         .insert("sub", email)
-        .unwrap();
+        .build();
     app.keys.last().unwrap().sign_jws(&payload)
 }
 
@@ -205,7 +205,7 @@ fn return_to_relier(result: Result<(String, String), String>)
     if result.is_err() {
         return json_response(&ObjectBuilder::new()
                             .insert("error", result.unwrap_err())
-                            .unwrap());
+                            .build());
     }
 
     let (jwt, redirect) = result.unwrap();

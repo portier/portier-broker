@@ -47,7 +47,7 @@ impl NamedKey {
             &ObjectBuilder::new()
                 .insert("kid", &self.id)
                 .insert("alg", "RS256")
-                .unwrap()
+                .build()
             ).unwrap();
 
         let payload = serde_json::to_string(&payload).unwrap();
@@ -76,7 +76,7 @@ impl NamedKey {
             .insert("kid", &self.id)
             .insert("n", json_big_num(&rsa.n().unwrap()))
             .insert("e", json_big_num(&rsa.e().unwrap()))
-            .unwrap()
+            .build()
     }
 }
 
@@ -106,8 +106,8 @@ pub fn session_id(email: &EmailAddress, client_id: &str) -> String {
 pub fn jwk_key_set_find(set: &Value, kid: &str) -> Result<PKey, ()> {
     let matching = set.find("keys").unwrap().as_array().unwrap().iter()
         .filter(|key_obj| {
-            key_obj.find("kid").unwrap().as_string().unwrap() == kid &&
-            key_obj.find("use").unwrap().as_string().unwrap() == "sig"
+            key_obj.find("kid").unwrap().as_str().unwrap() == kid &&
+            key_obj.find("use").unwrap().as_str().unwrap() == "sig"
         })
         .collect::<Vec<&Value>>();
 
@@ -117,8 +117,8 @@ pub fn jwk_key_set_find(set: &Value, kid: &str) -> Result<PKey, ()> {
     }
 
     // Then, use the data to build a public key object for verification.
-    let n_b64 = matching[0].find("n").unwrap().as_string().unwrap();
-    let e_b64 = matching[0].find("e").unwrap().as_string().unwrap();
+    let n_b64 = matching[0].find("n").unwrap().as_str().unwrap();
+    let e_b64 = matching[0].find("e").unwrap().as_str().unwrap();
     let n = BigNum::new_from_slice(&n_b64.from_base64().unwrap()).unwrap();
     let e = BigNum::new_from_slice(&e_b64.from_base64().unwrap()).unwrap();
     let mut pub_key = PKey::new();
@@ -133,7 +133,7 @@ pub fn verify_jws(jws: &str, key_set: &Value) -> Result<Value, ()> {
     // to sign the token, so we can then verify the signature.
     let parts: Vec<&str> = jws.split('.').collect();
     let jwt_header: Value = from_slice(&parts[0].from_base64().unwrap()).unwrap();
-    let kid = jwt_header.find("kid").unwrap().as_string().unwrap();
+    let kid = jwt_header.find("kid").unwrap().as_str().unwrap();
     let pub_key = try!(jwk_key_set_find(key_set, kid));
 
     // Verify the identity token's signature.

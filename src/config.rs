@@ -40,8 +40,8 @@ impl Deserialize for crypto::NamedKey {
     fn deserialize<D>(de: &mut D) -> Result<crypto::NamedKey, D::Error>
                       where D: serde::Deserializer {
         let value: Value = try!(serde::Deserialize::deserialize(de));
-        let id = value.find("id").unwrap().as_string().unwrap();
-        let file_name = value.find("file").unwrap().as_string().unwrap();
+        let id = value.find("id").unwrap().as_str().unwrap();
+        let file_name = value.find("file").unwrap().as_str().unwrap();
         let res = crypto::NamedKey::from_file(id, file_name);
         res.or_else(|err| Err(serde::de::Error::custom(err)))
     }
@@ -52,7 +52,7 @@ impl Deserialize for store::Store {
     fn deserialize<D>(de: &mut D) -> Result<store::Store, D::Error>
                       where D: serde::Deserializer {
         let value: Value = try!(serde::Deserialize::deserialize(de));
-        let url = value.find("redis_url").unwrap().as_string().unwrap();
+        let url = value.find("redis_url").unwrap().as_str().unwrap();
         let expire_keys = value.find("expire_keys").unwrap().as_u64().unwrap();
         let res = store::Store::new(url, expire_keys);
         res.or_else(|err| Err(serde::de::Error::custom(err)))

@@ -90,7 +90,7 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> Value {
     if !res.is_ok() {
         obj = obj.insert("store", res.unwrap_err());
     }
-    obj.unwrap()
+    obj.build()
 
 }
 

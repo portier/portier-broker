@@ -49,7 +49,7 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> Url {
     let rsp = client.get(&provider.discovery).send().unwrap();
     let val: Value = from_reader(rsp).unwrap();
     let config = val.as_object().unwrap();
-    let authz_base = config["authorization_endpoint"].as_string().unwrap();
+    let authz_base = config["authorization_endpoint"].as_str().unwrap();
 
     // Create the URL to redirect to, properly escaping all parameters.
     Url::parse(&vec![
@@ -100,7 +100,7 @@ pub fn verify(app: &AppConfig, session_id: &str, code: &str)
     let rsp = client.get(&provider.discovery).send().unwrap();
     let val: Value = from_reader(rsp).unwrap();
     let config = val.as_object().unwrap();
-    let token_url = config["token_endpoint"].as_string().unwrap();
+    let token_url = config["token_endpoint"].as_str().unwrap();
 
     // Create form data for the Token Request, where we exchange the code
     // received in this callback request for an identity token (while
@@ -123,23 +123,23 @@ pub fn verify(app: &AppConfig, session_id: &str, code: &str)
     headers.set(HyContentType::form_url_encoded());
     let token_rsp = client.post(token_url).headers(headers).body(&body).send().unwrap();
     let token_obj: Value = from_reader(token_rsp).unwrap();
-    let id_token = token_obj.find("id_token").unwrap().as_string().unwrap();
+    let id_token = token_obj.find("id_token").unwrap().as_str().unwrap();
 
     // Grab the keys from the provider, then verify the signature.
-    let keys_url = config["jwks_uri"].as_string().unwrap();
+    let keys_url = config["jwks_uri"].as_str().unwrap();
     let keys_rsp = client.get(keys_url).send().unwrap();
     let keys_doc: Value = from_reader(keys_rsp).unwrap();
     let jwt_payload = verify_jws(id_token, &keys_doc).unwrap();
 
     // Verify that the issuer matches the configured value.
-    let iss = jwt_payload.find("iss").unwrap().as_string().unwrap();
+    let iss = jwt_payload.find("iss").unwrap().as_str().unwrap();
     let issuer_origin = vec!["https://", &provider.issuer].join("");
     assert!(iss == provider.issuer || iss == issuer_origin);
 
     // Verify the audience, subject, and expiry.
-    let aud = jwt_payload.find("aud").unwrap().as_string().unwrap();
+    let aud = jwt_payload.find("aud").unwrap().as_str().unwrap();
     assert!(aud == provider.client_id);
-    let token_addr = jwt_payload.find("email").unwrap().as_string().unwrap();
+    let token_addr = jwt_payload.find("email").unwrap().as_str().unwrap();
     assert!(token_addr == email_addr.to_string());
     let now = now_utc().to_timespec().sec;
     let exp = jwt_payload.find("exp").unwrap().as_i64().unwrap();
