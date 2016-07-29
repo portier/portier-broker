@@ -61,7 +61,7 @@ pub struct WellKnownHandler { pub app: AppConfig }
 impl Handler for WellKnownHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
         let mut file_name = env::current_dir().unwrap();
-        file_name.push(req.url.path.join("/"));
+        file_name.push(req.url.path().join("/"));
         let file_res = File::open(file_name);
         if file_res.is_err() {
             return Ok(Response::with((status::NotFound)));
