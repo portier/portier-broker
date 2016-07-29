@@ -10,7 +10,7 @@ serde_codegen = "0.8.0"
 [dependencies]
 docopt = "0.6.81"
 emailaddress = "0.3.0"
-hyper = "0.9.6"
+hyper = "0.9.10"
 iron = "0.4.0"
 lettre = "0.5.1"
 openssl = "0.7.13"
