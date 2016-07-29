@@ -31,9 +31,9 @@ pub mod store;
 /// code with the serialized JSON as the body.
 fn json_response(obj: &Value) -> IronResult<Response> {
     let content = serde_json::to_string(&obj).unwrap();
-    let mut rsp = Response::with((status::Ok, content));
-    rsp.headers.set(ContentType::json());
-    Ok(rsp)
+    Ok(Response::with((status::Ok,
+                       modifiers::Header(ContentType::json()),
+                       content)))
 }
 
 
