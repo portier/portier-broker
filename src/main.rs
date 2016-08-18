@@ -1,10 +1,11 @@
 extern crate docopt;
 extern crate iron;
-extern crate ladaemon;
+extern crate portier_broker;
 #[macro_use(router)]
 extern crate router;
 extern crate rustc_serialize;
 
+use portier_broker as broker;
 use docopt::Docopt;
 use iron::Iron;
 use std::str::FromStr;
@@ -18,12 +19,12 @@ const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 ///
 /// [Docopt](http://docopt.org) parses this and generates a custom argv parser.
 const USAGE: &'static str = r#"
-Let's Auth.
+Portier broker
 
 Usage:
-  ladaemon [options] CONFIG
-  ladaemon --version
-  ladaemon --help
+  portier_broker [options] CONFIG
+  portier_broker --version
+  portier_broker --help
 
 Options:
   --address=<ip>  Address to listen on [default: 127.0.0.1]
@@ -50,25 +51,25 @@ fn main() {
                          .unwrap_or_else(|e| e.exit());
 
     // Read the configuration from the provided file.
-    let app = ladaemon::AppConfig::from_json_file(&args.arg_CONFIG).unwrap();
+    let app = broker::AppConfig::from_json_file(&args.arg_CONFIG).unwrap();
 
     // TODO: cloning the configuration object is ugly, but apparently necessary
     // with how the Iron `Handler` trait is defined. Also, it would be cleaner
     // if the handlers could just be functions, instead of single-method impls.
     let router = router!{
         // Human-targeted endpoints
-        get "/" => ladaemon::WelcomeHandler { app: app.clone() },
-        get "/.well-known/*" => ladaemon::WellKnownHandler { app: app.clone() },
-        get "/confirm" => ladaemon::ConfirmHandler { app: app.clone() },
+        get "/" => broker::WelcomeHandler { app: app.clone() },
+        get "/.well-known/*" => broker::WellKnownHandler { app: app.clone() },
+        get "/confirm" => broker::ConfirmHandler { app: app.clone() },
 
         // OpenID Connect provider endpoints
         get "/.well-known/openid-configuration" =>
-               ladaemon::OIDConfigHandler { app: app.clone() },
-        get "/keys.json" => ladaemon::KeysHandler { app: app.clone() },
-        post "/auth" => ladaemon::AuthHandler { app: app.clone() },
+               broker::OIDConfigHandler { app: app.clone() },
+        get "/keys.json" => broker::KeysHandler { app: app.clone() },
+        post "/auth" => broker::AuthHandler { app: app.clone() },
 
         // OpenID Connect relying party endpoints
-        get "/callback" => ladaemon::CallbackHandler { app: app.clone() },
+        get "/callback" => broker::CallbackHandler { app: app.clone() },
     };
 
     let ip_address = std::net::IpAddr::from_str(&args.flag_address).unwrap();
