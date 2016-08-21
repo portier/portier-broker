@@ -3,6 +3,12 @@ name = "portier_broker"
 version = "0.1.0"
 authors = ["Dirkjan Ochtman <dirkjan@ochtman.nl>"]
 build = "build.rs"
+description = "Reference implementation of the Portier broker protocol"
+repository = "https://github.com/portier/portier-broker"
+license = "MIT/Apache-2.0"
+
+[[bin]]
+name = "portier-broker"
 
 [build-dependencies]
 serde_codegen = "0.8.0"
