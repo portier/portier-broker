@@ -81,4 +81,14 @@ loop authentication. It requires ``name`` and ``address`` keys.
 authentication tokens are allowed to live. Defaults to 600s, or 10 minutes.
 
 **providers** is an object containing well-known Identity Providers, for
-which an account is required to authenticate.
+which an account is required to authenticate. Keys in this object represent
+an email address domain name for which this IdP will be used. The value is
+another object, which contains four more key-value pairs:
+
+* ``discovery``: the `OpenID Provider Configuration Document URL`_ for the
+  provider
+* ``client_id``: the client ID for the broker registration with the IdP
+* ``secret``: the secret for this broker's registration with the IdP
+* ``issuer``: the expected issuer for identity tokens received from this IdP
+
+.. _OpenID Provider Configuration Document URL: https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderConfig
