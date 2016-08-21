@@ -6,12 +6,11 @@ implemented in the `portier-broker` daemon code (this repository) as well as
 the Python `demo-rp` repository. Some of the acronyms used:
 
 * RP: relying party, the site who would like to log the user in
-* LA: an instance of the Portier broker
 * IdP: the identity provider who will actually authenticate the user
 
-In this concept approach, the RP delegates authentication to LA through an
-OpenID Connect-like protocol. LA will in turn use one of three ways to
-authenticate that the user owns the given email address:
+In this concept approach, the RP delegates authentication to the broker through
+an OpenID Connect-like protocol. The broker will in turn use one of three ways
+to authenticate that the user owns the given email address:
 
 * If the user's email domain supports "native" Portier authentication,
   this will be used. This has not been implemented; if we use OpenID Connect
