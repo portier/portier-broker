@@ -1,4 +1,6 @@
 extern crate emailaddress;
+#[macro_use]
+extern crate log;
 extern crate iron;
 extern crate redis;
 extern crate serde_json;
@@ -45,7 +47,8 @@ fn json_response(obj: &Value) -> IronResult<Response> {
 /// This is not actually used in the protocol.
 pub struct WelcomeHandler { pub app: AppConfig }
 impl Handler for WelcomeHandler {
-    fn handle(&self, _: &mut Request) -> IronResult<Response> {
+    fn handle(&self, req: &mut Request) -> IronResult<Response> {
+        info!("{} {}", req.method, req.url);
         json_response(&ObjectBuilder::new()
             .insert("ladaemon", "Welcome")
             .insert("version", env!("CARGO_PKG_VERSION"))
@@ -60,6 +63,7 @@ impl Handler for WelcomeHandler {
 pub struct WellKnownHandler { pub app: AppConfig }
 impl Handler for WellKnownHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
+        info!("{} {}", req.method, req.url);
         let mut file_name = env::current_dir().unwrap();
         file_name.push(req.url.path().join("/"));
         let file_res = File::open(file_name);
@@ -82,7 +86,8 @@ impl Handler for WellKnownHandler {
 /// using the base URL as configured in the `base_url` configuration value.
 pub struct OIDConfigHandler { pub app: AppConfig }
 impl Handler for OIDConfigHandler {
-    fn handle(&self, _: &mut Request) -> IronResult<Response> {
+    fn handle(&self, req: &mut Request) -> IronResult<Response> {
+        info!("{} {}", req.method, req.url);
         json_response(&ObjectBuilder::new()
             .insert("issuer", &self.app.base_url)
             .insert("authorization_endpoint",
@@ -109,7 +114,8 @@ impl Handler for OIDConfigHandler {
 /// tokens issued by this daemon instance.
 pub struct KeysHandler { pub app: AppConfig }
 impl Handler for KeysHandler {
-    fn handle(&self, _: &mut Request) -> IronResult<Response> {
+    fn handle(&self, req: &mut Request) -> IronResult<Response> {
+        info!("{} {}", req.method, req.url);
         let mut keys = ArrayBuilder::new();
         for key in &self.app.keys {
             keys = keys.push(key.public_jwk())
@@ -129,6 +135,7 @@ impl Handler for KeysHandler {
 pub struct AuthHandler { pub app: AppConfig }
 impl Handler for AuthHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
+        info!("{} {}", req.method, req.url);
         let params = try!(req.get_ref::<UrlEncodedBody>().map_err(
                           |e| IronError::new(e, (status::BadRequest,
                                                  "no query string in POST data"))));
@@ -225,6 +232,7 @@ fn return_to_relier(result: Result<(String, String), String>)
 pub struct ConfirmHandler { pub app: AppConfig }
 impl Handler for ConfirmHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
+        info!("{} {}", req.method, req.url);
         let params = req.get_ref::<UrlEncodedQuery>().unwrap();
         let session_id = &params.get("session").unwrap()[0];
         let code = &params.get("code").unwrap()[0];
@@ -241,6 +249,7 @@ impl Handler for ConfirmHandler {
 pub struct CallbackHandler { pub app: AppConfig }
 impl Handler for CallbackHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
+        info!("{} {}", req.method, req.url);
         let params = req.get_ref::<UrlEncodedQuery>().unwrap();
         let session = &params.get("state").unwrap()[0];
         let code = &params.get("code").unwrap()[0];
