@@ -1,5 +1,8 @@
 extern crate docopt;
+extern crate env_logger;
 extern crate iron;
+#[macro_use]
+extern crate log;
 extern crate portier_broker;
 #[macro_use(router)]
 extern crate router;
@@ -46,6 +49,7 @@ struct Args {
 
 /// The `main()` method. Will loop forever to serve HTTP requests.
 fn main() {
+    env_logger::init().unwrap();
     let args: Args = Docopt::new(USAGE)
                          .and_then(|d| d.version(Some(VERSION.to_string())).decode())
                          .unwrap_or_else(|e| e.exit());
@@ -75,7 +79,7 @@ fn main() {
     let ip_address = std::net::IpAddr::from_str(&args.flag_address).unwrap();
     let socket = std::net::SocketAddr::new(ip_address, args.flag_port);
 
-    println!("Listening on http://{}", socket);
+    info!("listening on http://{}", socket);
 
     Iron::new(router).http("0.0.0.0:3333").unwrap();
 }
