@@ -31,8 +31,8 @@ You may also want to refer to the output of ``portier-broker --help``.
 .. _installed: https://doc.rust-lang.org/book/getting-started.html
 
 
-Portier broker configuration
-----------------------------
+Configuration
+-------------
 
 Here's an example configuration file:
 
