@@ -92,3 +92,32 @@ another object, which contains four more key-value pairs:
 * ``issuer``: the expected issuer for identity tokens received from this IdP
 
 .. _OpenID Provider Configuration Document URL: https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderConfig
+
+
+Contributing
+------------
+
+If you want to hack on the broker code, clone this repository. If you have the
+Rust toolchain installed (see above), you can run ``cargo build`` to build the
+project in debug mode. ``cargo run <config-file>`` will run the project. You
+will have to set up your own configuration file; use the ``test.json`` file
+in the repository as a template.
+
+The broker binds to ``localhost:3333`` by default; this can be changed using
+the ``--address`` and ``--port`` options. It only speaks HTTP, so if you want
+to run it behind through a TLS connection, you will need to set up a proxy.
+Note that the broker will serve up files from the ``.well-known`` directory
+in the current working directory when executed; this makes it relatively easy
+to request a certificate from `Let's Encrypt`_.
+
+If you want to test support for well-known identity providers, you will need
+to configure them. For Google, you can request credentials through their
+`API Manager`_.
+
+To test your changes, you will need to set up a Relying Party; so far, the
+Python `demo-rp` code has been used. This is a very bare-bones implementation
+that only serves to prove authentication to the broker.
+
+.. _demo-rp: https://github.com/portier/demo-rp
+.. _Let's Encrypt: https://letsencrypt.org/
+.. _API Manager: https://console.developers.google.com/apis/credentials
