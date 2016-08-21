@@ -1,5 +1,5 @@
 {
-  "base_url": "https://letsauth.xavamedia.nl",
+  "base_url": "https://portier.example.com",
   "keys": [
     {"id": "base", "file": "private.pem"}
   ],
@@ -8,8 +8,8 @@
     "expire_keys": 900
   },
   "sender": {
-    "name": "Let's Auth",
-    "address": "letsauth@xavamedia.nl"
+    "name": "Portier",
+    "address": "portier@example.com"
   },
   "token_validity": 600,
   "providers": {
