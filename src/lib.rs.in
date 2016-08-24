@@ -181,22 +181,7 @@ fn create_jwt(app: &AppConfig, email: &str, origin: &str) -> String {
 
 /// HTML template used to have the user agent POST the identity token built
 /// by the daemon instance to the RP's `redirect_uri`.
-const FORWARD_TEMPLATE: &'static str = r#"<!DOCTYPE html>
-<html>
-  <head>
-    <title>Portier &ndash; forwarding...</title>
-    <script>
-      document.addEventListener('DOMContentLoaded', function() {
-        document.getElementById('form').submit();
-      });
-    </script>
-  </head>
-  <body>
-    <form id="form" action="{{ return_url }}" method="post">
-      <input type="hidden" name="id_token" value="{{ jwt }}">
-    </form>
-  </body>
-</html>"#;
+const FORWARD_TEMPLATE: &'static str = include_str!("forward-template.html");
 
 
 /// Helper function for returning result to the Relying Party.

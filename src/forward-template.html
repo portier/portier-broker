@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Portier &ndash; forwarding...</title>
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        document.getElementById('form').submit();
+      });
+    </script>
+  </head>
+  <body>
+    <form id="form" action="{{ return_url }}" method="post">
+      <input type="hidden" name="id_token" value="{{ jwt }}">
+    </form>
+  </body>
+</html>
