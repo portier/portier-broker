@@ -60,8 +60,7 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> Value {
                        utf8_percent_encode(&chars, QUERY_ENCODE_SET));
 
     // Generate a simple email and send it through the SMTP server running
-    // on localhost. TODO: make the SMTP host configurable. Also, consider
-    // using templates for the email message.
+    // on localhost. TODO: Use templates for the email message.
     let email = EmailBuilder::new()
         .to(email_addr.to_string().as_str())
         .from((&*app.sender.address, &*app.sender.name))
@@ -69,7 +68,8 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> Value {
                        chars, href))
         .subject(&format!("Code: {} - Finish logging in to {}", chars, client_id))
         .build().unwrap();
-    let mut mailer = SmtpTransportBuilder::localhost().unwrap().build();
+    // TODO: Add support for authentication.
+    let mut mailer = SmtpTransportBuilder::new(app.smtp.address.as_str()).unwrap().build();
     let result = mailer.send(email);
     mailer.close();
 
