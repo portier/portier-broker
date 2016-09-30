@@ -13,6 +13,7 @@ use emailaddress::EmailAddress;
 use iron::headers::ContentType;
 use iron::middleware::Handler;
 use iron::modifiers;
+use iron::method::Method;
 use iron::prelude::*;
 use iron::status;
 use serde_json::builder::{ArrayBuilder, ObjectBuilder};
@@ -139,9 +140,23 @@ pub struct AuthHandler { pub app: AppConfig }
 impl Handler for AuthHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
         info!("{} {}", req.method, req.url);
-        let params = try!(req.get_ref::<UrlEncodedBody>().map_err(
-                          |e| IronError::new(e, (status::BadRequest,
-                                                 "no query string in POST data"))));
+        let params = try!(
+            match req.method {
+                Method::Get => {
+                    req.get_ref::<UrlEncodedQuery>()
+                        .map_err(|e| IronError::new(e, (status::BadRequest,
+                                                        "no query string in GET request")))
+                },
+                Method::Post => {
+                    req.get_ref::<UrlEncodedBody>()
+                        .map_err(|e| IronError::new(e, (status::BadRequest,
+                                                        "no query string in POST data")))
+                },
+                _ => {
+                    panic!("Unsupported method: {}", req.method)
+                }
+            }
+        );
         let email_addr = EmailAddress::new(&params.get("login_hint").unwrap()[0]).unwrap();
         if self.app.providers.contains_key(&email_addr.domain) {
 
