@@ -70,6 +70,7 @@ fn main() {
         get "/.well-known/openid-configuration" =>
                broker::OIDConfigHandler { app: app.clone() },
         get "/keys.json" => broker::KeysHandler { app: app.clone() },
+        get "/auth" => broker::AuthHandler { app: app.clone() },
         post "/auth" => broker::AuthHandler { app: app.clone() },
 
         // OpenID Connect relying party endpoints
