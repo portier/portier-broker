@@ -44,11 +44,13 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> Value {
     // Store data for this request in Redis, to reference when user uses
     // the generated link.
     let client_id = &params.get("client_id").unwrap()[0];
+    let nonce = &params.get("nonce").unwrap()[0];
     let session = session_id(&email_addr, client_id);
     let key = format!("session:{}", session);
     let res = app.store.store_session(&key, &[
         ("email", &email_addr.to_string()),
         ("client_id", client_id),
+        ("nonce", nonce),
         ("code", &chars),
         ("redirect", &params.get("redirect_uri").unwrap()[0]),
     ]);
@@ -114,7 +116,8 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
 
     let email = stored.get("email").unwrap();
     let client_id = stored.get("client_id").unwrap();
-    let id_token = create_jwt(app, email, client_id);
+    let nonce = stored.get("nonce").unwrap();
+    let id_token = create_jwt(app, email, client_id, nonce);
     let redirect = stored.get("redirect").unwrap().to_string();
     Ok((id_token, redirect))
 

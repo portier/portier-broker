@@ -164,7 +164,7 @@ impl Handler for AuthHandler {
 ///
 /// Builds the JSON payload, then signs it using the last key provided in
 /// the configuration object.
-fn create_jwt(app: &AppConfig, email: &str, origin: &str) -> String {
+fn create_jwt(app: &AppConfig, email: &str, origin: &str, nonce: &str) -> String {
     let now = now_utc().to_timespec().sec;
     let payload = &ObjectBuilder::new()
         .insert("aud", origin)
@@ -174,6 +174,7 @@ fn create_jwt(app: &AppConfig, email: &str, origin: &str) -> String {
         .insert("iat", now)
         .insert("iss", &app.base_url)
         .insert("sub", email)
+        .insert("nonce", nonce)
         .build();
     app.keys.last().unwrap().sign_jws(&payload)
 }
