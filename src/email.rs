@@ -46,8 +46,7 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> Value {
     let client_id = &params.get("client_id").unwrap()[0];
     let nonce = &params.get("nonce").unwrap()[0];
     let session = session_id(&email_addr, client_id);
-    let key = format!("session:{}", session);
-    let res = app.store.store_session(&key, &[
+    let res = app.store.store_session(&session, &[
         ("email", &email_addr.to_string()),
         ("client_id", client_id),
         ("nonce", nonce),
@@ -103,8 +102,7 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> Value {
 pub fn verify(app: &AppConfig, session: &str, code: &str)
               -> Result<(String, String), String> {
 
-    let key = format!("session:{}", session);
-    let res = app.store.get_session(&key);
+    let res = app.store.get_session(&session);
     if res.is_err() {
         return Err(res.unwrap_err());
     }

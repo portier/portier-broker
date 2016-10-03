@@ -33,8 +33,7 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> Url {
 
     // Store the nonce and the RP's `redirect_uri` in Redis for use in the
     // callback handler.
-    let key = format!("session:{}", session);
-    let _ = app.store.store_session(&key, &[
+    let _ = app.store.store_session(&session, &[
         ("email", &email_addr.to_string()),
         ("client_id", client_id),
         ("nonce", nonce),
@@ -79,12 +78,11 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> Url {
 /// Match the returned email address and nonce against our Redis data, then
 /// extract the identity token returned by the provider and verify it. Return
 /// an identity token for the RP if successful, or an error message otherwise.
-pub fn verify(app: &AppConfig, session_id: &str, code: &str)
+pub fn verify(app: &AppConfig, session: &str, code: &str)
               -> Result<(String, String), String> {
 
     // Validate that the callback matches an auth request in Redis.
-    let key = format!("session:{}", session_id);
-    let res = app.store.get_session(&key);
+    let res = app.store.get_session(&session);
     if res.is_err() {
         return Err(res.unwrap_err());
     }
