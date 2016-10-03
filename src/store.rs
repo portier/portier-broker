@@ -17,24 +17,26 @@ impl Store {
         Ok(Store { client: res.unwrap(), expire_keys: expire_keys })
     }
 
-    pub fn store_session(&self, key: &str, data: &[(&str, &str)])
+    pub fn store_session(&self, session_id: &str, data: &[(&str, &str)])
                          -> Result<(), String> {
-        let res: RedisResult<String> = self.client.hset_multiple(key, data);
+        let key = Self::format_session_key(session_id);
+        let res: RedisResult<String> = self.client.hset_multiple(&key, data);
         if res.is_err() {
             return Err(res.unwrap_err().to_string());
         }
         let res: RedisResult<bool> =
-            self.client.expire(key, self.expire_keys as usize);
+            self.client.expire(&key, self.expire_keys as usize);
         if res.is_err() {
             return Err(res.unwrap_err().to_string());
         }
         Ok(())
     }
 
-    pub fn get_session(&self, key: &str)
+    pub fn get_session(&self, session_id: &str)
                        -> Result<HashMap<String, String>, String> {
+        let key = Self::format_session_key(session_id);
         let res: RedisResult<HashMap<String, String>> =
-            self.client.hgetall(key);
+            self.client.hgetall(&key);
         if res.is_err() {
             return Err(res.unwrap_err().to_string());
         }
@@ -43,5 +45,9 @@ impl Store {
             return Err("session not found".to_string());
         }
         Ok(stored)
+    }
+
+    fn format_session_key(session_id: &str) -> String {
+        format!("session:{}", session_id)
     }
 }
