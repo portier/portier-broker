@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use super::error::{BrokerResult, BrokerError};
-use super::redis::{self, Commands};
+use super::redis::{self, Commands, PipelineCommands};
 
 
 #[derive(Clone)]
@@ -21,8 +21,11 @@ impl Store {
     pub fn store_session(&self, session_id: &str, data: &[(&str, &str)])
                          -> BrokerResult<()> {
         let key = Self::format_session_key(session_id);
-        try!(self.client.hset_multiple(&key, data));
-        try!(self.client.expire(&key, self.expire_keys as usize));
+        try!(redis::pipe()
+                .atomic()
+                .hset_multiple(&key, data).ignore()
+                .expire(&key, self.expire_keys as usize).ignore()
+                .query(&self.client));
         Ok(())
     }
 
