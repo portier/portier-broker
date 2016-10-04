@@ -53,7 +53,7 @@ impl Deserialize for store::Store {
                       where D: serde::Deserializer {
         let value: Value = try!(serde::Deserialize::deserialize(de));
         let url = value.find("redis_url").unwrap().as_str().unwrap();
-        let expire_keys = value.find("expire_keys").unwrap().as_u64().unwrap();
+        let expire_keys = value.find("expire_keys").unwrap().as_u64().unwrap() as usize;
         let res = store::Store::new(url, expire_keys);
         res.or_else(|err| Err(serde::de::Error::custom(err)))
     }
