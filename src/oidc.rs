@@ -73,6 +73,34 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> Url {
 
 }
 
+pub fn canonicalized(email: &str) -> String {
+    let mut normalized = email.to_lowercase().to_string();
+    if normalized.contains("@gmail.com") || normalized.contains("@googlemail.com") {
+        let mut _normalized = normalized.clone();
+        let parts: Vec<&str> = _normalized.split("@").collect();
+        let mut lhs = parts[0].to_string();
+        let mut rhs = parts[1].to_string();
+
+        // ignore dots
+        lhs = lhs.replace(".", "").to_string();
+
+        // Trim plus addresses
+        if lhs.contains("+") {
+            let pos = lhs.find("+").unwrap();
+            let mut _lhs = lhs.clone();
+            let (first, _) = _lhs.split_at_mut(pos);
+            lhs = first.to_string();
+        }
+        
+        // Normalize googlemail.com to gmail.com
+        if rhs == "googlemail.com" {
+            rhs = "gmail.com".to_string();
+        }
+        
+        normalized = lhs + "@" + &rhs;
+    }
+    return normalized;
+}
 
 /// Helper method to verify OAuth authentication result.
 ///
@@ -143,7 +171,7 @@ pub fn verify(app: &AppConfig, session_id: &str, code: &str)
     let aud = jwt_payload.find("aud").unwrap().as_str().unwrap();
     assert!(aud == provider.client_id);
     let token_addr = jwt_payload.find("email").unwrap().as_str().unwrap();
-    assert!(token_addr == email_addr.to_string());
+    assert!(canonicalized(token_addr) == canonicalized(&email_addr.to_string()));
     let now = now_utc().to_timespec().sec;
     let exp = jwt_payload.find("exp").unwrap().as_i64().unwrap();
     assert!(now < exp);
