@@ -40,15 +40,18 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> Url {
         ("redirect", &params.get("redirect_uri").unwrap()[0]),
     ]).unwrap();
 
+    let client = HttpClient::new();
+
     // Retrieve the provider's Discovery document and extract the
     // `authorization_endpoint` from it.
     // TODO: cache other data for use in the callback handler, so that we
     // don't have to request the Discovery document twice. We could even store
     // per-provider data in Redis so we can amortize the cost of discovery.
     let provider = &app.providers[&email_addr.domain];
-    let client = HttpClient::new();
-    let rsp = client.get(&provider.discovery).send().unwrap();
-    let val: Value = from_reader(rsp).unwrap();
+    let val: Value = {
+        let rsp = client.get(&provider.discovery).send().unwrap();
+        from_reader(rsp).unwrap()
+    };
     let config = val.as_object().unwrap();
     let authz_base = config["authorization_endpoint"].as_str().unwrap();
 
@@ -87,14 +90,17 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
     let origin = stored.get("client_id").unwrap();
     let nonce = stored.get("nonce").unwrap();
 
+    let client = HttpClient::new();
+
     // Request the provider's Discovery document to get the
     // `token_endpoint` and `jwks_uri` values from it. TODO: save these
     // when requesting the Discovery document in the `oauth_request()`
     // function, and/or cache them by provider host.
-    let client = HttpClient::new();
     let provider = &app.providers[&email_addr.domain];
-    let rsp = client.get(&provider.discovery).send().unwrap();
-    let val: Value = from_reader(rsp).unwrap();
+    let val: Value = {
+        let rsp = client.get(&provider.discovery).send().unwrap();
+        from_reader(rsp).unwrap()
+    };
     let config = val.as_object().unwrap();
     let token_url = config["token_endpoint"].as_str().unwrap();
 
@@ -115,17 +121,21 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
     ].join("");
 
     // Send the Token Request and extract the `id_token` from the response.
-    let mut headers = Headers::new();
-    headers.set(HyContentType::form_url_encoded());
-    let token_rsp = client.post(token_url).headers(headers).body(&body).send().unwrap();
-    let token_obj: Value = from_reader(token_rsp).unwrap();
+    let token_obj: Value = {
+        let mut headers = Headers::new();
+        headers.set(HyContentType::form_url_encoded());
+        let rsp = client.post(token_url).headers(headers).body(&body).send().unwrap();
+        from_reader(rsp).unwrap()
+    };
     let id_token = token_obj.find("id_token").unwrap().as_str().unwrap();
 
     // Grab the keys from the provider, then verify the signature.
-    let keys_url = config["jwks_uri"].as_str().unwrap();
-    let keys_rsp = client.get(keys_url).send().unwrap();
-    let keys_doc: Value = from_reader(keys_rsp).unwrap();
-    let jwt_payload = verify_jws(id_token, &keys_doc).unwrap();
+    let jwt_payload = {
+        let url = config["jwks_uri"].as_str().unwrap();
+        let rsp = client.get(url).send().unwrap();
+        let doc: Value = from_reader(rsp).unwrap();
+        verify_jws(id_token, &doc).unwrap()
+    };
 
     // Verify that the issuer matches the configured value.
     let iss = jwt_payload.find("iss").unwrap().as_str().unwrap();
