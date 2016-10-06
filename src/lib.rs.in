@@ -1,6 +1,7 @@
 extern crate emailaddress;
 #[macro_use]
 extern crate log;
+extern crate hyper;
 extern crate iron;
 extern crate redis;
 extern crate serde_json;
@@ -29,6 +30,7 @@ pub mod crypto;
 pub mod email;
 pub mod oidc;
 pub mod store;
+pub mod store_cache;
 
 
 /// Helper function for returning an Iron response with JSON data.

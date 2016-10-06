@@ -1,13 +1,18 @@
 use std::fmt;
 use std::convert::From;
 use std::error::Error;
+use std::io::Error as IoError;
+use super::hyper::Error as HttpError;
 use super::redis::RedisError;
 
 
+/// Union of all possible runtime error types.
 #[derive(Debug)]
 pub enum BrokerError {
     Custom(String),
+    Io(IoError),
     Redis(RedisError),
+    Http(HttpError),
 }
 
 pub type BrokerResult<T> = Result<T, BrokerError>;
@@ -35,14 +40,24 @@ impl fmt::Display for BrokerError {
     }
 }
 
-impl From<RedisError> for BrokerError {
-    fn from(err: RedisError) -> BrokerError {
-        BrokerError::Redis(err)
-    }
-}
-
 impl From<BrokerError> for String {
     fn from(err: BrokerError) -> String {
         err.description().to_string()
     }
 }
+
+
+// Conversion from other error types.
+macro_rules! from_error {
+    ( $orig:ty, $enum_type:ident ) => {
+        impl From<$orig> for BrokerError {
+            fn from(err: $orig) -> BrokerError {
+                BrokerError::$enum_type(err)
+            }
+        }
+    }
+}
+
+from_error!(IoError, Io);
+from_error!(HttpError, Http);
+from_error!(RedisError, Redis);

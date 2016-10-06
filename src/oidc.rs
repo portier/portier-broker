@@ -1,14 +1,13 @@
-extern crate hyper;
-
 use emailaddress::EmailAddress;
 use iron::Url;
-use serde_json::de::from_reader;
+use serde_json::de::{from_reader, from_str};
 use serde_json::value::Value;
-use self::hyper::client::Client as HttpClient;
-use self::hyper::header::ContentType as HyContentType;
-use self::hyper::header::Headers;
+use super::hyper::client::Client as HttpClient;
+use super::hyper::header::ContentType as HyContentType;
+use super::hyper::header::Headers;
 use super::{AppConfig, create_jwt};
 use super::crypto::{session_id, verify_jws};
+use super::store_cache::CacheKey;
 use time::now_utc;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 use urlencoded::QueryMap;
@@ -49,8 +48,13 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> Url {
     // per-provider data in Redis so we can amortize the cost of discovery.
     let provider = &app.providers[&email_addr.domain];
     let val: Value = {
-        let rsp = client.get(&provider.discovery).send().unwrap();
-        from_reader(rsp).unwrap()
+        let data = app.store.cache.fetch_url(
+            &app.store,
+            CacheKey::Discovery { domain: &email_addr.domain },
+            &client,
+            &provider.discovery
+        ).unwrap();
+        from_str(&data).unwrap()
     };
     let config = val.as_object().unwrap();
     let authz_base = config["authorization_endpoint"].as_str().unwrap();
@@ -98,8 +102,13 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
     // function, and/or cache them by provider host.
     let provider = &app.providers[&email_addr.domain];
     let val: Value = {
-        let rsp = client.get(&provider.discovery).send().unwrap();
-        from_reader(rsp).unwrap()
+        let data = app.store.cache.fetch_url(
+            &app.store,
+            CacheKey::Discovery { domain: &email_addr.domain },
+            &client,
+            &provider.discovery
+        ).unwrap();
+        from_str(&data).unwrap()
     };
     let config = val.as_object().unwrap();
     let token_url = config["token_endpoint"].as_str().unwrap();
@@ -132,8 +141,13 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
     // Grab the keys from the provider, then verify the signature.
     let jwt_payload = {
         let url = config["jwks_uri"].as_str().unwrap();
-        let rsp = client.get(url).send().unwrap();
-        let doc: Value = from_reader(rsp).unwrap();
+        let data = app.store.cache.fetch_url(
+            &app.store,
+            CacheKey::KeySet { domain: &email_addr.domain },
+            &client,
+            &url
+        ).unwrap();
+        let doc: Value = from_str(&data).unwrap();
         verify_jws(id_token, &doc).unwrap()
     };
 
