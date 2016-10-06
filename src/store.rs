@@ -6,16 +6,16 @@ use super::redis::{self, Commands, PipelineCommands};
 #[derive(Clone)]
 pub struct Store {
     pub client: redis::Client,
-    pub expire_keys: usize, // Redis key TTL, in seconds
+    pub expire_sessions: usize, // TTL of session keys, in seconds
 }
 
 impl Store {
-    pub fn new(url: &str, expire_keys: usize) -> Result<Store, &'static str> {
+    pub fn new(url: &str, expire_sessions: usize) -> Result<Store, &'static str> {
         let res = redis::Client::open(url);
         if res.is_err() {
             return Err("error opening store connection");
         }
-        Ok(Store { client: res.unwrap(), expire_keys: expire_keys })
+        Ok(Store { client: res.unwrap(), expire_sessions: expire_sessions })
     }
 
     pub fn store_session(&self, session_id: &str, data: &[(&str, &str)])
@@ -24,7 +24,7 @@ impl Store {
         try!(redis::pipe()
                 .atomic()
                 .hset_multiple(&key, data).ignore()
-                .expire(&key, self.expire_keys).ignore()
+                .expire(&key, self.expire_sessions).ignore()
                 .query(&self.client));
         Ok(())
     }

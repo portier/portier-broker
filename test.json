@@ -5,7 +5,7 @@
   ],
   "store": {
     "redis_url": "redis://127.0.0.1/5",
-    "expire_keys": 900
+    "expire_sessions": 900
   },
   "sender": {
     "name": "Portier",

@@ -45,7 +45,7 @@ Here's an example configuration file:
      ],
      "store": {
        "redis_url": "redis://127.0.0.1/5",
-       "expire_keys": 900
+       "expire_sessions": 900
      },
      "smtp": {
        "address": "localhost:25"
@@ -71,11 +71,12 @@ Here's an example configuration file:
 Multiple keys can be used to implement key rotation. By default, the last key
 in the list will be used for signing the outgoing JWTs.
 
-**store** has a ``redis_url`` value that points to a Redis database. This
-is used for ephemeral state, most importantly for tracking login attempts
-while waiting for authorization from the user. The broker itself is stateless.
-``expire_keys`` contains the lifetime (in seconds) for such data. In the
-example, login attempts are timed out after 900s, or 15 minutes.
+**store** has a ``redis_url`` value that points to a Redis database. This is
+used for ephemeral state, most importantly for tracking login attempts while
+waiting for authorization from the user. The broker itself is stateless.
+``expire_sessions`` contains the lifetime (in seconds) for sessions kept during
+login attempts. In the example, login attempts are timed out after 900s, or 15
+minutes.
 
 **smtp** contains SMTP client settings, currently just the ``address``, which
 should be in the format ``<host>:<port>``.
