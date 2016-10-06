@@ -10,10 +10,11 @@ pub struct Store {
     pub cache: StoreCache,
     pub expire_sessions: usize, // TTL of session keys, in seconds
     pub expire_cache: usize, // TTL of cache keys, in seconds
+    pub max_response_size: u64, // Maximum size of HTTP GET responses
 }
 
 impl Store {
-    pub fn new(url: &str, expire_sessions: usize, expire_cache: usize)
+    pub fn new(url: &str, expire_sessions: usize, expire_cache: usize, max_response_size: u64)
                -> Result<Store, &'static str> {
         let res = redis::Client::open(url);
         if res.is_err() {
@@ -24,6 +25,7 @@ impl Store {
             cache: StoreCache,
             expire_sessions: expire_sessions,
             expire_cache: expire_cache,
+            max_response_size: max_response_size,
         })
     }
 
