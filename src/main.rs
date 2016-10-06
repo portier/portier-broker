@@ -60,23 +60,21 @@ fn main() {
         broker::AppConfig::from_json_file(&args.arg_CONFIG).unwrap()
     );
 
-    // TODO: It would be cleaner if the handlers could just be functions,
-    // instead of single-method impls.
     let router = router!{
         // Human-targeted endpoints
-        get "/" => broker::WelcomeHandler { app: app.clone() },
-        get "/.well-known/*" => broker::WellKnownHandler { app: app.clone() },
-        get "/confirm" => broker::ConfirmHandler { app: app.clone() },
+        get "/" => broker::WelcomeHandler::new(&app),
+        get "/.well-known/*" => broker::WellKnownHandler::new(&app),
+        get "/confirm" => broker::ConfirmHandler::new(&app),
 
         // OpenID Connect provider endpoints
         get "/.well-known/openid-configuration" =>
-               broker::OIDConfigHandler { app: app.clone() },
-        get "/keys.json" => broker::KeysHandler { app: app.clone() },
-        get "/auth" => broker::AuthHandler { app: app.clone() },
-        post "/auth" => broker::AuthHandler { app: app.clone() },
+               broker::OIDConfigHandler::new(&app),
+        get "/keys.json" => broker::KeysHandler::new(&app),
+        get "/auth" => broker::AuthHandler::new(&app),
+        post "/auth" => broker::AuthHandler::new(&app),
 
         // OpenID Connect relying party endpoints
-        get "/callback" => broker::CallbackHandler { app: app.clone() },
+        get "/callback" => broker::CallbackHandler::new(&app),
     };
 
     let ip_address = std::net::IpAddr::from_str(&args.flag_address).unwrap();
