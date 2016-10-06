@@ -150,10 +150,9 @@ impl Handler for AuthHandler {
 
         } else {
 
-            // Email loop authentication. For now, returns a JSON response;
-            // empty if successful, otherwise contains an error.
-            let obj = email::request(&self.app, params);
-            json_response(&obj)
+            // Email loop authentication. For now, returns 204.
+            // TODO: Return a form that allows the user to enter the code.
+            Ok(Response::with((status::NoContent)))
 
         }
     }
