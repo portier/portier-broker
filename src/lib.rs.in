@@ -22,6 +22,7 @@ use std::io::{BufReader, Read};
 use time::now_utc;
 use urlencoded::{UrlEncodedBody, UrlEncodedQuery};
 
+pub mod error;
 pub mod config;
 pub use config::AppConfig;
 pub mod crypto;

@@ -82,12 +82,7 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
               -> Result<(String, String), String> {
 
     // Validate that the callback matches an auth request in Redis.
-    let res = app.store.get_session(&session);
-    if res.is_err() {
-        return Err(res.unwrap_err());
-    }
-
-    let stored = res.unwrap();
+    let stored = try!(app.store.get_session(&session));
     let email_addr = EmailAddress::new(stored.get("email").unwrap()).unwrap();
     let origin = stored.get("client_id").unwrap();
     let nonce = stored.get("nonce").unwrap();

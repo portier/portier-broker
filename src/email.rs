@@ -80,12 +80,7 @@ pub fn request(app: &AppConfig, params: &QueryMap) {
 pub fn verify(app: &AppConfig, session: &str, code: &str)
               -> Result<(String, String), String> {
 
-    let res = app.store.get_session(&session);
-    if res.is_err() {
-        return Err(res.unwrap_err());
-    }
-
-    let stored = res.unwrap();
+    let stored = try!(app.store.get_session(&session));
     if code != stored.get("code").unwrap() {
         return Err("incorrect code".to_string());
     }

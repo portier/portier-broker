@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use super::redis::{self, Commands, RedisResult};
+use super::error::{BrokerResult, BrokerError};
+use super::redis::{self, Commands};
 
 
 #[derive(Clone)]
@@ -18,31 +19,19 @@ impl Store {
     }
 
     pub fn store_session(&self, session_id: &str, data: &[(&str, &str)])
-                         -> Result<(), String> {
+                         -> BrokerResult<()> {
         let key = Self::format_session_key(session_id);
-        let res: RedisResult<String> = self.client.hset_multiple(&key, data);
-        if res.is_err() {
-            return Err(res.unwrap_err().to_string());
-        }
-        let res: RedisResult<bool> =
-            self.client.expire(&key, self.expire_keys as usize);
-        if res.is_err() {
-            return Err(res.unwrap_err().to_string());
-        }
+        try!(self.client.hset_multiple(&key, data));
+        try!(self.client.expire(&key, self.expire_keys as usize));
         Ok(())
     }
 
     pub fn get_session(&self, session_id: &str)
-                       -> Result<HashMap<String, String>, String> {
+                       -> BrokerResult<HashMap<String, String>> {
         let key = Self::format_session_key(session_id);
-        let res: RedisResult<HashMap<String, String>> =
-            self.client.hgetall(&key);
-        if res.is_err() {
-            return Err(res.unwrap_err().to_string());
-        }
-        let stored = res.unwrap();
+        let stored: HashMap<String, String> = try!(self.client.hgetall(&key));
         if stored.is_empty() {
-            return Err("session not found".to_string());
+            return Err(BrokerError::Custom("session not found".to_string()));
         }
         Ok(stored)
     }
