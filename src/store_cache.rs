@@ -1,5 +1,10 @@
+use std::cmp::max;
 use std::io::Read;
 use super::hyper::client::Client as HttpClient;
+use super::hyper::header::{
+    CacheControl as HyCacheControl,
+    CacheDirective as HyCacheDirective
+};
 use super::redis::Commands;
 use super::error::BrokerResult;
 use super::store::Store;
@@ -44,8 +49,19 @@ impl StoreCache {
             let mut data = String::new();
             try!(rsp.read_to_string(&mut data));
 
-            // Cache the response for `expire_cache`.
-            try!(store.client.set_ex(&key_str, &data, store.expire_cache));
+            // Grab the max-age directive from the Cache-Control header.
+            let max_age = rsp.headers.get().map_or(0, |header: &HyCacheControl| {
+                for dir in header.iter() {
+                    if let HyCacheDirective::MaxAge(seconds) = *dir {
+                        return seconds;
+                    }
+                }
+                0
+            });
+
+            // Cache the response for at least `expire_cache`, but honor longer `max-age`.
+            let seconds = max(store.expire_cache, max_age as usize);
+            try!(store.client.set_ex(&key_str, &data, seconds));
 
             Ok(data)
 
