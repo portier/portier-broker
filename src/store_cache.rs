@@ -6,7 +6,7 @@ use super::hyper::header::{
     CacheDirective as HyCacheDirective
 };
 use super::redis::Commands;
-use super::error::BrokerResult;
+use super::error::{BrokerError, BrokerResult};
 use super::store::Store;
 
 
@@ -45,9 +45,7 @@ impl StoreCache {
         stored.map_or_else(|| {
 
             // Cache miss, make a request.
-            let mut rsp = try!(session.get(url).send());
-            let mut data = String::new();
-            try!(rsp.read_to_string(&mut data));
+            let rsp = try!(session.get(url).send());
 
             // Grab the max-age directive from the Cache-Control header.
             let max_age = rsp.headers.get().map_or(0, |header: &HyCacheControl| {
@@ -58,6 +56,14 @@ impl StoreCache {
                 }
                 0
             });
+
+            // We read up to size+1, because we use the extra byte as a
+            // sentinel to detect responses that exceed our maximum size.
+            let mut data = String::new();
+            let bytes_read = try!(rsp.take(store.max_response_size + 1).read_to_string(&mut data));
+            if bytes_read as u64 > store.max_response_size {
+                return Err(BrokerError::Custom("response exceeded the size limit".to_string()))
+            }
 
             // Cache the response for at least `expire_cache`, but honor longer `max-age`.
             let seconds = max(store.expire_cache, max_age as usize);

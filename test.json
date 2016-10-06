@@ -6,7 +6,8 @@
   "store": {
     "redis_url": "redis://127.0.0.1/5",
     "expire_sessions": 900,
-    "expire_cache": 3600
+    "expire_cache": 3600,
+    "max_response_size": 8096
   },
   "sender": {
     "name": "Portier",

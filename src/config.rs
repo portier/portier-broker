@@ -55,7 +55,8 @@ impl Deserialize for store::Store {
         let url = value.find("redis_url").unwrap().as_str().unwrap();
         let expire_sessions = value.find("expire_sessions").unwrap().as_u64().unwrap() as usize;
         let expire_cache = value.find("expire_cache").unwrap().as_u64().unwrap() as usize;
-        let res = store::Store::new(url, expire_sessions, expire_cache);
+        let max_response_size = value.find("max_response_size").unwrap().as_u64().unwrap();
+        let res = store::Store::new(url, expire_sessions, expire_cache, max_response_size);
         res.or_else(|err| Err(serde::de::Error::custom(err)))
     }
 }

@@ -46,7 +46,8 @@ Here's an example configuration file:
      "store": {
        "redis_url": "redis://127.0.0.1/5",
        "expire_sessions": 900,
-       "expire_cache": 3600
+       "expire_cache": 3600,
+       "max_response_size": 8096
      },
      "smtp": {
        "address": "localhost:25"
@@ -80,7 +81,8 @@ lifetime (in seconds) for sessions kept during login attempts. In the example,
 login attempts are timed out after 900s, or 15 minutes. ``expire_cache``
 contains the minimum lifetime (in seconds) for the cache entries, but
 individual entries may be kept longer if this is indicated in the HTTP headers
-providers send.
+providers send. ``max_response_size`` is the maximum allowed size (in bytes) of
+configuration documents from identity providers.
 
 **smtp** contains SMTP client settings, currently just the ``address``, which
 should be in the format ``<host>:<port>``.
