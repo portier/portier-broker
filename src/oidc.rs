@@ -79,33 +79,34 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> Url {
 
 }
 
+pub fn canonicalize_google(email: String) -> String {
+    let at = email.find("@").unwrap();
+    let (user, domain) = email.split_at(at);
+    let domain = &domain[1..];
+    let user = &user.replace(".", ""); // Ignore dots
+
+    // Trim plus addresses
+    let user = match user.find("+") {
+        Some(pos) => user.split_at(pos).0,
+        None => user,
+    };
+
+    // Normalize googlemail.com to gmail.com
+    let domain = if domain == "googlemail.com" {
+        "gmail.com"
+    } else {
+        domain
+    };
+    user.to_string() + "@" + domain
+}
+
 pub fn canonicalized(email: &str) -> String {
-    let mut normalized = email.to_lowercase().to_string();
-    if normalized.contains("@gmail.com") || normalized.contains("@googlemail.com") {
-        let mut _normalized = normalized.clone();
-        let parts: Vec<&str> = _normalized.split("@").collect();
-        let mut lhs = parts[0].to_string();
-        let mut rhs = parts[1].to_string();
-
-        // ignore dots
-        lhs = lhs.replace(".", "").to_string();
-
-        // Trim plus addresses
-        if lhs.contains("+") {
-            let pos = lhs.find("+").unwrap();
-            let mut _lhs = lhs.clone();
-            let (first, _) = _lhs.split_at_mut(pos);
-            lhs = first.to_string();
-        }
-        
-        // Normalize googlemail.com to gmail.com
-        if rhs == "googlemail.com" {
-            rhs = "gmail.com".to_string();
-        }
-        
-        normalized = lhs + "@" + &rhs;
+    let normalized = email.to_lowercase();
+    if normalized.ends_with("@gmail.com") || normalized.ends_with("@googlemail.com") {
+        canonicalize_google(normalized)
+    } else {
+        normalized
     }
-    return normalized;
 }
 
 /// Helper method to verify OAuth authentication result.
