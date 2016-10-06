@@ -45,7 +45,8 @@ Here's an example configuration file:
      ],
      "store": {
        "redis_url": "redis://127.0.0.1/5",
-       "expire_sessions": 900
+       "expire_sessions": 900,
+       "expire_cache": 3600
      },
      "smtp": {
        "address": "localhost:25"
@@ -73,10 +74,11 @@ in the list will be used for signing the outgoing JWTs.
 
 **store** has a ``redis_url`` value that points to a Redis database. This is
 used for ephemeral state, most importantly for tracking login attempts while
-waiting for authorization from the user. The broker itself is stateless.
-``expire_sessions`` contains the lifetime (in seconds) for sessions kept during
-login attempts. In the example, login attempts are timed out after 900s, or 15
-minutes.
+waiting for authorization from the user, and caching of identity provider
+configuration. The broker itself is stateless. ``expire_sessions`` contains the
+lifetime (in seconds) for sessions kept during login attempts. In the example,
+login attempts are timed out after 900s, or 15 minutes. ``expire_cache``
+contains the lifetime (in seconds) for the cache entries.
 
 **smtp** contains SMTP client settings, currently just the ``address``, which
 should be in the format ``<host>:<port>``.
