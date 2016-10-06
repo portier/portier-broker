@@ -78,7 +78,9 @@ waiting for authorization from the user, and caching of identity provider
 configuration. The broker itself is stateless. ``expire_sessions`` contains the
 lifetime (in seconds) for sessions kept during login attempts. In the example,
 login attempts are timed out after 900s, or 15 minutes. ``expire_cache``
-contains the lifetime (in seconds) for the cache entries.
+contains the minimum lifetime (in seconds) for the cache entries, but
+individual entries may be kept longer if this is indicated in the HTTP headers
+providers send.
 
 **smtp** contains SMTP client settings, currently just the ``address``, which
 should be in the format ``<host>:<port>``.
