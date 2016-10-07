@@ -10,7 +10,6 @@ use super::crypto::{session_id, verify_jws};
 use super::store_cache::CacheKey;
 use time::now_utc;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
-use urlencoded::QueryMap;
 
 
 /// Helper method to issue an OAuth authorization request.
@@ -23,11 +22,8 @@ use urlencoded::QueryMap;
 /// user will be redirected back to after confirming (or denying) the
 /// Authentication Request. Included in the request is a nonce which we can
 /// later use to definitively match the callback to this request.
-pub fn request(app: &AppConfig, params: &QueryMap) -> Url {
+pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &str) -> Url {
 
-    let email_addr = EmailAddress::new(&params.get("login_hint").unwrap()[0]).unwrap();
-    let client_id = &params.get("client_id").unwrap()[0];
-    let nonce = &params.get("nonce").unwrap()[0];
     let session = session_id(&email_addr, client_id);
 
     // Store the nonce and the RP's `redirect_uri` in Redis for use in the
@@ -36,7 +32,7 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> Url {
         ("email", &email_addr.to_string()),
         ("client_id", client_id),
         ("nonce", nonce),
-        ("redirect", &params.get("redirect_uri").unwrap()[0]),
+        ("redirect", redirect_uri),
     ]).unwrap();
 
     let client = HttpClient::new();

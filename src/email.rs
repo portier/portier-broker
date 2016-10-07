@@ -9,7 +9,6 @@ use super::{AppConfig, create_jwt};
 use super::crypto::session_id;
 use std::iter::Iterator;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
-use urlencoded::QueryMap;
 
 
 /// Characters eligible for inclusion in the email loop one-time pad.
@@ -32,23 +31,21 @@ const CODE_CHARS: &'static [char] = &[
 /// authentication, create a randomly-generated one-time pad. Then, send
 /// an email containing a link with the secret. Clicking the link will trigger
 /// the `ConfirmHandler`, returning an authentication result to the RP.
-pub fn request(app: &AppConfig, params: &QueryMap) {
+pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &str) {
+
+    let session = session_id(&email_addr, client_id);
 
     // Generate a 6-character one-time pad.
-    let email_addr = EmailAddress::new(&params.get("login_hint").unwrap()[0]).unwrap();
     let chars: String = (0..6).map(|_| CODE_CHARS[rand::random::<usize>() % CODE_CHARS.len()]).collect();
 
     // Store data for this request in Redis, to reference when user uses
     // the generated link.
-    let client_id = &params.get("client_id").unwrap()[0];
-    let nonce = &params.get("nonce").unwrap()[0];
-    let session = session_id(&email_addr, client_id);
     app.store.store_session(&session, &[
         ("email", &email_addr.to_string()),
         ("client_id", client_id),
         ("nonce", nonce),
         ("code", &chars),
-        ("redirect", &params.get("redirect_uri").unwrap()[0]),
+        ("redirect", redirect_uri),
     ]).unwrap();
 
     // Generate the URL used to verify email address ownership.
