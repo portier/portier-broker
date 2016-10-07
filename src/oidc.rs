@@ -201,3 +201,24 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
     Ok((id_token, redirect.to_string()))
 
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::canonicalized;
+    #[test]
+    fn test_canonicalized_google() {
+        assert_eq!(canonicalized("example.foo+bar@example.com"),
+                   "example.foo+bar@example.com");
+        assert_eq!(canonicalized("example@gmail.com"),
+                   "example@gmail.com");
+        assert_eq!(canonicalized("example@googlemail.com"),
+                   "example@gmail.com");
+        assert_eq!(canonicalized("example.foo@gmail.com"),
+                   "examplefoo@gmail.com");
+        assert_eq!(canonicalized("example+bar@gmail.com"),
+                   "example@gmail.com");
+        assert_eq!(canonicalized("example.foo+bar@googlemail.com"),
+                   "examplefoo@gmail.com");
+    }
+}
