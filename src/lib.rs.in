@@ -155,6 +155,7 @@ impl Handler for AuthHandler {
 
             // Email loop authentication. For now, returns 204.
             // TODO: Return a form that allows the user to enter the code.
+            email::request(&self.app, params);
             Ok(Response::with((status::NoContent)))
 
         }
