@@ -4,6 +4,8 @@ use std::error::Error;
 use std::io::Error as IoError;
 use super::hyper::Error as HttpError;
 use super::redis::RedisError;
+use super::iron::IronError;
+use super::iron::status;
 
 
 /// Union of all possible runtime error types.
@@ -43,6 +45,13 @@ impl fmt::Display for BrokerError {
 impl From<BrokerError> for String {
     fn from(err: BrokerError) -> String {
         err.description().to_string()
+    }
+}
+
+// TODO: Add a category for user errors, and return such errors to the RP.
+impl From<BrokerError> for IronError {
+    fn from(err: BrokerError) -> IronError {
+        IronError::new(err, status::ServiceUnavailable)
     }
 }
 

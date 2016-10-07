@@ -58,6 +58,31 @@ macro_rules! broker_handler {
     }
 }
 
+/// Macro used to extract a bunch of parameters from a QueryMap.
+///
+/// This macro should be called from a handler function, because it will return
+/// with a 400 response if the parameter is missing from the request.
+///
+/// ```
+/// extract_params!(params, {
+///     foo = "foo",
+///     bar = "BAR",
+/// });
+/// ```
+macro_rules! extract_params {
+    ( $input:expr, { $( $var:ident = $param:tt ),* } ) => {
+        $(
+            let $var = try!(
+                $input.get($param).map(|list| &list[0]).ok_or_else(|| {
+                    error::BrokerError::Custom(
+                        concat!("missing request parameter ", $param).to_string()
+                    )
+                })
+            );
+        )*
+    }
+}
+
 
 /// Helper function for returning an Iron response with JSON data.
 ///
@@ -163,10 +188,17 @@ broker_handler!(AuthHandler, |app, req| {
             }
         }
     );
-    let email_addr = EmailAddress::new(&params.get("login_hint").unwrap()[0]).unwrap();
-    let client_id = &params.get("client_id").unwrap()[0];
-    let nonce = &params.get("nonce").unwrap()[0];
-    let redirect_uri = &params.get("redirect_uri").unwrap()[0];
+    extract_params!(params, {
+        login_hint = "login_hint",
+        client_id = "client_id",
+        nonce = "nonce",
+        redirect_uri = "redirect_uri"
+    });
+    let email_addr = try!(
+        EmailAddress::new(login_hint)
+            .map_err(|e| IronError::new(e, (status::BadRequest,
+                                            "login_hint is not a valid email address")))
+    );
     if app.providers.contains_key(&email_addr.domain) {
 
         // OIDC authentication. Using 302 Found for redirection here. Note
@@ -242,9 +274,15 @@ fn return_to_relier(result: Result<(String, String), String>)
 /// Retrieves the session based session ID and the expected one-time pad.
 /// Verify the code and return the resulting token or error to the RP.
 broker_handler!(ConfirmHandler, |app, req| {
-    let params = req.get_ref::<UrlEncodedQuery>().unwrap();
-    let session_id = &params.get("session").unwrap()[0];
-    let code = &params.get("code").unwrap()[0];
+    let params = try!(
+        req.get_ref::<UrlEncodedQuery>()
+            .map_err(|e| IronError::new(e, (status::BadRequest,
+                                            "no query string in GET request")))
+    );
+    extract_params!(params, {
+        session_id = "session",
+        code = "code"
+    });
     return_to_relier(email::verify(app, session_id, code))
 });
 
@@ -255,8 +293,14 @@ broker_handler!(ConfirmHandler, |app, req| {
 /// identity provider, they will be redirected back to the callback handler.
 /// Verify the callback data and return the resulting token or error.
 broker_handler!(CallbackHandler, |app, req| {
-    let params = req.get_ref::<UrlEncodedQuery>().unwrap();
-    let session = &params.get("state").unwrap()[0];
-    let code = &params.get("code").unwrap()[0];
+    let params = try!(
+        req.get_ref::<UrlEncodedQuery>()
+            .map_err(|e| IronError::new(e, (status::BadRequest,
+                                            "no query string in GET request")))
+    );
+    extract_params!(params, {
+        session = "state",
+        code = "code"
+    });
     return_to_relier(oidc::verify(app, session, code))
 });
