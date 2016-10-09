@@ -1,10 +1,10 @@
-extern crate lettre;
 extern crate rand;
 
 use emailaddress::EmailAddress;
-use self::lettre::email::EmailBuilder;
-use self::lettre::transport::EmailTransport;
-use self::lettre::transport::smtp::SmtpTransportBuilder;
+use super::error::BrokerResult;
+use super::lettre::email::EmailBuilder;
+use super::lettre::transport::EmailTransport;
+use super::lettre::transport::smtp::SmtpTransportBuilder;
 use super::{AppConfig, create_jwt};
 use super::crypto::session_id;
 use std::iter::Iterator;
@@ -31,7 +31,8 @@ const CODE_CHARS: &'static [char] = &[
 /// authentication, create a randomly-generated one-time pad. Then, send
 /// an email containing a link with the secret. Clicking the link will trigger
 /// the `ConfirmHandler`, returning an authentication result to the RP.
-pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &str) {
+pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &str)
+               -> BrokerResult<()> {
 
     let session = session_id(&email_addr, client_id);
 
@@ -40,13 +41,13 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
 
     // Store data for this request in Redis, to reference when user uses
     // the generated link.
-    app.store.store_session(&session, &[
+    try!(app.store.store_session(&session, &[
         ("email", &email_addr.to_string()),
         ("client_id", client_id),
         ("nonce", nonce),
         ("code", &chars),
         ("redirect", redirect_uri),
-    ]).unwrap();
+    ]));
 
     // Generate the URL used to verify email address ownership.
     let href = format!("{}/confirm?session={}&code={}",
@@ -55,6 +56,7 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
                        utf8_percent_encode(&chars, QUERY_ENCODE_SET));
 
     // Generate a simple email and send it through the SMTP server.
+    // We can unwrap here, because the possible errors cannot happen here.
     // TODO: Use templates for the email message.
     let email = EmailBuilder::new()
         .to(email_addr.to_string().as_str())
@@ -64,9 +66,12 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
         .subject(&format!("Code: {} - Finish logging in to {}", chars, client_id))
         .build().unwrap();
     // TODO: Add support for authentication.
-    let mut mailer = SmtpTransportBuilder::new(app.smtp.address.as_str()).unwrap().build();
-    mailer.send(email).unwrap();
+    let mut mailer = try!(
+        SmtpTransportBuilder::new(app.smtp.address.as_str())
+    ).build();
+    try!(mailer.send(email));
     mailer.close();
+    Ok(())
 
 }
 

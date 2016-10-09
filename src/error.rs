@@ -4,6 +4,7 @@ use std::error::Error;
 use std::io::Error as IoError;
 use super::hyper::Error as HttpError;
 use super::redis::RedisError;
+use super::lettre::transport::error::Error as MailError;
 use super::iron::IronError;
 use super::iron::status;
 
@@ -15,6 +16,7 @@ pub enum BrokerError {
     Io(IoError),
     Redis(RedisError),
     Http(HttpError),
+    Mail(MailError),
 }
 
 pub type BrokerResult<T> = Result<T, BrokerError>;
@@ -70,3 +72,4 @@ macro_rules! from_error {
 from_error!(IoError, Io);
 from_error!(HttpError, Http);
 from_error!(RedisError, Redis);
+from_error!(MailError, Mail);

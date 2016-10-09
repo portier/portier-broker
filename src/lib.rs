@@ -3,6 +3,7 @@ extern crate emailaddress;
 extern crate log;
 extern crate hyper;
 extern crate iron;
+extern crate lettre;
 extern crate redis;
 extern crate serde;
 extern crate serde_json;
@@ -213,7 +214,7 @@ broker_handler!(AuthHandler, |app, req| {
 
         // Email loop authentication. For now, returns 204.
         // TODO: Return a form that allows the user to enter the code.
-        email::request(app, email_addr, client_id, nonce, redirect_uri);
+        try!(email::request(app, email_addr, client_id, nonce, redirect_uri));
         Ok(Response::with((status::NoContent)))
 
     }
