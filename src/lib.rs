@@ -248,27 +248,16 @@ const FORWARD_TEMPLATE: &'static str = include_str!("forward-template.html");
 
 /// Helper function for returning result to the Relying Party.
 ///
-/// Takes a `Result` from one of the verification functions and embeds it in
-/// a form in the `FORWARD_TEMPLATE`, from where it's POSTED to the RP's
-/// `redirect_ur` as soon as the page has loaded. Result can either be an error
-/// message or a JWT asserting the user's email address identity.
-/// TODO: return error to RP instead of in a simple HTTP response.
-fn return_to_relier(result: Result<(String, String), String>)
-                    -> IronResult<Response> {
-
-    if result.is_err() {
-        return json_response(&ObjectBuilder::new()
-                            .insert("error", result.unwrap_err())
-                            .build());
-    }
-
-    let (jwt, redirect) = result.unwrap();
+/// Takes a `(jwt, redirect)` pair from one of the verification functions and
+/// embeds it in a form in the `FORWARD_TEMPLATE`, from where it's POSTED to
+/// the RP's `redirect` as soon as the page has loaded.
+fn return_to_relier(result: (String, String)) -> IronResult<Response> {
+    let (jwt, redirect) = result;
     let html = FORWARD_TEMPLATE.replace("{{ return_url }}", &redirect)
         .replace("{{ jwt }}", &jwt);
     let mut rsp = Response::with((status::Ok, html));
     rsp.headers.set(ContentType::html());
     Ok(rsp)
-
 }
 
 
@@ -286,7 +275,9 @@ broker_handler!(ConfirmHandler, |app, req| {
         session_id = "session",
         code = "code"
     });
-    return_to_relier(email::verify(app, session_id, code))
+    return_to_relier(
+        try!(email::verify(app, session_id, code))
+    )
 });
 
 
@@ -305,5 +296,7 @@ broker_handler!(CallbackHandler, |app, req| {
         session = "state",
         code = "code"
     });
-    return_to_relier(oidc::verify(app, session, code))
+    return_to_relier(
+        try!(oidc::verify(app, session, code))
+    )
 });

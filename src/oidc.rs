@@ -126,7 +126,7 @@ pub fn canonicalized(email: &str) -> String {
 /// extract the identity token returned by the provider and verify it. Return
 /// an identity token for the RP if successful, or an error message otherwise.
 pub fn verify(app: &AppConfig, session: &str, code: &str)
-              -> Result<(String, String), String> {
+              -> BrokerResult<(String, String)> {
 
     // Validate that the callback matches an auth request in Redis.
     let stored = try!(app.store.get_session(&session));
