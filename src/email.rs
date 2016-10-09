@@ -78,15 +78,15 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
               -> Result<(String, String), String> {
 
     let stored = try!(app.store.get_session(&session));
-    if code != stored.get("code").unwrap() {
+    if code != &stored["code"] {
         return Err("incorrect code".to_string());
     }
 
-    let email = stored.get("email").unwrap();
-    let client_id = stored.get("client_id").unwrap();
-    let nonce = stored.get("nonce").unwrap();
+    let email = &stored["email"];
+    let client_id = &stored["client_id"];
+    let nonce = &stored["nonce"];
     let id_token = create_jwt(app, email, client_id, nonce);
-    let redirect = stored.get("redirect").unwrap().to_string();
-    Ok((id_token, redirect))
+    let redirect = &stored["redirect"];
+    Ok((id_token, redirect.to_string()))
 
 }

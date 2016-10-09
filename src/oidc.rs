@@ -130,9 +130,9 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
 
     // Validate that the callback matches an auth request in Redis.
     let stored = try!(app.store.get_session(&session));
-    let email_addr = EmailAddress::new(stored.get("email").unwrap()).unwrap();
-    let origin = stored.get("client_id").unwrap();
-    let nonce = stored.get("nonce").unwrap();
+    let email_addr = EmailAddress::new(&stored["email"]).unwrap();
+    let origin = &stored["client_id"];
+    let nonce = &stored["nonce"];
 
     let client = HttpClient::new();
 
@@ -140,7 +140,8 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
     // `token_endpoint` and `jwks_uri` values from it. TODO: save these
     // when requesting the Discovery document in the `oauth_request()`
     // function, and/or cache them by provider host.
-    let provider = &app.providers[&email_addr.domain];
+    let domain = &email_addr.domain;
+    let provider = &app.providers[domain];
     let val: Value = {
         let data = app.store.cache.fetch_url(
             &app.store,
@@ -208,7 +209,7 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
     // If everything is okay, build a new identity token and send it
     // to the relying party.
     let id_token = create_jwt(app, &email_addr.to_string(), origin, nonce);
-    let redirect = stored.get("redirect").unwrap();
+    let redirect = &stored["redirect"];
     Ok((id_token, redirect.to_string()))
 
 }
