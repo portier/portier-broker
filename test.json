@@ -9,6 +9,9 @@
     "expire_cache": 3600,
     "max_response_size": 8096
   },
+  "smtp": {
+    "address": "localhost:25"
+  },
   "sender": {
     "name": "Portier",
     "address": "portier@example.com"
