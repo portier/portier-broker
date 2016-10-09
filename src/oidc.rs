@@ -2,6 +2,7 @@ use emailaddress::EmailAddress;
 use iron::Url;
 use serde_json::de::{from_reader, from_str};
 use serde_json::value::Value;
+use super::error::{BrokerError, BrokerResult};
 use super::hyper::client::Client as HttpClient;
 use super::hyper::header::ContentType as HyContentType;
 use super::hyper::header::Headers;
@@ -22,35 +23,50 @@ use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 /// user will be redirected back to after confirming (or denying) the
 /// Authentication Request. Included in the request is a nonce which we can
 /// later use to definitively match the callback to this request.
-pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &str) -> Url {
+pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &str)
+               -> BrokerResult<Url> {
 
     let session = session_id(&email_addr, client_id);
 
     // Store the nonce and the RP's `redirect_uri` in Redis for use in the
     // callback handler.
-    let _ = app.store.store_session(&session, &[
+    try!(app.store.store_session(&session, &[
         ("email", &email_addr.to_string()),
         ("client_id", client_id),
         ("nonce", nonce),
         ("redirect", redirect_uri),
-    ]).unwrap();
+    ]));
 
     let client = HttpClient::new();
 
     // Retrieve the provider's Discovery document and extract the
     // `authorization_endpoint` from it.
-    let provider = &app.providers[&email_addr.domain];
-    let val: Value = {
-        let data = app.store.cache.fetch_url(
+    let domain = &email_addr.domain;
+    let provider = &app.providers[domain];
+    let val: Value = try!(
+        app.store.cache.fetch_url(
             &app.store,
             CacheKey::Discovery { domain: &email_addr.domain },
             &client,
             &provider.discovery
-        ).unwrap();
-        from_str(&data).unwrap()
-    };
-    let config = val.as_object().unwrap();
-    let authz_base = config["authorization_endpoint"].as_str().unwrap();
+        ).and_then(|data| {
+            from_str(&data).map_err(|_| BrokerError::Custom(
+                format!("{} discovery document is not JSON", domain)
+            ))
+        })
+    );
+    let config = try!(
+        val.as_object().ok_or_else(|| {
+            BrokerError::Custom(format!("{} discovery document is not a JSON object", domain))
+        })
+    );
+    let authz_base = try!(
+        config.get("authorization_endpoint")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                BrokerError::Custom(format!("{} authorization_endpoint is not a string", domain))
+            })
+    );
 
     // Create the URL to redirect to, properly escaping all parameters.
     Url::parse(&vec![
@@ -68,7 +84,9 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
         &utf8_percent_encode(&session, QUERY_ENCODE_SET).to_string(),
         "&login_hint=",
         &utf8_percent_encode(&email_addr.to_string(), QUERY_ENCODE_SET).to_string(),
-    ].join("")).unwrap()
+    ].join("")).map_err(|_| {
+        BrokerError::Custom("authorization_endpoint is an invalid URL".to_string())
+    })
 
 }
 

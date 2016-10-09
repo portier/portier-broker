@@ -204,7 +204,9 @@ broker_handler!(AuthHandler, |app, req| {
         // OIDC authentication. Using 302 Found for redirection here. Note
         // that, per RFC 7231, a user agent MAY change the request method
         // from POST to GET for the subsequent request.
-        let auth_url = oidc::request(app, email_addr, client_id, nonce, redirect_uri);
+        let auth_url = try!(
+            oidc::request(app, email_addr, client_id, nonce, redirect_uri)
+        );
         Ok(Response::with((status::Found, modifiers::Redirect(auth_url))))
 
     } else {
