@@ -1,7 +1,7 @@
 extern crate rand;
 
 use emailaddress::EmailAddress;
-use super::error::BrokerResult;
+use super::error::{BrokerError, BrokerResult};
 use super::lettre::email::EmailBuilder;
 use super::lettre::transport::EmailTransport;
 use super::lettre::transport::smtp::SmtpTransportBuilder;
@@ -80,11 +80,11 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
 /// Checks that the session exists and matches the one-time pad. If so,
 /// returns the Identity Token; otherwise, returns an error message.
 pub fn verify(app: &AppConfig, session: &str, code: &str)
-              -> Result<(String, String), String> {
+              -> BrokerResult<(String, String)> {
 
     let stored = try!(app.store.get_session(&session));
     if code != &stored["code"] {
-        return Err("incorrect code".to_string());
+        return Err(BrokerError::Custom("incorrect code".to_string()));
     }
 
     let email = &stored["email"];
