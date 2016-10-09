@@ -42,6 +42,7 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
     // Store data for this request in Redis, to reference when user uses
     // the generated link.
     try!(app.store.store_session(&session, &[
+        ("type", "email"),
         ("email", &email_addr.to_string()),
         ("client_id", client_id),
         ("nonce", nonce),
@@ -83,6 +84,9 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
               -> BrokerResult<(String, String)> {
 
     let stored = try!(app.store.get_session(&session));
+    if &stored["type"] != "email" {
+        return Err(BrokerError::Custom("invalid session".to_string()));
+    }
     if code != &stored["code"] {
         return Err(BrokerError::Custom("incorrect code".to_string()));
     }
