@@ -39,9 +39,6 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
 
     // Retrieve the provider's Discovery document and extract the
     // `authorization_endpoint` from it.
-    // TODO: cache other data for use in the callback handler, so that we
-    // don't have to request the Discovery document twice. We could even store
-    // per-provider data in Redis so we can amortize the cost of discovery.
     let provider = &app.providers[&email_addr.domain];
     let val: Value = {
         let data = app.store.cache.fetch_url(

@@ -54,8 +54,8 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
                        utf8_percent_encode(&session, QUERY_ENCODE_SET),
                        utf8_percent_encode(&chars, QUERY_ENCODE_SET));
 
-    // Generate a simple email and send it through the SMTP server running
-    // on localhost. TODO: Use templates for the email message.
+    // Generate a simple email and send it through the SMTP server.
+    // TODO: Use templates for the email message.
     let email = EmailBuilder::new()
         .to(email_addr.to_string().as_str())
         .from((&*app.sender.address, &*app.sender.name))
