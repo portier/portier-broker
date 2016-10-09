@@ -31,6 +31,7 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
     // Store the nonce and the RP's `redirect_uri` in Redis for use in the
     // callback handler.
     try!(app.store.store_session(&session, &[
+        ("type", "oidc"),
         ("email", &email_addr.to_string()),
         ("client_id", client_id),
         ("nonce", nonce),
@@ -130,6 +131,10 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
 
     // Validate that the callback matches an auth request in Redis.
     let stored = try!(app.store.get_session(&session));
+    if &stored["type"] != "oidc" {
+        return Err(BrokerError::Custom("invalid session".to_string()));
+    }
+
     let email_addr = EmailAddress::new(&stored["email"]).unwrap();
     let origin = &stored["client_id"];
     let nonce = &stored["nonce"];
