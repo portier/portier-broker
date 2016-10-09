@@ -12,6 +12,7 @@ use portier_broker as broker;
 use docopt::Docopt;
 use iron::Iron;
 use std::str::FromStr;
+use std::sync::Arc;
 
 
 /// Defines the program's version, as set by Cargo at compile time.
@@ -55,11 +56,12 @@ fn main() {
                          .unwrap_or_else(|e| e.exit());
 
     // Read the configuration from the provided file.
-    let app = broker::AppConfig::from_json_file(&args.arg_CONFIG).unwrap();
+    let app = Arc::new(
+        broker::AppConfig::from_json_file(&args.arg_CONFIG).unwrap()
+    );
 
-    // TODO: cloning the configuration object is ugly, but apparently necessary
-    // with how the Iron `Handler` trait is defined. Also, it would be cleaner
-    // if the handlers could just be functions, instead of single-method impls.
+    // TODO: It would be cleaner if the handlers could just be functions,
+    // instead of single-method impls.
     let router = router!{
         // Human-targeted endpoints
         get "/" => broker::WelcomeHandler { app: app.clone() },

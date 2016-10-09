@@ -21,6 +21,7 @@ use serde_json::value::Value;
 use std::env;
 use std::fs::File;
 use std::io::{BufReader, Read};
+use std::sync::Arc;
 use time::now_utc;
 use urlencoded::{UrlEncodedBody, UrlEncodedQuery};
 
@@ -49,7 +50,7 @@ fn json_response(obj: &Value) -> IronResult<Response> {
 /// Iron handler for the root path, returns human-friendly message.
 ///
 /// This is not actually used in the protocol.
-pub struct WelcomeHandler { pub app: AppConfig }
+pub struct WelcomeHandler { pub app: Arc<AppConfig> }
 impl Handler for WelcomeHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
         info!("{} {}", req.method, req.url);
@@ -64,7 +65,7 @@ impl Handler for WelcomeHandler {
 /// Iron handler for files in .well-known.
 ///
 /// Mainly directed at Let's Encrypt verification. Returns text/plain always.
-pub struct WellKnownHandler { pub app: AppConfig }
+pub struct WellKnownHandler { pub app: Arc<AppConfig> }
 impl Handler for WellKnownHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
         info!("{} {}", req.method, req.url);
@@ -88,7 +89,7 @@ impl Handler for WellKnownHandler {
 ///
 /// Most of this is hard-coded for now, although the URLs are constructed by
 /// using the base URL as configured in the `base_url` configuration value.
-pub struct OIDConfigHandler { pub app: AppConfig }
+pub struct OIDConfigHandler { pub app: Arc<AppConfig> }
 impl Handler for OIDConfigHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
         info!("{} {}", req.method, req.url);
@@ -116,7 +117,7 @@ impl Handler for OIDConfigHandler {
 ///
 /// Relying Parties will need to fetch this data to be able to verify identity
 /// tokens issued by this daemon instance.
-pub struct KeysHandler { pub app: AppConfig }
+pub struct KeysHandler { pub app: Arc<AppConfig> }
 impl Handler for KeysHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
         info!("{} {}", req.method, req.url);
@@ -136,7 +137,7 @@ impl Handler for KeysHandler {
 /// Calls the `oidc::request()` function if the provided email address's
 /// domain matches one of the configured famous providers. Otherwise, calls the
 /// `email::request()` function to allow authentication through the email loop.
-pub struct AuthHandler { pub app: AppConfig }
+pub struct AuthHandler { pub app: Arc<AppConfig> }
 impl Handler for AuthHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
         info!("{} {}", req.method, req.url);
@@ -233,7 +234,7 @@ fn return_to_relier(result: Result<(String, String), String>)
 ///
 /// Retrieves the session based session ID and the expected one-time pad.
 /// Verify the code and return the resulting token or error to the RP.
-pub struct ConfirmHandler { pub app: AppConfig }
+pub struct ConfirmHandler { pub app: Arc<AppConfig> }
 impl Handler for ConfirmHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
         info!("{} {}", req.method, req.url);
@@ -250,7 +251,7 @@ impl Handler for ConfirmHandler {
 /// After the user allows or denies the Authentication Request with the famous
 /// identity provider, they will be redirected back to the callback handler.
 /// Verify the callback data and return the resulting token or error.
-pub struct CallbackHandler { pub app: AppConfig }
+pub struct CallbackHandler { pub app: Arc<AppConfig> }
 impl Handler for CallbackHandler {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
         info!("{} {}", req.method, req.url);
