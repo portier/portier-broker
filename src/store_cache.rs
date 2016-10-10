@@ -8,6 +8,8 @@ use super::hyper::header::{
 use super::redis::Commands;
 use super::error::{BrokerError, BrokerResult};
 use super::store::Store;
+use serde_json::de::from_str;
+use serde_json::value::Value;
 
 
 /// Represents a Redis key.
@@ -75,5 +77,15 @@ impl StoreCache {
             Ok(data)
         })
 
+    }
+
+    /// Similar to `fetch_url`, but also parses the response as JSON.
+    pub fn fetch_json_url(&self, store: &Store, key: CacheKey, session: &HttpClient, url: &str)
+                          -> BrokerResult<Value> {
+        self.fetch_url(store, key, session, url).and_then(|data| {
+            from_str(&data).map_err(|_| {
+                BrokerError::Custom("response is not valid JSON".to_string())
+            })
+        })
     }
 }
