@@ -1,6 +1,6 @@
 use emailaddress::EmailAddress;
 use iron::Url;
-use serde_json::de::{from_reader, from_str};
+use serde_json::de::from_reader;
 use serde_json::value::Value;
 use super::error::{BrokerError, BrokerResult};
 use super::hyper::client::Client as HttpClient;
@@ -45,16 +45,12 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
     let domain = &email_addr.domain;
     let provider = &app.providers[domain];
     let val: Value = try!(
-        app.store.cache.fetch_url(
+        app.store.cache.fetch_json_url(
             &app.store,
             CacheKey::Discovery { domain: &email_addr.domain },
             &client,
             &provider.discovery
-        ).and_then(|data| {
-            from_str(&data).map_err(|_| BrokerError::Custom(
-                format!("{} discovery document is not JSON", domain)
-            ))
-        })
+        )
     );
     let config = try!(
         val.as_object().ok_or_else(|| {
@@ -147,15 +143,14 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
     // function, and/or cache them by provider host.
     let domain = &email_addr.domain;
     let provider = &app.providers[domain];
-    let val: Value = {
-        let data = app.store.cache.fetch_url(
+    let val: Value = try!(
+        app.store.cache.fetch_json_url(
             &app.store,
             CacheKey::Discovery { domain: &email_addr.domain },
             &client,
             &provider.discovery
-        ).unwrap();
-        from_str(&data).unwrap()
-    };
+        )
+    );
     let config = val.as_object().unwrap();
     let token_url = config["token_endpoint"].as_str().unwrap();
 
@@ -187,13 +182,14 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
     // Grab the keys from the provider, then verify the signature.
     let jwt_payload = {
         let url = config["jwks_uri"].as_str().unwrap();
-        let data = app.store.cache.fetch_url(
-            &app.store,
-            CacheKey::KeySet { domain: &email_addr.domain },
-            &client,
-            &url
-        ).unwrap();
-        let doc: Value = from_str(&data).unwrap();
+        let doc: Value = try!(
+            app.store.cache.fetch_json_url(
+                &app.store,
+                CacheKey::KeySet { domain: &email_addr.domain },
+                &client,
+                &url
+            )
+        );
         verify_jws(id_token, &doc).unwrap()
     };
 
