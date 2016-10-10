@@ -21,6 +21,7 @@ use serde_json::value::Value;
 use std::env;
 use std::fs::File;
 use std::io::{BufReader, Read};
+use std::sync::Arc;
 use time::now_utc;
 use urlencoded::{UrlEncodedBody, UrlEncodedQuery};
 
@@ -32,6 +33,29 @@ pub mod email;
 pub mod oidc;
 pub mod store;
 pub mod store_cache;
+
+
+/// Macro that creates Handler implementations that log the request,
+/// and keep a reference to the AppConfig.
+macro_rules! broker_handler {
+    ( $name:ident , | $app:ident, $req:ident | $body:block ) => {
+        pub struct $name {
+            pub app: Arc<AppConfig>,
+        }
+        impl $name {
+            pub fn new(app: &Arc<AppConfig>) -> Self {
+                $name { app: app.clone() }
+            }
+        }
+        impl Handler for $name {
+            fn handle(&self, $req: &mut Request) -> IronResult<Response> {
+                info!("{} {}", $req.method, $req.url);
+                let $app = &self.app;
+                $body
+            }
+        }
+    }
+}
 
 
 /// Helper function for returning an Iron response with JSON data.
@@ -49,65 +73,53 @@ fn json_response(obj: &Value) -> IronResult<Response> {
 /// Iron handler for the root path, returns human-friendly message.
 ///
 /// This is not actually used in the protocol.
-pub struct WelcomeHandler { pub app: AppConfig }
-impl Handler for WelcomeHandler {
-    fn handle(&self, req: &mut Request) -> IronResult<Response> {
-        info!("{} {}", req.method, req.url);
-        json_response(&ObjectBuilder::new()
-            .insert("ladaemon", "Welcome")
-            .insert("version", env!("CARGO_PKG_VERSION"))
-            .build())
-    }
-}
+broker_handler!(WelcomeHandler, |_app, req| {
+    json_response(&ObjectBuilder::new()
+        .insert("ladaemon", "Welcome")
+        .insert("version", env!("CARGO_PKG_VERSION"))
+        .build())
+});
 
 
 /// Iron handler for files in .well-known.
 ///
 /// Mainly directed at Let's Encrypt verification. Returns text/plain always.
-pub struct WellKnownHandler { pub app: AppConfig }
-impl Handler for WellKnownHandler {
-    fn handle(&self, req: &mut Request) -> IronResult<Response> {
-        info!("{} {}", req.method, req.url);
-        let mut file_name = env::current_dir().unwrap();
-        file_name.push(req.url.path().join("/"));
-        let file_res = File::open(file_name);
-        if file_res.is_err() {
-            return Ok(Response::with((status::NotFound)));
-        }
-        let mut bytes = Vec::<u8>::new();
-        let mut reader = BufReader::new(file_res.unwrap());
-        let _ = reader.read_to_end(&mut bytes).unwrap();
-        Ok(Response::with((status::Ok,
-                           modifiers::Header(ContentType::plaintext()),
-                           bytes)))
+broker_handler!(WellKnownHandler, |_app, req| {
+    let mut file_name = env::current_dir().unwrap();
+    file_name.push(req.url.path().join("/"));
+    let file_res = File::open(file_name);
+    if file_res.is_err() {
+        return Ok(Response::with((status::NotFound)));
     }
-}
+    let mut bytes = Vec::<u8>::new();
+    let mut reader = BufReader::new(file_res.unwrap());
+    let _ = reader.read_to_end(&mut bytes).unwrap();
+    Ok(Response::with((status::Ok,
+                       modifiers::Header(ContentType::plaintext()),
+                       bytes)))
+});
 
 
 /// Iron handler to return the OpenID Discovery document.
 ///
 /// Most of this is hard-coded for now, although the URLs are constructed by
 /// using the base URL as configured in the `base_url` configuration value.
-pub struct OIDConfigHandler { pub app: AppConfig }
-impl Handler for OIDConfigHandler {
-    fn handle(&self, req: &mut Request) -> IronResult<Response> {
-        info!("{} {}", req.method, req.url);
-        json_response(&ObjectBuilder::new()
-            .insert("issuer", &self.app.base_url)
-            .insert("authorization_endpoint",
-                    format!("{}/auth", self.app.base_url))
-            .insert("jwks_uri", format!("{}/keys.json", self.app.base_url))
-            .insert("scopes_supported", vec!["openid", "email"])
-            .insert("claims_supported",
-                    vec!["aud", "email", "email_verified", "exp", "iat", "iss", "sub"])
-            .insert("response_types_supported", vec!["id_token"])
-            .insert("response_modes_supported", vec!["form_post"])
-            .insert("grant_types_supported", vec!["implicit"])
-            .insert("subject_types_supported", vec!["public"])
-            .insert("id_token_signing_alg_values_supported", vec!["RS256"])
-            .build())
-    }
-}
+broker_handler!(OIDConfigHandler, |app, req| {
+    json_response(&ObjectBuilder::new()
+        .insert("issuer", &app.base_url)
+        .insert("authorization_endpoint",
+                format!("{}/auth", app.base_url))
+        .insert("jwks_uri", format!("{}/keys.json", app.base_url))
+        .insert("scopes_supported", vec!["openid", "email"])
+        .insert("claims_supported",
+                vec!["aud", "email", "email_verified", "exp", "iat", "iss", "sub"])
+        .insert("response_types_supported", vec!["id_token"])
+        .insert("response_modes_supported", vec!["form_post"])
+        .insert("grant_types_supported", vec!["implicit"])
+        .insert("subject_types_supported", vec!["public"])
+        .insert("id_token_signing_alg_values_supported", vec!["RS256"])
+        .build())
+});
 
 
 /// Iron handler for the JSON Web Key Set document.
@@ -116,19 +128,15 @@ impl Handler for OIDConfigHandler {
 ///
 /// Relying Parties will need to fetch this data to be able to verify identity
 /// tokens issued by this daemon instance.
-pub struct KeysHandler { pub app: AppConfig }
-impl Handler for KeysHandler {
-    fn handle(&self, req: &mut Request) -> IronResult<Response> {
-        info!("{} {}", req.method, req.url);
-        let mut keys = ArrayBuilder::new();
-        for key in &self.app.keys {
-            keys = keys.push(key.public_jwk())
-        }
-        json_response(&ObjectBuilder::new()
-                          .insert("keys", keys.build())
-                          .build())
+broker_handler!(KeysHandler, |app, req| {
+    let mut keys = ArrayBuilder::new();
+    for key in &app.keys {
+        keys = keys.push(key.public_jwk())
     }
-}
+    json_response(&ObjectBuilder::new()
+                      .insert("keys", keys.build())
+                      .build())
+});
 
 
 /// Iron handler for authentication requests from the RP.
@@ -136,46 +144,42 @@ impl Handler for KeysHandler {
 /// Calls the `oidc::request()` function if the provided email address's
 /// domain matches one of the configured famous providers. Otherwise, calls the
 /// `email::request()` function to allow authentication through the email loop.
-pub struct AuthHandler { pub app: AppConfig }
-impl Handler for AuthHandler {
-    fn handle(&self, req: &mut Request) -> IronResult<Response> {
-        info!("{} {}", req.method, req.url);
-        let params = try!(
-            match req.method {
-                Method::Get => {
-                    req.get_ref::<UrlEncodedQuery>()
-                        .map_err(|e| IronError::new(e, (status::BadRequest,
-                                                        "no query string in GET request")))
-                },
-                Method::Post => {
-                    req.get_ref::<UrlEncodedBody>()
-                        .map_err(|e| IronError::new(e, (status::BadRequest,
-                                                        "no query string in POST data")))
-                },
-                _ => {
-                    panic!("Unsupported method: {}", req.method)
-                }
+broker_handler!(AuthHandler, |app, req| {
+    let params = try!(
+        match req.method {
+            Method::Get => {
+                req.get_ref::<UrlEncodedQuery>()
+                    .map_err(|e| IronError::new(e, (status::BadRequest,
+                                                    "no query string in GET request")))
+            },
+            Method::Post => {
+                req.get_ref::<UrlEncodedBody>()
+                    .map_err(|e| IronError::new(e, (status::BadRequest,
+                                                    "no query string in POST data")))
+            },
+            _ => {
+                panic!("Unsupported method: {}", req.method)
             }
-        );
-        let email_addr = EmailAddress::new(&params.get("login_hint").unwrap()[0]).unwrap();
-        if self.app.providers.contains_key(&email_addr.domain) {
-
-            // OIDC authentication. Using 302 Found for redirection here. Note
-            // that, per RFC 7231, a user agent MAY change the request method
-            // from POST to GET for the subsequent request.
-            let auth_url = oidc::request(&self.app, params);
-            Ok(Response::with((status::Found, modifiers::Redirect(auth_url))))
-
-        } else {
-
-            // Email loop authentication. For now, returns 204.
-            // TODO: Return a form that allows the user to enter the code.
-            email::request(&self.app, params);
-            Ok(Response::with((status::NoContent)))
-
         }
+    );
+    let email_addr = EmailAddress::new(&params.get("login_hint").unwrap()[0]).unwrap();
+    if app.providers.contains_key(&email_addr.domain) {
+
+        // OIDC authentication. Using 302 Found for redirection here. Note
+        // that, per RFC 7231, a user agent MAY change the request method
+        // from POST to GET for the subsequent request.
+        let auth_url = oidc::request(app, params);
+        Ok(Response::with((status::Found, modifiers::Redirect(auth_url))))
+
+    } else {
+
+        // Email loop authentication. For now, returns 204.
+        // TODO: Return a form that allows the user to enter the code.
+        email::request(app, params);
+        Ok(Response::with((status::NoContent)))
+
     }
-}
+});
 
 
 /// Helper method to create a JWT for a given email address and origin.
@@ -233,16 +237,12 @@ fn return_to_relier(result: Result<(String, String), String>)
 ///
 /// Retrieves the session based session ID and the expected one-time pad.
 /// Verify the code and return the resulting token or error to the RP.
-pub struct ConfirmHandler { pub app: AppConfig }
-impl Handler for ConfirmHandler {
-    fn handle(&self, req: &mut Request) -> IronResult<Response> {
-        info!("{} {}", req.method, req.url);
-        let params = req.get_ref::<UrlEncodedQuery>().unwrap();
-        let session_id = &params.get("session").unwrap()[0];
-        let code = &params.get("code").unwrap()[0];
-        return_to_relier(email::verify(&self.app, session_id, code))
-    }
-}
+broker_handler!(ConfirmHandler, |app, req| {
+    let params = req.get_ref::<UrlEncodedQuery>().unwrap();
+    let session_id = &params.get("session").unwrap()[0];
+    let code = &params.get("code").unwrap()[0];
+    return_to_relier(email::verify(app, session_id, code))
+});
 
 
 /// Iron handler for OAuth callbacks
@@ -250,13 +250,9 @@ impl Handler for ConfirmHandler {
 /// After the user allows or denies the Authentication Request with the famous
 /// identity provider, they will be redirected back to the callback handler.
 /// Verify the callback data and return the resulting token or error.
-pub struct CallbackHandler { pub app: AppConfig }
-impl Handler for CallbackHandler {
-    fn handle(&self, req: &mut Request) -> IronResult<Response> {
-        info!("{} {}", req.method, req.url);
-        let params = req.get_ref::<UrlEncodedQuery>().unwrap();
-        let session = &params.get("state").unwrap()[0];
-        let code = &params.get("code").unwrap()[0];
-        return_to_relier(oidc::verify(&self.app, session, code))
-    }
-}
+broker_handler!(CallbackHandler, |app, req| {
+    let params = req.get_ref::<UrlEncodedQuery>().unwrap();
+    let session = &params.get("state").unwrap()[0];
+    let code = &params.get("code").unwrap()[0];
+    return_to_relier(oidc::verify(app, session, code))
+});
