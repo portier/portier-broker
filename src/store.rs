@@ -45,7 +45,7 @@ impl Store {
         let key = Self::format_session_key(session_id);
         let stored: HashMap<String, String> = try!(self.client.hgetall(&key));
         if stored.is_empty() {
-            return Err(BrokerError::Custom("session not found".to_string()));
+            return Err(BrokerError::Input("session not found".to_string()));
         }
         Ok(stored)
     }
