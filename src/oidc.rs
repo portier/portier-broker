@@ -13,6 +13,35 @@ use time::now_utc;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 
 
+/// Macro used to extract a bunch of parameters from a JSON Value.
+///
+/// This macro will return from the contained method with a BrokerResult when
+/// it fails to parse one of the params. The error will contain the description
+/// string from the second parameter.
+///
+/// ```
+/// extract_json_fields!(value, "example document", {
+///     foo = as_str("foo"),
+///     bar = as_i64("BAR"),
+/// });
+/// ```
+macro_rules! extract_json_fields {
+    ( $input:expr , $descr:expr , { $( $var:ident = $conv:ident ( $key:tt ) ),* } ) => {
+        let descr = $descr;
+        $(
+            let $var = match $input.find($key).and_then(|v| v.$conv()) {
+                None => {
+                    return Err(BrokerError::Custom(format!("{} missing from {}", $key, descr)))
+                },
+                Some(value) => {
+                    value
+                }
+            };
+        )*
+    }
+}
+
+
 /// Helper method to issue an OAuth authorization request.
 ///
 /// When an authentication request comes in and matches one of the "famous"
@@ -44,7 +73,7 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
     // `authorization_endpoint` from it.
     let domain = &email_addr.domain;
     let provider = &app.providers[domain];
-    let val: Value = try!(
+    let config_obj: Value = try!(
         app.store.cache.fetch_json_url(
             &app.store,
             CacheKey::Discovery { domain: &email_addr.domain },
@@ -52,18 +81,9 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
             &provider.discovery
         )
     );
-    let config = try!(
-        val.as_object().ok_or_else(|| {
-            BrokerError::Custom(format!("{} discovery document is not a JSON object", domain))
-        })
-    );
-    let authz_base = try!(
-        config.get("authorization_endpoint")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                BrokerError::Custom(format!("{} authorization_endpoint is not a string", domain))
-            })
-    );
+    extract_json_fields!(config_obj, format!("{} discovery document", domain), {
+        authz_base = as_str("authorization_endpoint")
+    });
 
     // Create the URL to redirect to, properly escaping all parameters.
     Url::parse(&vec![
@@ -143,7 +163,7 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
     // function, and/or cache them by provider host.
     let domain = &email_addr.domain;
     let provider = &app.providers[domain];
-    let val: Value = try!(
+    let config_obj: Value = try!(
         app.store.cache.fetch_json_url(
             &app.store,
             CacheKey::Discovery { domain: &email_addr.domain },
@@ -151,8 +171,10 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
             &provider.discovery
         )
     );
-    let config = val.as_object().unwrap();
-    let token_url = config["token_endpoint"].as_str().unwrap();
+    extract_json_fields!(config_obj, format!("{} discovery document", domain), {
+        token_url = as_str("token_endpoint"),
+        jwks_url = as_str("jwks_uri")
+    });
 
     // Create form data for the Token Request, where we exchange the code
     // received in this callback request for an identity token (while
@@ -177,34 +199,35 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
         let rsp = client.post(token_url).headers(headers).body(&body).send().unwrap();
         from_reader(rsp).unwrap()
     };
-    let id_token = token_obj.find("id_token").unwrap().as_str().unwrap();
+    extract_json_fields!(token_obj, format!("{} token response", domain), {
+        id_token = as_str("id_token")
+    });
 
     // Grab the keys from the provider, then verify the signature.
     let jwt_payload = {
-        let url = config["jwks_uri"].as_str().unwrap();
-        let doc: Value = try!(
+        let keys_obj: Value = try!(
             app.store.cache.fetch_json_url(
                 &app.store,
                 CacheKey::KeySet { domain: &email_addr.domain },
                 &client,
-                &url
+                &jwks_url
             )
         );
-        verify_jws(id_token, &doc).unwrap()
+        verify_jws(id_token, &keys_obj).unwrap()
     };
 
-    // Verify that the issuer matches the configured value.
-    let iss = jwt_payload.find("iss").unwrap().as_str().unwrap();
+    // Verify the claims contained in the token.
+    extract_json_fields!(jwt_payload, format!("{} token", domain), {
+        iss = as_str("iss"),
+        aud = as_str("aud"),
+        token_addr = as_str("email"),
+        exp = as_i64("exp")
+    });
     let issuer_origin = vec!["https://", &provider.issuer].join("");
     assert!(iss == provider.issuer || iss == issuer_origin);
-
-    // Verify the audience, subject, and expiry.
-    let aud = jwt_payload.find("aud").unwrap().as_str().unwrap();
     assert!(aud == provider.client_id);
-    let token_addr = jwt_payload.find("email").unwrap().as_str().unwrap();
     assert!(canonicalized(token_addr) == canonicalized(&email_addr.to_string()));
     let now = now_utc().to_timespec().sec;
-    let exp = jwt_payload.find("exp").unwrap().as_i64().unwrap();
     assert!(now < exp);
 
     // If everything is okay, build a new identity token and send it
