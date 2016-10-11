@@ -196,8 +196,17 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
     let token_obj: Value = {
         let mut headers = Headers::new();
         headers.set(HyContentType::form_url_encoded());
-        let rsp = client.post(token_url).headers(headers).body(&body).send().unwrap();
-        from_reader(rsp).unwrap()
+        try!(
+            client.post(token_url).headers(headers).body(&body).send()
+                .map_err(|e| {
+                    BrokerError::Http(e)
+                })
+                .and_then(|rsp| {
+                    from_reader(rsp).map_err(|_| {
+                        BrokerError::Custom("response is not valid JSON".to_string())
+                    })
+                })
+        )
     };
     extract_json_fields!(token_obj, format!("{} token response", domain), {
         id_token = as_str("id_token")
@@ -213,7 +222,11 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
                 &jwks_url
             )
         );
-        verify_jws(id_token, &keys_obj).unwrap()
+        try!(
+            verify_jws(id_token, &keys_obj).map_err(|_| {
+                BrokerError::Custom(format!("could not verify the token received from {}", domain))
+            })
+        )
     };
 
     // Verify the claims contained in the token.
