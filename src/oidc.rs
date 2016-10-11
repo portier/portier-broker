@@ -1,3 +1,4 @@
+use std::error::Error;
 use emailaddress::EmailAddress;
 use iron::Url;
 use serde_json::de::from_reader;
@@ -31,7 +32,7 @@ macro_rules! extract_json_fields {
         $(
             let $var = match $input.find($key).and_then(|v| v.$conv()) {
                 None => {
-                    return Err(BrokerError::Custom(format!("{} missing from {}", $key, descr)))
+                    return Err(BrokerError::Provider(format!("{} missing from {}", $key, descr)))
                 },
                 Some(value) => {
                     value
@@ -79,7 +80,10 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
             CacheKey::Discovery { domain: &email_addr.domain },
             &client,
             &provider.discovery
-        )
+        ).map_err(|e| {
+            BrokerError::Provider(format!("could not fetch {} discovery document: {}",
+                                          domain, e.description()))
+        })
     );
     extract_json_fields!(config_obj, format!("{} discovery document", domain), {
         authz_base = as_str("authorization_endpoint")
@@ -102,7 +106,7 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
         "&login_hint=",
         &utf8_percent_encode(&email_addr.to_string(), QUERY_ENCODE_SET).to_string(),
     ].join("")).map_err(|_| {
-        BrokerError::Custom("authorization_endpoint is an invalid URL".to_string())
+        BrokerError::Provider(format!("{} authorization_endpoint is an invalid URL", domain))
     })
 
 }
@@ -148,7 +152,7 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
     // Validate that the callback matches an auth request in Redis.
     let stored = try!(app.store.get_session(&session));
     if &stored["type"] != "oidc" {
-        return Err(BrokerError::Custom("invalid session".to_string()));
+        return Err(BrokerError::Input("invalid session".to_string()));
     }
 
     let email_addr = EmailAddress::new(&stored["email"]).unwrap();
@@ -169,7 +173,10 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
             CacheKey::Discovery { domain: &email_addr.domain },
             &client,
             &provider.discovery
-        )
+        ).map_err(|e| {
+            BrokerError::Provider(format!("could not fetch {} discovery document: {}",
+                                          domain, e.description()))
+        })
     );
     extract_json_fields!(config_obj, format!("{} discovery document", domain), {
         token_url = as_str("token_endpoint"),
@@ -206,6 +213,10 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
                         BrokerError::Custom("response is not valid JSON".to_string())
                     })
                 })
+                .map_err(|e| {
+                    BrokerError::Provider(format!("{} token request failed: {}",
+                                                  domain, e.description()))
+                })
         )
     };
     extract_json_fields!(token_obj, format!("{} token response", domain), {
@@ -220,11 +231,14 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
                 CacheKey::KeySet { domain: &email_addr.domain },
                 &client,
                 &jwks_url
-            )
+            ).map_err(|e| {
+                BrokerError::Provider(format!("could not fetch {} keys document: {}",
+                                              domain, e.description()))
+            })
         );
         try!(
             verify_jws(id_token, &keys_obj).map_err(|_| {
-                BrokerError::Custom(format!("could not verify the token received from {}", domain))
+                BrokerError::Provider(format!("could not verify the token received from {}", domain))
             })
         )
     };

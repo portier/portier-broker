@@ -36,6 +36,8 @@ pub mod oidc;
 pub mod store;
 pub mod store_cache;
 
+use error::BrokerError;
+
 
 /// Macro that creates Handler implementations that log the request,
 /// and keep a reference to the AppConfig.
@@ -75,7 +77,7 @@ macro_rules! extract_params {
         $(
             let $var = try!(
                 $input.get($param).map(|list| &list[0]).ok_or_else(|| {
-                    error::BrokerError::Custom(
+                    BrokerError::Input(
                         concat!("missing request parameter ", $param).to_string()
                     )
                 })
@@ -176,13 +178,11 @@ broker_handler!(AuthHandler, |app, req| {
         match req.method {
             Method::Get => {
                 req.get_ref::<UrlEncodedQuery>()
-                    .map_err(|e| IronError::new(e, (status::BadRequest,
-                                                    "no query string in GET request")))
+                    .map_err(|_| BrokerError::Input("no query string in GET request".to_string()))
             },
             Method::Post => {
                 req.get_ref::<UrlEncodedBody>()
-                    .map_err(|e| IronError::new(e, (status::BadRequest,
-                                                    "no query string in POST data")))
+                    .map_err(|_| BrokerError::Input("no query string in POST data".to_string()))
             },
             _ => {
                 panic!("Unsupported method: {}", req.method)
@@ -197,8 +197,7 @@ broker_handler!(AuthHandler, |app, req| {
     });
     let email_addr = try!(
         EmailAddress::new(login_hint)
-            .map_err(|e| IronError::new(e, (status::BadRequest,
-                                            "login_hint is not a valid email address")))
+            .map_err(|_| BrokerError::Input("login_hint is not a valid email address".to_string()))
     );
     if app.providers.contains_key(&email_addr.domain) {
 
@@ -268,8 +267,7 @@ fn return_to_relier(result: (String, String)) -> IronResult<Response> {
 broker_handler!(ConfirmHandler, |app, req| {
     let params = try!(
         req.get_ref::<UrlEncodedQuery>()
-            .map_err(|e| IronError::new(e, (status::BadRequest,
-                                            "no query string in GET request")))
+            .map_err(|_| BrokerError::Input("no query string in GET request".to_string()))
     );
     extract_params!(params, {
         session_id = "session",
@@ -289,8 +287,7 @@ broker_handler!(ConfirmHandler, |app, req| {
 broker_handler!(CallbackHandler, |app, req| {
     let params = try!(
         req.get_ref::<UrlEncodedQuery>()
-            .map_err(|e| IronError::new(e, (status::BadRequest,
-                                            "no query string in GET request")))
+            .map_err(|_| BrokerError::Input("no query string in GET request".to_string()))
     );
     extract_params!(params, {
         session = "state",
