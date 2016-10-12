@@ -1,6 +1,7 @@
-use serde;
+extern crate serde;
+extern crate serde_json;
+
 use serde::de::Deserialize;
-use serde_json;
 use serde_json::de::from_reader;
 use serde_json::value::Value;
 use std;
@@ -9,6 +10,8 @@ use std::fs::File;
 use std::io::BufReader;
 
 use super::{crypto, store};
+
+include!(concat!(env!("OUT_DIR"), "/serde_types.rs"));
 
 
 /// Union of all possible error types seen while parsing.
@@ -61,43 +64,6 @@ impl Deserialize for store::Store {
     }
 }
 
-
-/// Represents an email address.
-#[derive(Clone, Deserialize)]
-pub struct Smtp {
-    pub address: String
-}
-
-
-/// Represents an email address.
-#[derive(Clone, Deserialize)]
-pub struct Email {
-    pub address: String,
-    pub name: String,
-}
-
-
-/// Represents an OpenID Connect provider.
-#[derive(Clone, Deserialize)]
-pub struct Provider {
-    pub discovery: String,
-    pub client_id: String,
-    pub secret: String,
-    pub issuer: String,
-}
-
-
-/// Holds runtime configuration data for this daemon instance.
-#[derive(Clone, Deserialize)]
-pub struct AppConfig {
-    pub base_url: String, // Origin of this instance, used for constructing URLs
-    pub keys: Vec<crypto::NamedKey>, // Signing keys
-    pub store: store::Store, // Redis Client
-    pub smtp: Smtp, // SMTP client
-    pub sender: Email, // From address for email
-    pub token_validity: usize, // JWT validity duration, in seconds
-    pub providers: HashMap<String, Provider>, // Mapping of Domain -> OIDC Provider
-}
 
 /// Implementation with single method to read configuration from JSON.
 impl AppConfig {
