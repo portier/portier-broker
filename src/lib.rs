@@ -121,9 +121,7 @@ broker_handler!(WellKnownHandler, |_app, req| {
     let mut bytes = Vec::<u8>::new();
     let mut reader = BufReader::new(file_res.unwrap());
     let _ = reader.read_to_end(&mut bytes).unwrap();
-    Ok(Response::with((status::Ok,
-                       modifiers::Header(ContentType::plaintext()),
-                       bytes)))
+    Ok(Response::with((status::Ok, modifiers::Header(ContentType::plaintext()), bytes)))
 });
 
 
@@ -134,8 +132,7 @@ broker_handler!(WellKnownHandler, |_app, req| {
 broker_handler!(OIDConfigHandler, |app, req| {
     json_response(&ObjectBuilder::new()
         .insert("issuer", &app.base_url)
-        .insert("authorization_endpoint",
-                format!("{}/auth", app.base_url))
+        .insert("authorization_endpoint", format!("{}/auth", app.base_url))
         .insert("jwks_uri", format!("{}/keys.json", app.base_url))
         .insert("scopes_supported", vec!["openid", "email"])
         .insert("claims_supported",
@@ -161,8 +158,8 @@ broker_handler!(KeysHandler, |app, req| {
         keys = keys.push(key.public_jwk())
     }
     json_response(&ObjectBuilder::new()
-                      .insert("keys", keys.build())
-                      .build())
+        .insert("keys", keys.build())
+        .build())
 });
 
 
@@ -199,9 +196,9 @@ broker_handler!(AuthHandler, |app, req| {
     );
     if app.providers.contains_key(&email_addr.domain) {
 
-// OIDC authentication. Using 302 Found for redirection here. Note
-// that, per RFC 7231, a user agent MAY change the request method
-// from POST to GET for the subsequent request.
+        // OIDC authentication. Using 302 Found for redirection here. Note
+        // that, per RFC 7231, a user agent MAY change the request method
+        // from POST to GET for the subsequent request.
         let auth_url = try!(
             oidc::request(app, email_addr, client_id, nonce, redirect_uri)
         );
@@ -209,8 +206,8 @@ broker_handler!(AuthHandler, |app, req| {
 
     } else {
 
-// Email loop authentication. For now, returns 204.
-// TODO: Return a form that allows the user to enter the code.
+        // Email loop authentication. For now, returns 204.
+        // TODO: Return a form that allows the user to enter the code.
         try!(email::request(app, email_addr, client_id, nonce, redirect_uri));
         Ok(Response::with((status::NoContent)))
 
