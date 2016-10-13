@@ -53,20 +53,23 @@ macro_rules! extract_json_fields {
 /// user will be redirected back to after confirming (or denying) the
 /// Authentication Request. Included in the request is a nonce which we can
 /// later use to definitively match the callback to this request.
-pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &str)
+pub fn request(app: &AppConfig,
+               email_addr: EmailAddress,
+               client_id: &str,
+               nonce: &str,
+               redirect_uri: &str)
                -> BrokerResult<Url> {
 
     let session = session_id(&email_addr, client_id);
 
     // Store the nonce and the RP's `redirect_uri` in Redis for use in the
     // callback handler.
-    try!(app.store.store_session(&session, &[
-        ("type", "oidc"),
-        ("email", &email_addr.to_string()),
-        ("client_id", client_id),
-        ("nonce", nonce),
-        ("redirect", redirect_uri),
-    ]));
+    try!(app.store.store_session(&session,
+                                 &[("type", "oidc"),
+                                   ("email", &email_addr.to_string()),
+                                   ("client_id", client_id),
+                                   ("nonce", nonce),
+                                   ("redirect", redirect_uri)]));
 
     let client = HttpClient::new();
 
@@ -74,17 +77,17 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
     // `authorization_endpoint` from it.
     let domain = &email_addr.domain;
     let provider = &app.providers[domain];
-    let config_obj: Value = try!(
-        app.store.cache.fetch_json_url(
-            &app.store,
-            CacheKey::Discovery { domain: &email_addr.domain },
-            &client,
-            &provider.discovery
-        ).map_err(|e| {
+    let config_obj: Value = try!(app.store
+        .cache
+        .fetch_json_url(&app.store,
+                        CacheKey::Discovery { domain: &email_addr.domain },
+                        &client,
+                        &provider.discovery)
+        .map_err(|e| {
             BrokerError::Provider(format!("could not fetch {} discovery document: {}",
-                                          domain, e.description()))
-        })
-    );
+                                          domain,
+                                          e.description()))
+        }));
     extract_json_fields!(config_obj, format!("{} discovery document", domain), {
         authz_base = as_str("authorization_endpoint")
     });
@@ -105,9 +108,11 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
         &utf8_percent_encode(&session, QUERY_ENCODE_SET).to_string(),
         "&login_hint=",
         &utf8_percent_encode(&email_addr.to_string(), QUERY_ENCODE_SET).to_string(),
-    ].join("")).map_err(|_| {
-        BrokerError::Provider(format!("{} authorization_endpoint is an invalid URL", domain))
-    })
+    ]
+            .join(""))
+        .map_err(|_| {
+            BrokerError::Provider(format!("{} authorization_endpoint is an invalid URL", domain))
+        })
 
 }
 
@@ -146,8 +151,7 @@ pub fn canonicalized(email: &str) -> String {
 /// Match the returned email address and nonce against our Redis data, then
 /// extract the identity token returned by the provider and verify it. Return
 /// an identity token for the RP if successful, or an error message otherwise.
-pub fn verify(app: &AppConfig, session: &str, code: &str)
-              -> BrokerResult<(String, String)> {
+pub fn verify(app: &AppConfig, session: &str, code: &str) -> BrokerResult<(String, String)> {
 
     // Validate that the callback matches an auth request in Redis.
     let stored = try!(app.store.get_session(&session));
@@ -167,17 +171,17 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
     // function, and/or cache them by provider host.
     let domain = &email_addr.domain;
     let provider = &app.providers[domain];
-    let config_obj: Value = try!(
-        app.store.cache.fetch_json_url(
-            &app.store,
-            CacheKey::Discovery { domain: &email_addr.domain },
-            &client,
-            &provider.discovery
-        ).map_err(|e| {
+    let config_obj: Value = try!(app.store
+        .cache
+        .fetch_json_url(&app.store,
+                        CacheKey::Discovery { domain: &email_addr.domain },
+                        &client,
+                        &provider.discovery)
+        .map_err(|e| {
             BrokerError::Provider(format!("could not fetch {} discovery document: {}",
-                                          domain, e.description()))
-        })
-    );
+                                          domain,
+                                          e.description()))
+        }));
     extract_json_fields!(config_obj, format!("{} discovery document", domain), {
         token_url = as_str("token_endpoint"),
         jwks_url = as_str("jwks_uri")
@@ -197,7 +201,8 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
         &utf8_percent_encode(&format!("{}/callback", &app.base_url),
                              QUERY_ENCODE_SET).to_string(),
         "&grant_type=authorization_code",
-    ].join("");
+    ]
+        .join("");
 
     // Send the Token Request and extract the `id_token` from the response.
     let token_obj: Value = {
@@ -238,7 +243,8 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
         );
         try!(
             verify_jws(id_token, &keys_obj).map_err(|_| {
-                BrokerError::Provider(format!("could not verify the token received from {}", domain))
+                BrokerError::Provider(format!("could not verify the token received from {}",
+                                              domain))
             })
         )
     };

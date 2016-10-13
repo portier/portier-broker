@@ -93,9 +93,7 @@ macro_rules! extract_params {
 /// code with the serialized JSON as the body.
 fn json_response(obj: &Value) -> IronResult<Response> {
     let content = serde_json::to_string(&obj).unwrap();
-    Ok(Response::with((status::Ok,
-                       modifiers::Header(ContentType::json()),
-                       content)))
+    Ok(Response::with((status::Ok, modifiers::Header(ContentType::json()), content)))
 }
 
 
@@ -123,9 +121,7 @@ broker_handler!(WellKnownHandler, |_app, req| {
     let mut bytes = Vec::<u8>::new();
     let mut reader = BufReader::new(file_res.unwrap());
     let _ = reader.read_to_end(&mut bytes).unwrap();
-    Ok(Response::with((status::Ok,
-                       modifiers::Header(ContentType::plaintext()),
-                       bytes)))
+    Ok(Response::with((status::Ok, modifiers::Header(ContentType::plaintext()), bytes)))
 });
 
 
@@ -136,8 +132,7 @@ broker_handler!(WellKnownHandler, |_app, req| {
 broker_handler!(OIDConfigHandler, |app, req| {
     json_response(&ObjectBuilder::new()
         .insert("issuer", &app.base_url)
-        .insert("authorization_endpoint",
-                format!("{}/auth", app.base_url))
+        .insert("authorization_endpoint", format!("{}/auth", app.base_url))
         .insert("jwks_uri", format!("{}/keys.json", app.base_url))
         .insert("scopes_supported", vec!["openid", "email"])
         .insert("claims_supported",
@@ -163,8 +158,8 @@ broker_handler!(KeysHandler, |app, req| {
         keys = keys.push(key.public_jwk())
     }
     json_response(&ObjectBuilder::new()
-                      .insert("keys", keys.build())
-                      .build())
+        .insert("keys", keys.build())
+        .build())
 });
 
 

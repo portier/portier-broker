@@ -80,9 +80,7 @@ impl From<BrokerError> for IronError {
                 // TODO: Redirect to RP with the error description
                 IronError::new(err, status::ServiceUnavailable)
             }
-            _ => {
-                IronError::new(err, status::InternalServerError)
-            }
+            _ => IronError::new(err, status::InternalServerError),
         }
     }
 }
