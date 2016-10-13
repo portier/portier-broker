@@ -238,7 +238,8 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
         );
         try!(
             verify_jws(id_token, &keys_obj).map_err(|_| {
-                BrokerError::Provider(format!("could not verify the token received from {}", domain))
+                BrokerError::Provider(format!("could not verify the token received from {}",
+                                              domain))
             })
         )
     };
