@@ -196,9 +196,9 @@ broker_handler!(AuthHandler, |app, req| {
     );
     if app.providers.contains_key(&email_addr.domain) {
 
-// OIDC authentication. Using 302 Found for redirection here. Note
-// that, per RFC 7231, a user agent MAY change the request method
-// from POST to GET for the subsequent request.
+        // OIDC authentication. Using 302 Found for redirection here. Note
+        // that, per RFC 7231, a user agent MAY change the request method
+        // from POST to GET for the subsequent request.
         let auth_url = try!(
             oidc::request(app, email_addr, client_id, nonce, redirect_uri)
         );
@@ -206,8 +206,8 @@ broker_handler!(AuthHandler, |app, req| {
 
     } else {
 
-// Email loop authentication. For now, returns 204.
-// TODO: Return a form that allows the user to enter the code.
+        // Email loop authentication. For now, returns 204.
+        // TODO: Return a form that allows the user to enter the code.
         try!(email::request(app, email_addr, client_id, nonce, redirect_uri));
         Ok(Response::with((status::NoContent)))
 
