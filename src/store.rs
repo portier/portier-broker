@@ -35,10 +35,12 @@ impl Store {
     pub fn store_session(&self, session_id: &str, data: &[(&str, &str)]) -> BrokerResult<()> {
         let key = Self::format_session_key(session_id);
         try!(redis::pipe()
-                .atomic()
-                .hset_multiple(&key, data).ignore()
-                .expire(&key, self.expire_sessions).ignore()
-                .query(&self.client));
+            .atomic()
+            .hset_multiple(&key, data)
+            .ignore()
+            .expire(&key, self.expire_sessions)
+            .ignore()
+            .query(&self.client));
         Ok(())
     }
 
