@@ -63,7 +63,7 @@ macro_rules! broker_handler {
 ///
 /// Serializes the argument value to JSON and returns a HTTP 200 response
 /// code with the serialized JSON as the body.
-fn json_response(obj: &Value) -> IronResult<Response> {
+fn json_response(obj: Value) -> IronResult<Response> {
     let content = serde_json::to_string(&obj).unwrap();
     Ok(Response::with((status::Ok,
                        modifiers::Header(ContentType::json()),
