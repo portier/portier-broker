@@ -14,7 +14,10 @@ pub struct Store {
 }
 
 impl Store {
-    pub fn new(url: &str, expire_sessions: usize, expire_cache: usize, max_response_size: u64)
+    pub fn new(url: &str,
+               expire_sessions: usize,
+               expire_cache: usize,
+               max_response_size: u64)
                -> Result<Store, &'static str> {
         let res = redis::Client::open(url);
         if res.is_err() {
@@ -29,8 +32,7 @@ impl Store {
         })
     }
 
-    pub fn store_session(&self, session_id: &str, data: &[(&str, &str)])
-                         -> BrokerResult<()> {
+    pub fn store_session(&self, session_id: &str, data: &[(&str, &str)]) -> BrokerResult<()> {
         let key = Self::format_session_key(session_id);
         try!(redis::pipe()
                 .atomic()
@@ -40,8 +42,7 @@ impl Store {
         Ok(())
     }
 
-    pub fn get_session(&self, session_id: &str)
-                       -> BrokerResult<HashMap<String, String>> {
+    pub fn get_session(&self, session_id: &str) -> BrokerResult<HashMap<String, String>> {
         let key = Self::format_session_key(session_id);
         let stored: HashMap<String, String> = try!(self.client.hgetall(&key));
         if stored.is_empty() {

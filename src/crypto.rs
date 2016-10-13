@@ -38,17 +38,19 @@ impl NamedKey {
         if key_res.is_err() {
             return Err("could not instantiate private key");
         }
-        Ok(NamedKey { id: id.to_string(), key: key_res.unwrap() })
+        Ok(NamedKey {
+            id: id.to_string(),
+            key: key_res.unwrap(),
+        })
     }
 
     /// Create a JSON Web Signature (JWS) for the given JSON structure.
     pub fn sign_jws(&self, payload: &Value) -> String {
-        let header = serde_json::to_string(
-            &ObjectBuilder::new()
+        let header = serde_json::to_string(&ObjectBuilder::new()
                 .insert("kid", &self.id)
                 .insert("alg", "RS256")
-                .build()
-            ).unwrap();
+                .build())
+            .unwrap();
 
         let payload = serde_json::to_string(&payload).unwrap();
         let mut input = Vec::<u8>::new();

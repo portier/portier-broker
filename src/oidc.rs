@@ -53,7 +53,11 @@ macro_rules! extract_json_fields {
 /// user will be redirected back to after confirming (or denying) the
 /// Authentication Request. Included in the request is a nonce which we can
 /// later use to definitively match the callback to this request.
-pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &str)
+pub fn request(app: &AppConfig,
+               email_addr: EmailAddress,
+               client_id: &str,
+               nonce: &str,
+               redirect_uri: &str)
                -> BrokerResult<Url> {
 
     let session = session_id(&email_addr, client_id);
@@ -105,9 +109,11 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
         &utf8_percent_encode(&session, QUERY_ENCODE_SET).to_string(),
         "&login_hint=",
         &utf8_percent_encode(&email_addr.to_string(), QUERY_ENCODE_SET).to_string(),
-    ].join("")).map_err(|_| {
-        BrokerError::Provider(format!("{} authorization_endpoint is an invalid URL", domain))
-    })
+    ]
+            .join(""))
+        .map_err(|_| {
+            BrokerError::Provider(format!("{} authorization_endpoint is an invalid URL", domain))
+        })
 
 }
 
@@ -146,8 +152,7 @@ pub fn canonicalized(email: &str) -> String {
 /// Match the returned email address and nonce against our Redis data, then
 /// extract the identity token returned by the provider and verify it. Return
 /// an identity token for the RP if successful, or an error message otherwise.
-pub fn verify(app: &AppConfig, session: &str, code: &str)
-              -> BrokerResult<(String, String)> {
+pub fn verify(app: &AppConfig, session: &str, code: &str) -> BrokerResult<(String, String)> {
 
     // Validate that the callback matches an auth request in Redis.
     let stored = try!(app.store.get_session(&session));
@@ -197,7 +202,8 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
         &utf8_percent_encode(&format!("{}/callback", &app.base_url),
                              QUERY_ENCODE_SET).to_string(),
         "&grant_type=authorization_code",
-    ].join("");
+    ]
+        .join("");
 
     // Send the Token Request and extract the `id_token` from the response.
     let token_obj: Value = {

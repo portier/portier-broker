@@ -17,12 +17,10 @@ use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 /// except those that could potentially cause confusion when reading back.
 /// (That is, '1', '5', '8', '0', 'b', 'i', 'l', 'o', 's', 'u', 'B', 'D', 'I'
 /// and 'O'.)
-const CODE_CHARS: &'static [char] = &[
-    '2', '3', '4', '6', '7', '9', 'a', 'c', 'd', 'e', 'f', 'g', 'h', 'j', 'k',
-    'm', 'n', 'p', 'q', 'r', 't', 'v', 'w', 'x', 'y', 'z', 'A', 'C', 'E', 'F',
-    'G', 'H', 'J', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W',
-    'X', 'Y', 'Z',
-];
+const CODE_CHARS: &'static [char] = &['2', '3', '4', '6', '7', '9', 'a', 'c', 'd', 'e', 'f', 'g',
+                                      'h', 'j', 'k', 'm', 'n', 'p', 'q', 'r', 't', 'v', 'w', 'x',
+                                      'y', 'z', 'A', 'C', 'E', 'F', 'G', 'H', 'J', 'K', 'L', 'M',
+                                      'N', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
 
 
 /// Helper method to provide authentication through an email loop.
@@ -31,24 +29,28 @@ const CODE_CHARS: &'static [char] = &[
 /// authentication, create a randomly-generated one-time pad. Then, send
 /// an email containing a link with the secret. Clicking the link will trigger
 /// the `ConfirmHandler`, returning an authentication result to the RP.
-pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &str)
+pub fn request(app: &AppConfig,
+               email_addr: EmailAddress,
+               client_id: &str,
+               nonce: &str,
+               redirect_uri: &str)
                -> BrokerResult<()> {
 
     let session = session_id(&email_addr, client_id);
 
     // Generate a 6-character one-time pad.
-    let chars: String = (0..6).map(|_| CODE_CHARS[rand::random::<usize>() % CODE_CHARS.len()]).collect();
+    let chars: String =
+        (0..6).map(|_| CODE_CHARS[rand::random::<usize>() % CODE_CHARS.len()]).collect();
 
     // Store data for this request in Redis, to reference when user uses
     // the generated link.
-    try!(app.store.store_session(&session, &[
-        ("type", "email"),
-        ("email", &email_addr.to_string()),
-        ("client_id", client_id),
-        ("nonce", nonce),
-        ("code", &chars),
-        ("redirect", redirect_uri),
-    ]));
+    try!(app.store.store_session(&session,
+                                 &[("type", "email"),
+                                   ("email", &email_addr.to_string()),
+                                   ("client_id", client_id),
+                                   ("nonce", nonce),
+                                   ("code", &chars),
+                                   ("redirect", redirect_uri)]));
 
     // Generate the URL used to verify email address ownership.
     let href = format!("{}/confirm?session={}&code={}",
@@ -63,13 +65,13 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
         .to(email_addr.to_string().as_str())
         .from((&*app.sender.address, &*app.sender.name))
         .body(&format!("Enter your login code:\n\n{}\n\nOr click this link:\n\n{}",
-                       chars, href))
+                       chars,
+                       href))
         .subject(&format!("Code: {} - Finish logging in to {}", chars, client_id))
-        .build().unwrap();
+        .build()
+        .unwrap();
     // TODO: Add support for authentication.
-    let mut mailer = try!(
-        SmtpTransportBuilder::new(app.smtp.address.as_str())
-    ).build();
+    let mut mailer = try!(SmtpTransportBuilder::new(app.smtp.address.as_str())).build();
     try!(mailer.send(email));
     mailer.close();
     Ok(())
@@ -80,8 +82,7 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
 ///
 /// Checks that the session exists and matches the one-time pad. If so,
 /// returns the Identity Token; otherwise, returns an error message.
-pub fn verify(app: &AppConfig, session: &str, code: &str)
-              -> BrokerResult<(String, String)> {
+pub fn verify(app: &AppConfig, session: &str, code: &str) -> BrokerResult<(String, String)> {
 
     let stored = try!(app.store.get_session(&session));
     if &stored["type"] != "email" {

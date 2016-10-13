@@ -41,7 +41,8 @@ from_error!(&'static str, Store);
 /// to instantiate the `NamedKey` object matching the property values.
 impl Deserialize for crypto::NamedKey {
     fn deserialize<D>(de: &mut D) -> Result<crypto::NamedKey, D::Error>
-                      where D: serde::Deserializer {
+        where D: serde::Deserializer
+    {
         let value: Value = try!(serde::Deserialize::deserialize(de));
         let id = value.find("id").unwrap().as_str().unwrap();
         let file_name = value.find("file").unwrap().as_str().unwrap();
@@ -53,7 +54,8 @@ impl Deserialize for crypto::NamedKey {
 
 impl Deserialize for store::Store {
     fn deserialize<D>(de: &mut D) -> Result<store::Store, D::Error>
-                      where D: serde::Deserializer {
+        where D: serde::Deserializer
+    {
         let value: Value = try!(serde::Deserialize::deserialize(de));
         let url = value.find("redis_url").unwrap().as_str().unwrap();
         let expire_sessions = value.find("expire_sessions").unwrap().as_u64().unwrap() as usize;

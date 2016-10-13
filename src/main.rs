@@ -52,13 +52,11 @@ struct Args {
 fn main() {
     env_logger::init().unwrap();
     let args: Args = Docopt::new(USAGE)
-                         .and_then(|d| d.version(Some(VERSION.to_string())).decode())
-                         .unwrap_or_else(|e| e.exit());
+        .and_then(|d| d.version(Some(VERSION.to_string())).decode())
+        .unwrap_or_else(|e| e.exit());
 
     // Read the configuration from the provided file.
-    let app = Arc::new(
-        broker::AppConfig::from_json_file(&args.arg_CONFIG).unwrap()
-    );
+    let app = Arc::new(broker::AppConfig::from_json_file(&args.arg_CONFIG).unwrap());
 
     let router = router!{
         // Human-targeted endpoints

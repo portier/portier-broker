@@ -1,10 +1,7 @@
 use std::cmp::max;
 use std::io::Read;
 use super::hyper::client::Client as HttpClient;
-use super::hyper::header::{
-    CacheControl as HyCacheControl,
-    CacheDirective as HyCacheDirective
-};
+use super::hyper::header::{CacheControl as HyCacheControl, CacheDirective as HyCacheDirective};
 use super::redis::Commands;
 use super::error::{BrokerError, BrokerResult};
 use super::store::Store;
@@ -21,12 +18,8 @@ pub enum CacheKey<'a> {
 impl<'a> CacheKey<'a> {
     fn to_string(&self) -> String {
         match *self {
-            CacheKey::Discovery { domain } => {
-                format!("cache:discovery:{}", domain)
-            },
-            CacheKey::KeySet { domain } => {
-                format!("cache:key-set:{}", domain)
-            }
+            CacheKey::Discovery { domain } => format!("cache:discovery:{}", domain),
+            CacheKey::KeySet { domain } => format!("cache:key-set:{}", domain),
         }
     }
 }
@@ -38,7 +31,11 @@ pub struct StoreCache;
 impl StoreCache {
     /// Fetch `url` from cache or using a HTTP GET request. The cache is stored in `store` with
     /// `key`. The `session` is used to make the HTTP GET request, if necessary.
-    pub fn fetch_url(&self, store: &Store, key: CacheKey, session: &HttpClient, url: &str)
+    pub fn fetch_url(&self,
+                     store: &Store,
+                     key: CacheKey,
+                     session: &HttpClient,
+                     url: &str)
                      -> BrokerResult<String> {
 
         // Try to retrieve the result from cache.
@@ -64,7 +61,7 @@ impl StoreCache {
             let mut data = String::new();
             let bytes_read = try!(rsp.take(store.max_response_size + 1).read_to_string(&mut data));
             if bytes_read as u64 > store.max_response_size {
-                return Err(BrokerError::Custom("response exceeded the size limit".to_string()))
+                return Err(BrokerError::Custom("response exceeded the size limit".to_string()));
             }
 
             // Cache the response for at least `expire_cache`, but honor longer `max-age`.
@@ -73,19 +70,21 @@ impl StoreCache {
 
             Ok(data)
 
-        }, |data| {
-            Ok(data)
-        })
+        },
+                           |data| Ok(data))
 
     }
 
     /// Similar to `fetch_url`, but also parses the response as JSON.
-    pub fn fetch_json_url(&self, store: &Store, key: CacheKey, session: &HttpClient, url: &str)
+    pub fn fetch_json_url(&self,
+                          store: &Store,
+                          key: CacheKey,
+                          session: &HttpClient,
+                          url: &str)
                           -> BrokerResult<Value> {
         self.fetch_url(store, key, session, url).and_then(|data| {
-            from_str(&data).map_err(|_| {
-                BrokerError::Custom("response is not valid JSON".to_string())
-            })
+            from_str(&data)
+                .map_err(|_| BrokerError::Custom("response is not valid JSON".to_string()))
         })
     }
 }
