@@ -64,13 +64,12 @@ pub fn request(app: &AppConfig,
 
     // Store the nonce and the RP's `redirect_uri` in Redis for use in the
     // callback handler.
-    try!(app.store.store_session(&session, &[
-        ("type", "oidc"),
-        ("email", &email_addr.to_string()),
-        ("client_id", client_id),
-        ("nonce", nonce),
-        ("redirect", redirect_uri),
-    ]));
+    try!(app.store.store_session(&session,
+                                 &[("type", "oidc"),
+                                   ("email", &email_addr.to_string()),
+                                   ("client_id", client_id),
+                                   ("nonce", nonce),
+                                   ("redirect", redirect_uri)]));
 
     let client = HttpClient::new();
 
@@ -78,17 +77,17 @@ pub fn request(app: &AppConfig,
     // `authorization_endpoint` from it.
     let domain = &email_addr.domain;
     let provider = &app.providers[domain];
-    let config_obj: Value = try!(
-        app.store.cache.fetch_json_url(
-            &app.store,
-            CacheKey::Discovery { domain: &email_addr.domain },
-            &client,
-            &provider.discovery
-        ).map_err(|e| {
+    let config_obj: Value = try!(app.store
+        .cache
+        .fetch_json_url(&app.store,
+                        CacheKey::Discovery { domain: &email_addr.domain },
+                        &client,
+                        &provider.discovery)
+        .map_err(|e| {
             BrokerError::Provider(format!("could not fetch {} discovery document: {}",
-                                          domain, e.description()))
-        })
-    );
+                                          domain,
+                                          e.description()))
+        }));
     extract_json_fields!(config_obj, format!("{} discovery document", domain), {
         authz_base = as_str("authorization_endpoint")
     });
@@ -172,17 +171,17 @@ pub fn verify(app: &AppConfig, session: &str, code: &str) -> BrokerResult<(Strin
     // function, and/or cache them by provider host.
     let domain = &email_addr.domain;
     let provider = &app.providers[domain];
-    let config_obj: Value = try!(
-        app.store.cache.fetch_json_url(
-            &app.store,
-            CacheKey::Discovery { domain: &email_addr.domain },
-            &client,
-            &provider.discovery
-        ).map_err(|e| {
+    let config_obj: Value = try!(app.store
+        .cache
+        .fetch_json_url(&app.store,
+                        CacheKey::Discovery { domain: &email_addr.domain },
+                        &client,
+                        &provider.discovery)
+        .map_err(|e| {
             BrokerError::Provider(format!("could not fetch {} discovery document: {}",
-                                          domain, e.description()))
-        })
-    );
+                                          domain,
+                                          e.description()))
+        }));
     extract_json_fields!(config_obj, format!("{} discovery document", domain), {
         token_url = as_str("token_endpoint"),
         jwks_url = as_str("jwks_uri")
