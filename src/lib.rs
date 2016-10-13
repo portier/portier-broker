@@ -3,6 +3,7 @@ extern crate emailaddress;
 extern crate log;
 extern crate hyper;
 extern crate iron;
+extern crate lettre;
 extern crate redis;
 extern crate serde;
 extern crate serde_json;
@@ -35,6 +36,8 @@ pub mod oidc;
 pub mod store;
 pub mod store_cache;
 
+use error::BrokerError;
+
 
 /// Macro that creates Handler implementations that log the request,
 /// and keep a reference to the AppConfig.
@@ -55,6 +58,31 @@ macro_rules! broker_handler {
                 $body
             }
         }
+    }
+}
+
+/// Macro used to extract a bunch of parameters from a QueryMap.
+///
+/// This macro should be called from a handler function, because it will return
+/// with a 400 response if the parameter is missing from the request.
+///
+/// ```
+/// extract_params!(params, {
+///     foo = "foo",
+///     bar = "BAR",
+/// });
+/// ```
+macro_rules! extract_params {
+    ( $input:expr, { $( $var:ident = $param:tt ),* } ) => {
+        $(
+            let $var = try!(
+                $input.get($param).map(|list| &list[0]).ok_or_else(|| {
+                    BrokerError::Input(
+                        concat!("missing request parameter ", $param).to_string()
+                    )
+                })
+            );
+        )*
     }
 }
 
@@ -150,33 +178,42 @@ broker_handler!(AuthHandler, |app, req| {
         match req.method {
             Method::Get => {
                 req.get_ref::<UrlEncodedQuery>()
-                    .map_err(|e| IronError::new(e, (status::BadRequest,
-                                                    "no query string in GET request")))
+                    .map_err(|_| BrokerError::Input("no query string in GET request".to_string()))
             },
             Method::Post => {
                 req.get_ref::<UrlEncodedBody>()
-                    .map_err(|e| IronError::new(e, (status::BadRequest,
-                                                    "no query string in POST data")))
+                    .map_err(|_| BrokerError::Input("no query string in POST data".to_string()))
             },
             _ => {
                 panic!("Unsupported method: {}", req.method)
             }
         }
     );
-    let email_addr = EmailAddress::new(&params.get("login_hint").unwrap()[0]).unwrap();
+    extract_params!(params, {
+        login_hint = "login_hint",
+        client_id = "client_id",
+        nonce = "nonce",
+        redirect_uri = "redirect_uri"
+    });
+    let email_addr = try!(
+        EmailAddress::new(login_hint)
+            .map_err(|_| BrokerError::Input("login_hint is not a valid email address".to_string()))
+    );
     if app.providers.contains_key(&email_addr.domain) {
 
         // OIDC authentication. Using 302 Found for redirection here. Note
         // that, per RFC 7231, a user agent MAY change the request method
         // from POST to GET for the subsequent request.
-        let auth_url = oidc::request(app, params);
+        let auth_url = try!(
+            oidc::request(app, email_addr, client_id, nonce, redirect_uri)
+        );
         Ok(Response::with((status::Found, modifiers::Redirect(auth_url))))
 
     } else {
 
         // Email loop authentication. For now, returns 204.
         // TODO: Return a form that allows the user to enter the code.
-        email::request(app, params);
+        try!(email::request(app, email_addr, client_id, nonce, redirect_uri));
         Ok(Response::with((status::NoContent)))
 
     }
@@ -210,27 +247,16 @@ const FORWARD_TEMPLATE: &'static str = include_str!("forward-template.html");
 
 /// Helper function for returning result to the Relying Party.
 ///
-/// Takes a `Result` from one of the verification functions and embeds it in
-/// a form in the `FORWARD_TEMPLATE`, from where it's POSTED to the RP's
-/// `redirect_ur` as soon as the page has loaded. Result can either be an error
-/// message or a JWT asserting the user's email address identity.
-/// TODO: return error to RP instead of in a simple HTTP response.
-fn return_to_relier(result: Result<(String, String), String>)
-                    -> IronResult<Response> {
-
-    if result.is_err() {
-        return json_response(&ObjectBuilder::new()
-                            .insert("error", result.unwrap_err())
-                            .build());
-    }
-
-    let (jwt, redirect) = result.unwrap();
+/// Takes a `(jwt, redirect)` pair from one of the verification functions and
+/// embeds it in a form in the `FORWARD_TEMPLATE`, from where it's POSTED to
+/// the RP's `redirect` as soon as the page has loaded.
+fn return_to_relier(result: (String, String)) -> IronResult<Response> {
+    let (jwt, redirect) = result;
     let html = FORWARD_TEMPLATE.replace("{{ return_url }}", &redirect)
         .replace("{{ jwt }}", &jwt);
     let mut rsp = Response::with((status::Ok, html));
     rsp.headers.set(ContentType::html());
     Ok(rsp)
-
 }
 
 
@@ -239,10 +265,17 @@ fn return_to_relier(result: Result<(String, String), String>)
 /// Retrieves the session based session ID and the expected one-time pad.
 /// Verify the code and return the resulting token or error to the RP.
 broker_handler!(ConfirmHandler, |app, req| {
-    let params = req.get_ref::<UrlEncodedQuery>().unwrap();
-    let session_id = &params.get("session").unwrap()[0];
-    let code = &params.get("code").unwrap()[0];
-    return_to_relier(email::verify(app, session_id, code))
+    let params = try!(
+        req.get_ref::<UrlEncodedQuery>()
+            .map_err(|_| BrokerError::Input("no query string in GET request".to_string()))
+    );
+    extract_params!(params, {
+        session_id = "session",
+        code = "code"
+    });
+    return_to_relier(
+        try!(email::verify(app, session_id, code))
+    )
 });
 
 
@@ -252,8 +285,15 @@ broker_handler!(ConfirmHandler, |app, req| {
 /// identity provider, they will be redirected back to the callback handler.
 /// Verify the callback data and return the resulting token or error.
 broker_handler!(CallbackHandler, |app, req| {
-    let params = req.get_ref::<UrlEncodedQuery>().unwrap();
-    let session = &params.get("state").unwrap()[0];
-    let code = &params.get("code").unwrap()[0];
-    return_to_relier(oidc::verify(app, session, code))
+    let params = try!(
+        req.get_ref::<UrlEncodedQuery>()
+            .map_err(|_| BrokerError::Input("no query string in GET request".to_string()))
+    );
+    extract_params!(params, {
+        session = "state",
+        code = "code"
+    });
+    return_to_relier(
+        try!(oidc::verify(app, session, code))
+    )
 });

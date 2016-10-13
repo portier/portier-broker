@@ -1,7 +1,9 @@
+use std::error::Error;
 use emailaddress::EmailAddress;
 use iron::Url;
-use serde_json::de::{from_reader, from_str};
+use serde_json::de::from_reader;
 use serde_json::value::Value;
+use super::error::{BrokerError, BrokerResult};
 use super::hyper::client::Client as HttpClient;
 use super::hyper::header::ContentType as HyContentType;
 use super::hyper::header::Headers;
@@ -10,7 +12,35 @@ use super::crypto::{session_id, verify_jws};
 use super::store_cache::CacheKey;
 use time::now_utc;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
-use urlencoded::QueryMap;
+
+
+/// Macro used to extract a bunch of parameters from a JSON Value.
+///
+/// This macro will return from the contained method with a BrokerResult when
+/// it fails to parse one of the params. The error will contain the description
+/// string from the second parameter.
+///
+/// ```
+/// extract_json_fields!(value, "example document", {
+///     foo = as_str("foo"),
+///     bar = as_i64("BAR"),
+/// });
+/// ```
+macro_rules! extract_json_fields {
+    ( $input:expr , $descr:expr , { $( $var:ident = $conv:ident ( $key:tt ) ),* } ) => {
+        let descr = $descr;
+        $(
+            let $var = match $input.find($key).and_then(|v| v.$conv()) {
+                None => {
+                    return Err(BrokerError::Provider(format!("{} missing from {}", $key, descr)))
+                },
+                Some(value) => {
+                    value
+                }
+            };
+        )*
+    }
+}
 
 
 /// Helper method to issue an OAuth authorization request.
@@ -23,41 +53,41 @@ use urlencoded::QueryMap;
 /// user will be redirected back to after confirming (or denying) the
 /// Authentication Request. Included in the request is a nonce which we can
 /// later use to definitively match the callback to this request.
-pub fn request(app: &AppConfig, params: &QueryMap) -> Url {
+pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &str)
+               -> BrokerResult<Url> {
 
-    let email_addr = EmailAddress::new(&params.get("login_hint").unwrap()[0]).unwrap();
-    let client_id = &params.get("client_id").unwrap()[0];
-    let nonce = &params.get("nonce").unwrap()[0];
     let session = session_id(&email_addr, client_id);
 
     // Store the nonce and the RP's `redirect_uri` in Redis for use in the
     // callback handler.
-    let _ = app.store.store_session(&session, &[
+    try!(app.store.store_session(&session, &[
+        ("type", "oidc"),
         ("email", &email_addr.to_string()),
         ("client_id", client_id),
         ("nonce", nonce),
-        ("redirect", &params.get("redirect_uri").unwrap()[0]),
-    ]).unwrap();
+        ("redirect", redirect_uri),
+    ]));
 
     let client = HttpClient::new();
 
     // Retrieve the provider's Discovery document and extract the
     // `authorization_endpoint` from it.
-    // TODO: cache other data for use in the callback handler, so that we
-    // don't have to request the Discovery document twice. We could even store
-    // per-provider data in Redis so we can amortize the cost of discovery.
-    let provider = &app.providers[&email_addr.domain];
-    let val: Value = {
-        let data = app.store.cache.fetch_url(
+    let domain = &email_addr.domain;
+    let provider = &app.providers[domain];
+    let config_obj: Value = try!(
+        app.store.cache.fetch_json_url(
             &app.store,
             CacheKey::Discovery { domain: &email_addr.domain },
             &client,
             &provider.discovery
-        ).unwrap();
-        from_str(&data).unwrap()
-    };
-    let config = val.as_object().unwrap();
-    let authz_base = config["authorization_endpoint"].as_str().unwrap();
+        ).map_err(|e| {
+            BrokerError::Provider(format!("could not fetch {} discovery document: {}",
+                                          domain, e.description()))
+        })
+    );
+    extract_json_fields!(config_obj, format!("{} discovery document", domain), {
+        authz_base = as_str("authorization_endpoint")
+    });
 
     // Create the URL to redirect to, properly escaping all parameters.
     Url::parse(&vec![
@@ -75,7 +105,9 @@ pub fn request(app: &AppConfig, params: &QueryMap) -> Url {
         &utf8_percent_encode(&session, QUERY_ENCODE_SET).to_string(),
         "&login_hint=",
         &utf8_percent_encode(&email_addr.to_string(), QUERY_ENCODE_SET).to_string(),
-    ].join("")).unwrap()
+    ].join("")).map_err(|_| {
+        BrokerError::Provider(format!("{} authorization_endpoint is an invalid URL", domain))
+    })
 
 }
 
@@ -115,13 +147,17 @@ pub fn canonicalized(email: &str) -> String {
 /// extract the identity token returned by the provider and verify it. Return
 /// an identity token for the RP if successful, or an error message otherwise.
 pub fn verify(app: &AppConfig, session: &str, code: &str)
-              -> Result<(String, String), String> {
+              -> BrokerResult<(String, String)> {
 
     // Validate that the callback matches an auth request in Redis.
     let stored = try!(app.store.get_session(&session));
-    let email_addr = EmailAddress::new(stored.get("email").unwrap()).unwrap();
-    let origin = stored.get("client_id").unwrap();
-    let nonce = stored.get("nonce").unwrap();
+    if &stored["type"] != "oidc" {
+        return Err(BrokerError::Input("invalid session".to_string()));
+    }
+
+    let email_addr = EmailAddress::new(&stored["email"]).unwrap();
+    let origin = &stored["client_id"];
+    let nonce = &stored["nonce"];
 
     let client = HttpClient::new();
 
@@ -129,18 +165,23 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
     // `token_endpoint` and `jwks_uri` values from it. TODO: save these
     // when requesting the Discovery document in the `oauth_request()`
     // function, and/or cache them by provider host.
-    let provider = &app.providers[&email_addr.domain];
-    let val: Value = {
-        let data = app.store.cache.fetch_url(
+    let domain = &email_addr.domain;
+    let provider = &app.providers[domain];
+    let config_obj: Value = try!(
+        app.store.cache.fetch_json_url(
             &app.store,
             CacheKey::Discovery { domain: &email_addr.domain },
             &client,
             &provider.discovery
-        ).unwrap();
-        from_str(&data).unwrap()
-    };
-    let config = val.as_object().unwrap();
-    let token_url = config["token_endpoint"].as_str().unwrap();
+        ).map_err(|e| {
+            BrokerError::Provider(format!("could not fetch {} discovery document: {}",
+                                          domain, e.description()))
+        })
+    );
+    extract_json_fields!(config_obj, format!("{} discovery document", domain), {
+        token_url = as_str("token_endpoint"),
+        jwks_url = as_str("jwks_uri")
+    });
 
     // Create form data for the Token Request, where we exchange the code
     // received in this callback request for an identity token (while
@@ -162,42 +203,64 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
     let token_obj: Value = {
         let mut headers = Headers::new();
         headers.set(HyContentType::form_url_encoded());
-        let rsp = client.post(token_url).headers(headers).body(&body).send().unwrap();
-        from_reader(rsp).unwrap()
+        try!(
+            client.post(token_url).headers(headers).body(&body).send()
+                .map_err(|e| {
+                    BrokerError::Http(e)
+                })
+                .and_then(|rsp| {
+                    from_reader(rsp).map_err(|_| {
+                        BrokerError::Custom("response is not valid JSON".to_string())
+                    })
+                })
+                .map_err(|e| {
+                    BrokerError::Provider(format!("{} token request failed: {}",
+                                                  domain, e.description()))
+                })
+        )
     };
-    let id_token = token_obj.find("id_token").unwrap().as_str().unwrap();
+    extract_json_fields!(token_obj, format!("{} token response", domain), {
+        id_token = as_str("id_token")
+    });
 
     // Grab the keys from the provider, then verify the signature.
     let jwt_payload = {
-        let url = config["jwks_uri"].as_str().unwrap();
-        let data = app.store.cache.fetch_url(
-            &app.store,
-            CacheKey::KeySet { domain: &email_addr.domain },
-            &client,
-            &url
-        ).unwrap();
-        let doc: Value = from_str(&data).unwrap();
-        verify_jws(id_token, &doc).unwrap()
+        let keys_obj: Value = try!(
+            app.store.cache.fetch_json_url(
+                &app.store,
+                CacheKey::KeySet { domain: &email_addr.domain },
+                &client,
+                &jwks_url
+            ).map_err(|e| {
+                BrokerError::Provider(format!("could not fetch {} keys document: {}",
+                                              domain, e.description()))
+            })
+        );
+        try!(
+            verify_jws(id_token, &keys_obj).map_err(|_| {
+                BrokerError::Provider(format!("could not verify the token received from {}", domain))
+            })
+        )
     };
 
-    // Verify that the issuer matches the configured value.
-    let iss = jwt_payload.find("iss").unwrap().as_str().unwrap();
+    // Verify the claims contained in the token.
+    extract_json_fields!(jwt_payload, format!("{} token", domain), {
+        iss = as_str("iss"),
+        aud = as_str("aud"),
+        token_addr = as_str("email"),
+        exp = as_i64("exp")
+    });
     let issuer_origin = vec!["https://", &provider.issuer].join("");
     assert!(iss == provider.issuer || iss == issuer_origin);
-
-    // Verify the audience, subject, and expiry.
-    let aud = jwt_payload.find("aud").unwrap().as_str().unwrap();
     assert!(aud == provider.client_id);
-    let token_addr = jwt_payload.find("email").unwrap().as_str().unwrap();
     assert!(canonicalized(token_addr) == canonicalized(&email_addr.to_string()));
     let now = now_utc().to_timespec().sec;
-    let exp = jwt_payload.find("exp").unwrap().as_i64().unwrap();
     assert!(now < exp);
 
     // If everything is okay, build a new identity token and send it
     // to the relying party.
     let id_token = create_jwt(app, &email_addr.to_string(), origin, nonce);
-    let redirect = stored.get("redirect").unwrap();
+    let redirect = &stored["redirect"];
     Ok((id_token, redirect.to_string()))
 
 }

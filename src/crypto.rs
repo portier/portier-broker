@@ -104,10 +104,13 @@ pub fn session_id(email: &EmailAddress, client_id: &str) -> String {
 /// Searches the provided JWK Key Set Value for the key matching the given
 /// id. Returns a usable public key if exactly one key is found.
 pub fn jwk_key_set_find(set: &Value, kid: &str) -> Result<PKey, ()> {
-    let matching = set.find("keys").unwrap().as_array().unwrap().iter()
+    let key_objs = try!(
+        set.find("keys").and_then(|v| v.as_array()).ok_or(())
+    );
+    let matching = key_objs.iter()
         .filter(|key_obj| {
-            key_obj.find("kid").unwrap().as_str().unwrap() == kid &&
-            key_obj.find("use").unwrap().as_str().unwrap() == "sig"
+            key_obj.find("kid").and_then(|v| v.as_str()) == Some(kid) &&
+            key_obj.find("use").and_then(|v| v.as_str()) == Some("sig")
         })
         .collect::<Vec<&Value>>();
 
@@ -117,12 +120,19 @@ pub fn jwk_key_set_find(set: &Value, kid: &str) -> Result<PKey, ()> {
     }
 
     // Then, use the data to build a public key object for verification.
-    let n_b64 = matching[0].find("n").unwrap().as_str().unwrap();
-    let e_b64 = matching[0].find("e").unwrap().as_str().unwrap();
-    let n = BigNum::new_from_slice(&n_b64.from_base64().unwrap()).unwrap();
-    let e = BigNum::new_from_slice(&e_b64.from_base64().unwrap()).unwrap();
+    let n = try!(
+        matching[0].find("n").and_then(|v| v.as_str()).ok_or(())
+            .and_then(|data| data.from_base64().map_err(|_| ()))
+            .and_then(|data| BigNum::new_from_slice(&data).map_err(|_| ()))
+    );
+    let e = try!(
+        matching[0].find("e").and_then(|v| v.as_str()).ok_or(())
+            .and_then(|data| data.from_base64().map_err(|_| ()))
+            .and_then(|data| BigNum::new_from_slice(&data).map_err(|_| ()))
+    );
+    let rsa = try!(RSA::from_public_components(n, e).map_err(|_| ()));
     let mut pub_key = PKey::new();
-    pub_key.set_rsa(&RSA::from_public_components(n, e).unwrap());
+    pub_key.set_rsa(&rsa);
     Ok(pub_key)
 }
 
@@ -132,17 +142,29 @@ pub fn verify_jws(jws: &str, key_set: &Value) -> Result<Value, ()> {
     // Extract the header from the JWT structure. Determine what key was used
     // to sign the token, so we can then verify the signature.
     let parts: Vec<&str> = jws.split('.').collect();
-    let jwt_header: Value = from_slice(&parts[0].from_base64().unwrap()).unwrap();
-    let kid = jwt_header.find("kid").unwrap().as_str().unwrap();
+    if parts.len() != 3 {
+        return Err(());
+    }
+    let decoded = try!(
+        parts.iter().map(|s| s.from_base64())
+            .collect::<Result<Vec<_>, _>>().map_err(|_| ())
+    );
+    let jwt_header: Value = try!(
+        from_slice(&decoded[0]).map_err(|_| ())
+    );
+    let kid = try!(
+        jwt_header.find("kid").and_then(|v| v.as_str()).ok_or(())
+    );
     let pub_key = try!(jwk_key_set_find(key_set, kid));
 
     // Verify the identity token's signature.
-    let message = format!("{}.{}", parts[0], parts[1]);
-    let sha256 = hash::hash(hash::Type::SHA256, message.as_bytes());
-    let sig = parts[2].from_base64().unwrap();
-    if !pub_key.verify(&sha256, &sig) {
+    let message_len = parts[0].len() + parts[1].len() + 1;
+    let bytes = &jws[..message_len].as_bytes();
+    let sha256 = hash::hash(hash::Type::SHA256, bytes);
+    if !pub_key.verify(&sha256, &decoded[2]) {
         return Err(());
     }
 
-    Ok(from_slice(&parts[1].from_base64().unwrap()).unwrap())
+    let payload = try!(from_slice(&decoded[1]).map_err(|_| ()));
+    Ok(payload)
 }
