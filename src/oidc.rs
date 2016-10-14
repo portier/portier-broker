@@ -14,31 +14,19 @@ use time::now_utc;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 
 
-/// Macro used to extract a bunch of parameters from a JSON Value.
+/// Macro used to extract a typed field from a JSON Value.
 ///
-/// This macro will return from the contained method with a BrokerResult when
-/// it fails to parse one of the params. The error will contain the description
-/// string from the second parameter.
+/// Will return from the caller with a BrokerError if the field is missing or its value is an
+/// incompatible type. `descr` is used to format the error message.
 ///
 /// ```
-/// extract_json_fields!(value, "example document", {
-///     foo = as_str("foo"),
-///     bar = as_i64("BAR"),
-/// });
+/// let foo = try_get_json_field!(value, "foo", as_str, "example document");
 /// ```
-macro_rules! extract_json_fields {
-    ( $input:expr , $descr:expr , { $( $var:ident = $conv:ident ( $key:tt ) ),* } ) => {
-        let descr = $descr;
-        $(
-            let $var = match $input.find($key).and_then(|v| v.$conv()) {
-                None => {
-                    return Err(BrokerError::Provider(format!("{} missing from {}", $key, descr)))
-                },
-                Some(value) => {
-                    value
-                }
-            };
-        )*
+macro_rules! try_get_json_field {
+    ( $input:expr, $key:tt, $conv:ident, $descr:expr ) => {
+        try!($input.find($key).and_then(|v| v.$conv()).ok_or_else(|| {
+            BrokerError::Provider(format!("{} missing from {}", $key, $descr))
+        }))
     }
 }
 
@@ -81,13 +69,12 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
             &client,
             &provider.discovery
         ).map_err(|e| {
-            BrokerError::Provider(format!("could not fetch {} discovery document: {}",
+            BrokerError::Provider(format!("could not fetch {}'s discovery document: {}",
                                           domain, e.description()))
         })
     );
-    extract_json_fields!(config_obj, format!("{} discovery document", domain), {
-        authz_base = as_str("authorization_endpoint")
-    });
+    let descr = format!("{}'s discovery document", domain);
+    let authz_base = try_get_json_field!(config_obj, "authz_base", as_str, descr);
 
     // Create the URL to redirect to, properly escaping all parameters.
     Url::parse(&vec![
@@ -106,7 +93,7 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
         "&login_hint=",
         &utf8_percent_encode(&email_addr.to_string(), QUERY_ENCODE_SET).to_string(),
     ].join("")).map_err(|_| {
-        BrokerError::Provider(format!("{} authorization_endpoint is an invalid URL", domain))
+        BrokerError::Provider(format!("failed to build valid authorization URL from {}'s 'authorization_endpoint'", domain))
     })
 
 }
@@ -170,18 +157,17 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
     let config_obj: Value = try!(
         app.store.cache.fetch_json_url(
             &app.store,
-            CacheKey::Discovery { domain: &email_addr.domain },
+            CacheKey::Discovery { domain: domain },
             &client,
             &provider.discovery
         ).map_err(|e| {
-            BrokerError::Provider(format!("could not fetch {} discovery document: {}",
+            BrokerError::Provider(format!("could not fetch {}'s discovery document: {}",
                                           domain, e.description()))
         })
     );
-    extract_json_fields!(config_obj, format!("{} discovery document", domain), {
-        token_url = as_str("token_endpoint"),
-        jwks_url = as_str("jwks_uri")
-    });
+    let descr = format!("{}'s discovery document", domain);
+    let token_url = try_get_json_field!(config_obj, "token_endpoint", as_str, descr);
+    let jwks_url = try_get_json_field!(config_obj, "jwks_uri", as_str, descr);
 
     // Create form data for the Token Request, where we exchange the code
     // received in this callback request for an identity token (while
@@ -205,34 +191,29 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
         headers.set(HyContentType::form_url_encoded());
         try!(
             client.post(token_url).headers(headers).body(&body).send()
-                .map_err(|e| {
-                    BrokerError::Http(e)
-                })
-                .and_then(|rsp| {
-                    from_reader(rsp).map_err(|_| {
-                        BrokerError::Custom("response is not valid JSON".to_string())
-                    })
-                })
+                .map_err(|e| BrokerError::Http(e))
+                .and_then(|rsp| from_reader(rsp).map_err(|_| {
+                    BrokerError::Provider("failed to parse response as JSON".to_string())
+                }))
                 .map_err(|e| {
                     BrokerError::Provider(format!("{} token request failed: {}",
                                                   domain, e.description()))
                 })
         )
     };
-    extract_json_fields!(token_obj, format!("{} token response", domain), {
-        id_token = as_str("id_token")
-    });
+    let descr = format!("{}'s token response", domain);
+    let id_token = try_get_json_field!(token_obj, "id_token", as_str, descr);
 
     // Grab the keys from the provider, then verify the signature.
     let jwt_payload = {
         let keys_obj: Value = try!(
             app.store.cache.fetch_json_url(
                 &app.store,
-                CacheKey::KeySet { domain: &email_addr.domain },
+                CacheKey::KeySet { domain: domain },
                 &client,
                 &jwks_url
             ).map_err(|e| {
-                BrokerError::Provider(format!("could not fetch {} keys document: {}",
+                BrokerError::Provider(format!("could not fetch {}'s keys: {}",
                                               domain, e.description()))
             })
         );
@@ -244,12 +225,11 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
     };
 
     // Verify the claims contained in the token.
-    extract_json_fields!(jwt_payload, format!("{} token", domain), {
-        iss = as_str("iss"),
-        aud = as_str("aud"),
-        token_addr = as_str("email"),
-        exp = as_i64("exp")
-    });
+    let descr = format!("{}'s token payload", domain);
+    let iss = try_get_json_field!(jwt_payload, "iss", as_str, descr);
+    let aud = try_get_json_field!(jwt_payload, "aud", as_str, descr);
+    let token_addr = try_get_json_field!(jwt_payload, "email", as_str, descr);
+    let exp = try_get_json_field!(jwt_payload, "exp", as_i64, descr);
     let issuer_origin = vec!["https://", &provider.issuer].join("");
     assert!(iss == provider.issuer || iss == issuer_origin);
     assert!(aud == provider.client_id);

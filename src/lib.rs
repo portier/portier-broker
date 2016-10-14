@@ -61,28 +61,18 @@ macro_rules! broker_handler {
     }
 }
 
-/// Macro used to extract a bunch of parameters from a QueryMap.
+/// Macro used to extract a parameter from a QueryMap.
 ///
-/// This macro should be called from a handler function, because it will return
-/// with a 400 response if the parameter is missing from the request.
+/// Will return from the caller with a BrokerError if the parameter is missing.
 ///
 /// ```
-/// extract_params!(params, {
-///     foo = "foo",
-///     bar = "BAR",
-/// });
+/// let foo = try_get_param!(params, "foo");
 /// ```
-macro_rules! extract_params {
-    ( $input:expr, { $( $var:ident = $param:tt ),* } ) => {
-        $(
-            let $var = try!(
-                $input.get($param).map(|list| &list[0]).ok_or_else(|| {
-                    BrokerError::Input(
-                        concat!("missing request parameter ", $param).to_string()
-                    )
-                })
-            );
-        )*
+macro_rules! try_get_param {
+    ( $input:expr , $param:tt ) => {
+        try!($input.get($param).map(|list| &list[0]).ok_or_else(|| {
+            BrokerError::Input(concat!("missing request parameter ", $param).to_string())
+        }))
     }
 }
 
@@ -189,14 +179,11 @@ broker_handler!(AuthHandler, |app, req| {
             }
         }
     );
-    extract_params!(params, {
-        login_hint = "login_hint",
-        client_id = "client_id",
-        nonce = "nonce",
-        redirect_uri = "redirect_uri"
-    });
+    let client_id = try_get_param!(params, "client_id");
+    let nonce = try_get_param!(params, "nonce");
+    let redirect_uri = try_get_param!(params, "redirect_uri");
     let email_addr = try!(
-        EmailAddress::new(login_hint)
+        EmailAddress::new(try_get_param!(params, "login_hint"))
             .map_err(|_| BrokerError::Input("login_hint is not a valid email address".to_string()))
     );
     if app.providers.contains_key(&email_addr.domain) {
@@ -269,13 +256,9 @@ broker_handler!(ConfirmHandler, |app, req| {
         req.get_ref::<UrlEncodedQuery>()
             .map_err(|_| BrokerError::Input("no query string in GET request".to_string()))
     );
-    extract_params!(params, {
-        session_id = "session",
-        code = "code"
-    });
-    return_to_relier(
-        try!(email::verify(app, session_id, code))
-    )
+    let session_id = try_get_param!(params, "session");
+    let code = try_get_param!(params, "code");
+    return_to_relier(try!(email::verify(app, session_id, code)))
 });
 
 
@@ -289,11 +272,7 @@ broker_handler!(CallbackHandler, |app, req| {
         req.get_ref::<UrlEncodedQuery>()
             .map_err(|_| BrokerError::Input("no query string in GET request".to_string()))
     );
-    extract_params!(params, {
-        session = "state",
-        code = "code"
-    });
-    return_to_relier(
-        try!(oidc::verify(app, session, code))
-    )
+    let session = try_get_param!(params, "state");
+    let code = try_get_param!(params, "code");
+    return_to_relier(try!(oidc::verify(app, session, code)))
 });

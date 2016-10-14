@@ -159,12 +159,10 @@ pub fn verify_jws(jws: &str, key_set: &Value) -> Result<Value, ()> {
 
     // Verify the identity token's signature.
     let message_len = parts[0].len() + parts[1].len() + 1;
-    let bytes = &jws[..message_len].as_bytes();
-    let sha256 = hash::hash(hash::Type::SHA256, bytes);
+    let sha256 = hash::hash(hash::Type::SHA256, &jws[..message_len].as_bytes());
     if !pub_key.verify(&sha256, &decoded[2]) {
         return Err(());
     }
 
-    let payload = try!(from_slice(&decoded[1]).map_err(|_| ()));
-    Ok(payload)
+    Ok(try!(from_slice(&decoded[1]).map_err(|_| ())))
 }
