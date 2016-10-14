@@ -36,10 +36,11 @@ impl<'a> CacheKey<'a> {
 pub struct StoreCache;
 
 impl StoreCache {
-    /// Fetch `url` from cache or using a HTTP GET request. The cache is stored in `store` with
-    /// `key`. The `session` is used to make the HTTP GET request, if necessary.
-    pub fn fetch_url(&self, store: &Store, key: CacheKey, session: &HttpClient, url: &str)
-                     -> BrokerResult<String> {
+    /// Fetch `url` from cache or using a HTTP GET request, and parse the response as JSON. The
+    /// cache is stored in `store` with `key`. The `session` is used to make the HTTP GET request,
+    /// if necessary.
+    pub fn fetch_json_url(&self, store: &Store, key: CacheKey, session: &HttpClient, url: &str)
+                     -> BrokerResult<Value> {
 
         // Try to retrieve the result from cache.
         let key_str = key.to_string();
@@ -75,17 +76,13 @@ impl StoreCache {
 
         }, |data| {
             Ok(data)
-        })
+        }).and_then(|data| {
 
-    }
-
-    /// Similar to `fetch_url`, but also parses the response as JSON.
-    pub fn fetch_json_url(&self, store: &Store, key: CacheKey, session: &HttpClient, url: &str)
-                          -> BrokerResult<Value> {
-        self.fetch_url(store, key, session, url).and_then(|data| {
             from_str(&data).map_err(|_| {
-                BrokerError::Custom("response is not valid JSON".to_string())
+                BrokerError::Custom("failed to parse response as JSON".to_string())
             })
+
         })
+
     }
 }
