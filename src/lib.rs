@@ -227,10 +227,14 @@ broker_handler!(AuthHandler, |app, req| {
 
     } else {
 
-        // Email loop authentication. For now, returns 204.
-        // TODO: Return a form that allows the user to enter the code.
-        try!(email::request(app, email_addr, client_id, nonce, redirect_uri));
-        Ok(Response::with((status::NoContent)))
+        // Email loop authentication. Render a message and form.
+        let session_id = try!(email::request(app, email_addr, client_id, nonce, redirect_uri));
+        Ok(Response::with((status::Ok,
+                           modifiers::Header(ContentType::html()),
+                           app.templates.confirm_email.render(&[
+                               ("client_id", &client_id),
+                               ("session_id", &session_id),
+                           ]))))
 
     }
 });

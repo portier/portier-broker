@@ -36,6 +36,8 @@ pub struct Provider {
 // Contains all templates we use in compiled form.
 #[derive(Clone)]
 pub struct Templates {
+    /// Page displayed when the confirmation email was sent.
+    pub confirm_email: Template,
     /// A dummy form used to redirect back to the RP with a POST request.
     pub forward: Template,
 }

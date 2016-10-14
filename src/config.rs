@@ -93,6 +93,7 @@ impl Templates {
 impl Default for Templates {
     fn default() -> Templates {
         Templates {
+            confirm_email: Self::compile_template("tmpl/confirm_email.mustache"),
             forward: Self::compile_template("tmpl/forward.mustache"),
         }
     }
