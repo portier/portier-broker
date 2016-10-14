@@ -24,6 +24,7 @@ use std::env;
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::sync::Arc;
+use std::error::Error;
 use time::now_utc;
 use urlencoded::{UrlEncodedBody, UrlEncodedQuery};
 
@@ -36,7 +37,7 @@ pub mod oidc;
 pub mod store;
 pub mod store_cache;
 
-use error::BrokerError;
+use error::{BrokerResult, BrokerError};
 
 
 /// Macro that creates Handler implementations that log the request,
@@ -50,12 +51,14 @@ macro_rules! broker_handler {
             pub fn new(app: &Arc<AppConfig>) -> Self {
                 $name { app: app.clone() }
             }
+            fn handle_body($app: &AppConfig, $req: &mut Request)
+                -> BrokerResult<Response> $body
         }
         impl Handler for $name {
-            fn handle(&self, $req: &mut Request) -> IronResult<Response> {
-                info!("{} {}", $req.method, $req.url);
-                let $app = &self.app;
-                $body
+            fn handle(&self, req: &mut Request) -> IronResult<Response> {
+                info!("{} {}", req.method, req.url);
+                Self::handle_body(&self.app, req)
+                    .or_else(|e| handle_error(&self.app, req, e))
             }
         }
     }
@@ -77,11 +80,37 @@ macro_rules! try_get_param {
 }
 
 
+/// Handle an BrokerError and create an IronResult.
+///
+/// The `broker_handler!` macro calls this on error. We don't use a `From`
+/// implementation, because this way we get app and request context, and we
+/// don't necessarily have to pass the error on to Iron.
+fn handle_error(_: &AppConfig, _: &mut Request, err: BrokerError) -> IronResult<Response> {
+    match err {
+        BrokerError::Input(_) => {
+            let obj = ObjectBuilder::new()
+                .insert("error", err.description())
+                .build();
+            let content = serde_json::to_string(&obj).unwrap();
+            let content_type = modifiers::Header(ContentType::json());
+            Ok(Response::with((status::BadRequest, content_type, content)))
+        }
+        BrokerError::Provider(_) => {
+            // TODO: Redirect to RP with the error description
+            Err(IronError::new(err, status::ServiceUnavailable))
+        }
+        _ => {
+            Err(IronError::new(err, status::InternalServerError))
+        }
+    }
+}
+
+
 /// Helper function for returning an Iron response with JSON data.
 ///
 /// Serializes the argument value to JSON and returns a HTTP 200 response
 /// code with the serialized JSON as the body.
-fn json_response(obj: &Value) -> IronResult<Response> {
+fn json_response(obj: &Value) -> BrokerResult<Response> {
     let content = serde_json::to_string(&obj).unwrap();
     Ok(Response::with((status::Ok,
                        modifiers::Header(ContentType::json()),
@@ -92,7 +121,7 @@ fn json_response(obj: &Value) -> IronResult<Response> {
 /// Iron handler for the root path, returns human-friendly message.
 ///
 /// This is not actually used in the protocol.
-broker_handler!(WelcomeHandler, |_app, req| {
+broker_handler!(WelcomeHandler, |_app, _req| {
     json_response(&ObjectBuilder::new()
         .insert("ladaemon", "Welcome")
         .insert("version", env!("CARGO_PKG_VERSION"))
@@ -123,7 +152,7 @@ broker_handler!(WellKnownHandler, |_app, req| {
 ///
 /// Most of this is hard-coded for now, although the URLs are constructed by
 /// using the base URL as configured in the `base_url` configuration value.
-broker_handler!(OIDConfigHandler, |app, req| {
+broker_handler!(OIDConfigHandler, |app, _req| {
     json_response(&ObjectBuilder::new()
         .insert("issuer", &app.base_url)
         .insert("authorization_endpoint",
@@ -147,7 +176,7 @@ broker_handler!(OIDConfigHandler, |app, req| {
 ///
 /// Relying Parties will need to fetch this data to be able to verify identity
 /// tokens issued by this daemon instance.
-broker_handler!(KeysHandler, |app, req| {
+broker_handler!(KeysHandler, |app, _req| {
     let mut keys = ArrayBuilder::new();
     for key in &app.keys {
         keys = keys.push(key.public_jwk())
@@ -237,7 +266,7 @@ const FORWARD_TEMPLATE: &'static str = include_str!("forward-template.html");
 /// Takes a `(jwt, redirect)` pair from one of the verification functions and
 /// embeds it in a form in the `FORWARD_TEMPLATE`, from where it's POSTED to
 /// the RP's `redirect` as soon as the page has loaded.
-fn return_to_relier(result: (String, String)) -> IronResult<Response> {
+fn return_to_relier(result: (String, String)) -> BrokerResult<Response> {
     let (jwt, redirect) = result;
     let html = FORWARD_TEMPLATE.replace("{{ return_url }}", &redirect)
         .replace("{{ jwt }}", &jwt);

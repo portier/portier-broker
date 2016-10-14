@@ -5,12 +5,6 @@ use std::io::Error as IoError;
 use super::hyper::Error as HttpError;
 use super::redis::RedisError;
 use super::lettre::transport::error::Error as MailError;
-use super::iron::IronError;
-use super::iron::modifiers;
-use super::iron::status;
-use super::iron::headers::ContentType;
-use super::serde_json;
-use super::serde_json::builder::ObjectBuilder;
 
 
 /// Union of all possible runtime error types.
@@ -62,28 +56,6 @@ impl fmt::Display for BrokerError {
 impl From<BrokerError> for String {
     fn from(err: BrokerError) -> String {
         err.description().to_string()
-    }
-}
-
-impl From<BrokerError> for IronError {
-    fn from(err: BrokerError) -> IronError {
-        match err {
-            BrokerError::Input(_) => {
-                let obj = ObjectBuilder::new()
-                    .insert("error", err.description())
-                    .build();
-                let content = serde_json::to_string(&obj).unwrap();
-                let content_type = modifiers::Header(ContentType::json());
-                IronError::new(err, (status::BadRequest, content_type, content))
-            }
-            BrokerError::Provider(_) => {
-                // TODO: Redirect to RP with the error description
-                IronError::new(err, status::ServiceUnavailable)
-            }
-            _ => {
-                IronError::new(err, status::InternalServerError)
-            }
-        }
     }
 }
 
