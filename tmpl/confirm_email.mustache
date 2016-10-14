@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Portier &ndash; Confirm your address</title>
+  </head>
+  <body>
+    <p>
+      We've sent you an email with a link you can use to finish
+      logging in to {{ client_id }}.
+    </p>
+    <p>
+      Is the link not working? Enter the code from the email below:
+    </p>
+    <form id="form" action="/confirm" method="get">
+      <input type="hidden" name="session" value="{{ session_id }}">
+      <input type="text" name="code">
+      <button type="submit">Login</button>
+    </form>
+  </body>
+</html>

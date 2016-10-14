@@ -31,8 +31,11 @@ const CODE_CHARS: &'static [char] = &[
 /// authentication, create a randomly-generated one-time pad. Then, send
 /// an email containing a link with the secret. Clicking the link will trigger
 /// the `ConfirmHandler`, returning an authentication result to the RP.
+///
+/// Returns the session ID, so a form can be rendered as an alternative way
+/// to confirm, without following the link.
 pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &str)
-               -> BrokerResult<()> {
+               -> BrokerResult<String> {
 
     let session = session_id(&email_addr, client_id);
 
@@ -72,7 +75,7 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
     ).build();
     try!(mailer.send(email));
     mailer.close();
-    Ok(())
+    Ok(session)
 
 }
 
