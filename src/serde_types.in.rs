@@ -31,11 +31,18 @@ pub struct Provider {
 /// Holds runtime configuration data for this daemon instance.
 #[derive(Clone, Deserialize)]
 pub struct AppConfig {
-    pub base_url: String, // Origin of this instance, used for constructing URLs
-    pub keys: Vec<crypto::NamedKey>, // Signing keys
-    pub store: store::Store, // Redis Client
-    pub smtp: Smtp, // SMTP client
-    pub sender: Email, // From address for email
-    pub token_validity: usize, // JWT validity duration, in seconds
-    pub providers: HashMap<String, Provider>, // Mapping of Domain -> OIDC Provider
+    /// Origin of this instance, used for constructing URLs
+    pub base_url: String,
+    /// Signing keys
+    pub keys: Vec<crypto::NamedKey>,
+    /// Redis Client
+    pub store: store::Store,
+    /// SMTP client
+    pub smtp: Smtp,
+    /// From address for email
+    pub sender: Email,
+    /// JWT validity duration, in seconds
+    pub token_validity: usize,
+    /// Mapping of Domain -> OIDC Provider
+    pub providers: HashMap<String, Provider>,
 }
