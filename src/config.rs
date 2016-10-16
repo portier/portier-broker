@@ -16,7 +16,7 @@ include!(concat!(env!("OUT_DIR"), "/serde_types.rs"));
 
 /// Union of all possible error types seen while parsing.
 #[derive(Debug)]
-pub enum Error {
+pub enum ConfigError {
     Io(std::io::Error),
     De(serde_json::error::Error),
     Store(&'static str),
@@ -24,9 +24,9 @@ pub enum Error {
 
 macro_rules! from_error {
     ( $orig:ty, $enum_type:ident ) => {
-        impl From<$orig> for Error {
-            fn from(err: $orig) -> Error {
-                Error::$enum_type(err)
+        impl From<$orig> for ConfigError {
+            fn from(err: $orig) -> ConfigError {
+                ConfigError::$enum_type(err)
             }
         }
     }
@@ -67,7 +67,7 @@ impl Deserialize for store::Store {
 
 /// Implementation with single method to read configuration from JSON.
 impl AppConfig {
-    pub fn from_json_file(file_name: &str) -> Result<AppConfig, Error> {
+    pub fn from_json_file(file_name: &str) -> Result<AppConfig, ConfigError> {
         let file = try!(File::open(file_name));
         Ok(try!(from_reader(BufReader::new(file))))
     }
