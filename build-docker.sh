@@ -20,12 +20,13 @@ container="$(
 )"
 trap "docker rm -f ${container}" exit
 
-docker cp "${TARGET_DIR}/portier-broker" "${container}:/"
+docker cp "${TARGET_DIR}/portier-broker" "${container}:/tmp/portier-broker"
+docker cp "tmpl" "${container}:/tmp/tmpl"
 docker start -ai "${container}" << END_CONTAINER_SCRIPT
 
 mkdir /tmp/build
 cd /tmp/build
-mv /portier-broker ./
+mv /tmp/portier-broker /tmp/tmpl ./
 
 mkdir certs
 cd certs
@@ -37,12 +38,10 @@ cd ..
 tee Dockerfile > /dev/null << EOF
 FROM scratch
 
-COPY ./certs /certs
+COPY . /
+USER 65534:65534
 ENV SSL_CERT_FILE=/certs/ca-certificates.crt \
     SSL_CERT_DIR=/certs
-
-COPY ./portier-broker /
-USER 65534:65534
 ENTRYPOINT ["/portier-broker"]
 CMD ["/cfg/config.json"]
 EXPOSE 3333

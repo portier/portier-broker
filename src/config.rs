@@ -1,3 +1,4 @@
+extern crate mustache;
 extern crate serde;
 extern crate serde_json;
 
@@ -61,6 +62,39 @@ impl Deserialize for store::Store {
         let max_response_size = value.find("max_response_size").unwrap().as_u64().unwrap();
         let res = store::Store::new(url, expire_sessions, expire_cache, max_response_size);
         res.or_else(|err| Err(serde::de::Error::custom(err)))
+    }
+}
+
+
+impl Template {
+    pub fn render(&self, params: &[(&str, &str)]) -> String {
+        let mut builder = mustache::MapBuilder::new();
+        for &param in params {
+            let (ref key, ref value) = param;
+            builder = builder.insert_str(key, value);
+        }
+        self.render_data(&builder.build())
+    }
+
+    pub fn render_data(&self, data: &mustache::Data) -> String {
+        let mut out: Vec<u8> = Vec::new();
+        self.0.render_data(&mut out, data);
+        String::from_utf8(out).unwrap()
+    }
+}
+
+
+impl Templates {
+    fn compile_template(path: &str) -> Template {
+        Template(mustache::compile_path(path).unwrap())
+    }
+}
+
+impl Default for Templates {
+    fn default() -> Templates {
+        Templates {
+            forward: Self::compile_template("tmpl/forward.mustache"),
+        }
     }
 }
 

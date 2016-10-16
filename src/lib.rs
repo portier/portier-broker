@@ -256,23 +256,19 @@ fn create_jwt(app: &AppConfig, email: &str, origin: &str, nonce: &str) -> String
 }
 
 
-/// HTML template used to have the user agent POST the identity token built
-/// by the daemon instance to the RP's `redirect_uri`.
-const FORWARD_TEMPLATE: &'static str = include_str!("forward-template.html");
-
-
 /// Helper function for returning result to the Relying Party.
 ///
 /// Takes a `(jwt, redirect)` pair from one of the verification functions and
-/// embeds it in a form in the `FORWARD_TEMPLATE`, from where it's POSTED to
+/// embeds it in a form in `tmpl/forward.html`, from where it's POSTed to
 /// the RP's `redirect` as soon as the page has loaded.
-fn return_to_relier(result: (String, String)) -> BrokerResult<Response> {
+fn return_to_relier(app: &AppConfig, result: (String, String)) -> BrokerResult<Response> {
     let (jwt, redirect) = result;
-    let html = FORWARD_TEMPLATE.replace("{{ return_url }}", &redirect)
-        .replace("{{ jwt }}", &jwt);
-    let mut rsp = Response::with((status::Ok, html));
-    rsp.headers.set(ContentType::html());
-    Ok(rsp)
+    Ok(Response::with((status::Ok,
+                       modifiers::Header(ContentType::html()),
+                       app.templates.forward.render(&[
+                           ("return_url", &redirect),
+                           ("jwt", &jwt),
+                       ]))))
 }
 
 
@@ -287,7 +283,7 @@ broker_handler!(ConfirmHandler, |app, req| {
     );
     let session_id = try_get_param!(params, "session");
     let code = try_get_param!(params, "code");
-    return_to_relier(try!(email::verify(app, session_id, code)))
+    return_to_relier(app, try!(email::verify(app, session_id, code)))
 });
 
 
@@ -303,5 +299,5 @@ broker_handler!(CallbackHandler, |app, req| {
     );
     let session = try_get_param!(params, "state");
     let code = try_get_param!(params, "code");
-    return_to_relier(try!(oidc::verify(app, session, code)))
+    return_to_relier(app, try!(oidc::verify(app, session, code)))
 });

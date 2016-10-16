@@ -3,6 +3,11 @@
 // See https://serde.rs/codegen-stable.html for more information.
 
 
+// Newtype so we can implement Deserialize for templates.
+#[derive(Clone)]
+pub struct Template(mustache::Template);
+
+
 /// Represents an email address.
 #[derive(Clone, Deserialize)]
 pub struct Smtp {
@@ -28,6 +33,14 @@ pub struct Provider {
 }
 
 
+// Contains all templates we use in compiled form.
+#[derive(Clone)]
+pub struct Templates {
+    /// A dummy form used to redirect back to the RP with a POST request.
+    pub forward: Template,
+}
+
+
 /// Holds runtime configuration data for this daemon instance.
 #[derive(Clone, Deserialize)]
 pub struct AppConfig {
@@ -45,4 +58,7 @@ pub struct AppConfig {
     pub token_validity: usize,
     /// Mapping of Domain -> OIDC Provider
     pub providers: HashMap<String, Provider>,
+    /// Template files
+    #[serde(skip_deserializing)]
+    pub templates: Templates,
 }
