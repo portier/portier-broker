@@ -4,7 +4,7 @@ use std::error::Error;
 use std::io::Error as IoError;
 use super::hyper::Error as HttpError;
 use super::redis::RedisError;
-use super::lettre::transport::error::Error as MailError;
+use super::lettre::transport::smtp::error::Error as MailError;
 
 
 /// Union of all possible runtime error types.
