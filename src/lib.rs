@@ -85,7 +85,7 @@ macro_rules! try_get_param {
 /// The `broker_handler!` macro calls this on error. We don't use a `From`
 /// implementation, because this way we get app and request context, and we
 /// don't necessarily have to pass the error on to Iron.
-fn handle_error(_: &AppConfig, _: &mut Request, err: BrokerError) -> IronResult<Response> {
+fn handle_error(app: &AppConfig, _: &mut Request, err: BrokerError) -> IronResult<Response> {
     match err {
         BrokerError::Input(_) => {
             let obj = ObjectBuilder::new()
@@ -100,7 +100,9 @@ fn handle_error(_: &AppConfig, _: &mut Request, err: BrokerError) -> IronResult<
             Err(IronError::new(err, status::ServiceUnavailable))
         }
         _ => {
-            Err(IronError::new(err, status::InternalServerError))
+            Err(IronError::new(err, (status::InternalServerError,
+                                     modifiers::Header(ContentType::html()),
+                                     app.templates.error.render(&[]))))
         }
     }
 }

@@ -42,6 +42,8 @@ pub struct Templates {
     pub email_html: Template,
     /// Plain text email containing the one-type pad.
     pub email_text: Template,
+    /// The error page template.
+    pub error: Template,
     /// A dummy form used to redirect back to the RP with a POST request.
     pub forward: Template,
 }

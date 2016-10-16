@@ -96,6 +96,7 @@ impl Default for Templates {
             confirm_email: Self::compile_template("tmpl/confirm_email.mustache"),
             email_html: Self::compile_template("tmpl/email_html.mustache"),
             email_text: Self::compile_template("tmpl/email_text.mustache"),
+            error: Self::compile_template("tmpl/error.mustache"),
             forward: Self::compile_template("tmpl/forward.mustache"),
         }
     }
