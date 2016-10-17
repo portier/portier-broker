@@ -39,7 +39,7 @@ Here's an example configuration file:
 .. code-block:: json
 
    {
-     "listen_ip": "0.0.0.0",
+     "listen_ip": "127.0.0.1",
      "listen_port": 3333,
      "base_url": "https://portier.example.com",
      "keys": [
