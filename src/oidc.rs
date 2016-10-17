@@ -137,10 +137,7 @@ pub fn verify(app: &AppConfig, session: &str, code: &str)
               -> BrokerResult<(String, String)> {
 
     // Validate that the callback matches an auth request in Redis.
-    let stored = try!(app.store.get_session(&session));
-    if &stored["type"] != "oidc" {
-        return Err(BrokerError::Input("invalid session".to_string()));
-    }
+    let stored = try!(app.store.get_session("oidc", &session));
 
     let email_addr = EmailAddress::new(&stored["email"]).unwrap();
     let origin = &stored["client_id"];

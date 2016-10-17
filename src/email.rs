@@ -91,10 +91,7 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
 pub fn verify(app: &AppConfig, session: &str, code: &str)
               -> BrokerResult<(String, String)> {
 
-    let stored = try!(app.store.get_session(&session));
-    if &stored["type"] != "email" {
-        return Err(BrokerError::Input("invalid session".to_string()));
-    }
+    let stored = try!(app.store.get_session("email", &session));
     if code != &stored["code"] {
         return Err(BrokerError::Input("incorrect code".to_string()));
     }
