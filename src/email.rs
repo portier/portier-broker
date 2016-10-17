@@ -8,6 +8,7 @@ use super::lettre::transport::EmailTransport;
 use super::lettre::transport::smtp::SmtpTransportBuilder;
 use super::{AppConfig, create_jwt};
 use super::crypto::session_id;
+use std::collections::HashMap;
 use std::iter::Iterator;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 
@@ -86,12 +87,11 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
 
 /// Helper function for verification of one-time pad sent through email.
 ///
-/// Checks that the session exists and matches the one-time pad. If so,
+/// Checks the one-time pad against the stored session data. If a match,
 /// returns the Identity Token; otherwise, returns an error message.
-pub fn verify(app: &AppConfig, session: &str, code: &str)
+pub fn verify(app: &AppConfig, stored: &HashMap<String, String>, code: &str)
               -> BrokerResult<(String, String)> {
 
-    let stored = try!(app.store.get_session("email", &session));
     if code != &stored["code"] {
         return Err(BrokerError::Input("incorrect code".to_string()));
     }

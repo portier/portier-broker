@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::collections::HashMap;
 use emailaddress::EmailAddress;
 use iron::Url;
 use serde_json::de::from_reader;
@@ -133,11 +134,8 @@ pub fn canonicalized(email: &str) -> String {
 /// Match the returned email address and nonce against our Redis data, then
 /// extract the identity token returned by the provider and verify it. Return
 /// an identity token for the RP if successful, or an error message otherwise.
-pub fn verify(app: &AppConfig, session: &str, code: &str)
+pub fn verify(app: &AppConfig, stored: &HashMap<String, String>, code: &str)
               -> BrokerResult<(String, String)> {
-
-    // Validate that the callback matches an auth request in Redis.
-    let stored = try!(app.store.get_session("oidc", &session));
 
     let email_addr = EmailAddress::new(&stored["email"]).unwrap();
     let origin = &stored["client_id"];
