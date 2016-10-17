@@ -12,7 +12,7 @@ extern crate url;
 extern crate urlencoded;
 
 use emailaddress::EmailAddress;
-use iron::headers::ContentType;
+use iron::headers::{ContentType, Location};
 use iron::middleware::Handler;
 use iron::modifiers;
 use iron::method::Method;
@@ -219,13 +219,9 @@ broker_handler!(AuthHandler, |app, req| {
     );
     if app.providers.contains_key(&email_addr.domain) {
 
-        // OIDC authentication. Using 302 Found for redirection here. Note
-        // that, per RFC 7231, a user agent MAY change the request method
-        // from POST to GET for the subsequent request.
-        let auth_url = try!(
-            oidc::request(app, email_addr, client_id, nonce, redirect_uri)
-        );
-        Ok(Response::with((status::Found, modifiers::Redirect(auth_url))))
+        // OIDC authentication. Redirect to the identity provider.
+        let auth_url = try!(oidc::request(app, email_addr, client_id, nonce, redirect_uri));
+        Ok(Response::with((status::SeeOther, modifiers::Header(Location(auth_url.to_string())))))
 
     } else {
 
