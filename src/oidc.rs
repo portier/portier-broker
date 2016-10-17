@@ -41,7 +41,7 @@ macro_rules! try_get_json_field {
 /// user will be redirected back to after confirming (or denying) the
 /// Authentication Request. Included in the request is a nonce which we can
 /// later use to definitively match the callback to this request.
-pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &str)
+pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &Url)
                -> BrokerResult<Url> {
 
     let session = session_id(&email_addr, client_id);
@@ -53,7 +53,7 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
         ("email", &email_addr.to_string()),
         ("client_id", client_id),
         ("nonce", nonce),
-        ("redirect", redirect_uri),
+        ("redirect", &redirect_uri.to_string()),
     ]));
 
     let client = HttpClient::new();

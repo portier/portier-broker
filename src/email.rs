@@ -1,6 +1,7 @@
 extern crate rand;
 
 use emailaddress::EmailAddress;
+use iron::Url;
 use super::error::{BrokerError, BrokerResult};
 use super::lettre::email::EmailBuilder;
 use super::lettre::transport::EmailTransport;
@@ -34,7 +35,7 @@ const CODE_CHARS: &'static [char] = &[
 ///
 /// Returns the session ID, so a form can be rendered as an alternative way
 /// to confirm, without following the link.
-pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &str)
+pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &Url)
                -> BrokerResult<String> {
 
     let session = session_id(&email_addr, client_id);
@@ -50,7 +51,7 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
         ("client_id", client_id),
         ("nonce", nonce),
         ("code", &chars),
-        ("redirect", redirect_uri),
+        ("redirect", &redirect_uri.to_string()),
     ]));
 
     // Generate the URL used to verify email address ownership.

@@ -18,6 +18,7 @@ use iron::modifiers;
 use iron::method::Method;
 use iron::prelude::*;
 use iron::status;
+use iron::Url;
 use serde_json::builder::{ArrayBuilder, ObjectBuilder};
 use serde_json::value::Value;
 use std::env;
@@ -212,7 +213,10 @@ broker_handler!(AuthHandler, |app, req| {
     );
     let client_id = try_get_param!(params, "client_id");
     let nonce = try_get_param!(params, "nonce");
-    let redirect_uri = try_get_param!(params, "redirect_uri");
+    let redirect_uri = try!(
+        Url::parse(try_get_param!(params, "redirect_uri"))
+            .map_err(|_| BrokerError::Input("redirect_uri is not a valid URL".to_string()))
+    );
     let email_addr = try!(
         EmailAddress::new(try_get_param!(params, "login_hint"))
             .map_err(|_| BrokerError::Input("login_hint is not a valid email address".to_string()))
@@ -220,13 +224,13 @@ broker_handler!(AuthHandler, |app, req| {
     if app.providers.contains_key(&email_addr.domain) {
 
         // OIDC authentication. Redirect to the identity provider.
-        let auth_url = try!(oidc::request(app, email_addr, client_id, nonce, redirect_uri));
+        let auth_url = try!(oidc::request(app, email_addr, client_id, nonce, &redirect_uri));
         Ok(Response::with((status::SeeOther, modifiers::Header(Location(auth_url.to_string())))))
 
     } else {
 
         // Email loop authentication. Render a message and form.
-        let session_id = try!(email::request(app, email_addr, client_id, nonce, redirect_uri));
+        let session_id = try!(email::request(app, email_addr, client_id, nonce, &redirect_uri));
         Ok(Response::with((status::Ok,
                            modifiers::Header(ContentType::html()),
                            app.templates.confirm_email.render(&[
