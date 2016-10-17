@@ -198,11 +198,11 @@ broker_handler!(AuthHandler, |app, req| {
     let params = try!(
         match req.method {
             Method::Get => {
-                req.get_ref::<UrlEncodedQuery>()
+                req.compute::<UrlEncodedQuery>()
                     .map_err(|_| BrokerError::Input("no query string in GET request".to_string()))
             },
             Method::Post => {
-                req.get_ref::<UrlEncodedBody>()
+                req.compute::<UrlEncodedBody>()
                     .map_err(|_| BrokerError::Input("no query string in POST data".to_string()))
             },
             _ => {
@@ -280,7 +280,7 @@ fn return_to_relier(app: &AppConfig, result: (String, String)) -> BrokerResult<R
 /// Verify the code and return the resulting token or error to the RP.
 broker_handler!(ConfirmHandler, |app, req| {
     let params = try!(
-        req.get_ref::<UrlEncodedQuery>()
+        req.compute::<UrlEncodedQuery>()
             .map_err(|_| BrokerError::Input("no query string in GET request".to_string()))
     );
     let session_id = try_get_param!(params, "session");
@@ -296,7 +296,7 @@ broker_handler!(ConfirmHandler, |app, req| {
 /// Verify the callback data and return the resulting token or error.
 broker_handler!(CallbackHandler, |app, req| {
     let params = try!(
-        req.get_ref::<UrlEncodedQuery>()
+        req.compute::<UrlEncodedQuery>()
             .map_err(|_| BrokerError::Input("no query string in GET request".to_string()))
     );
     let session = try_get_param!(params, "state");
