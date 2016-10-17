@@ -15,7 +15,7 @@ serde_codegen = "0.8.0"
 
 [dependencies]
 docopt = "0.6.81"
-emailaddress = "0.3.0"
+emailaddress = "0.3.1"
 env_logger = "0.3.4"
 hyper = "0.9.10"
 iron = "0.4.0"
