@@ -74,7 +74,7 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
         })
     );
     let descr = format!("{}'s discovery document", domain);
-    let authz_base = try_get_json_field!(config_obj, "authz_base", as_str, descr);
+    let authz_base = try_get_json_field!(config_obj, "authorization_endpoint", as_str, descr);
 
     // Create the URL to redirect to, properly escaping all parameters.
     Url::parse(&vec![
