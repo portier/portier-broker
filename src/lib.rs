@@ -287,9 +287,9 @@ broker_handler!(ConfirmHandler, |app, req| {
         req.compute::<UrlEncodedQuery>()
             .map_err(|_| BrokerError::Input("no query string in GET request".to_string()))
     );
-    let session_id = try_get_param!(params, "session");
+    let stored = try!(app.store.get_session("email", &try_get_param!(params, "session")));
     let code = try_get_param!(params, "code");
-    return_to_relier(app, try!(email::verify(app, session_id, code)))
+    return_to_relier(app, try!(email::verify(app, &stored, code)))
 });
 
 
@@ -303,7 +303,7 @@ broker_handler!(CallbackHandler, |app, req| {
         req.compute::<UrlEncodedQuery>()
             .map_err(|_| BrokerError::Input("no query string in GET request".to_string()))
     );
-    let session = try_get_param!(params, "state");
+    let stored = try!(app.store.get_session("oidc", &try_get_param!(params, "state")));
     let code = try_get_param!(params, "code");
-    return_to_relier(app, try!(oidc::verify(app, session, code)))
+    return_to_relier(app, try!(oidc::verify(app, &stored, code)))
 });
