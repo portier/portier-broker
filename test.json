@@ -1,4 +1,6 @@
 {
+  "listen_ip": "0.0.0.0",
+  "listen_port": 3333,
   "base_url": "https://portier.example.com",
   "keys": [
     {"id": "base", "file": "private.pem"}

@@ -39,6 +39,8 @@ Here's an example configuration file:
 .. code-block:: json
 
    {
+     "listen_ip": "0.0.0.0",
+     "listen_port": 3333,
      "base_url": "https://portier.example.com",
      "keys": [
        {"id": "base", "file": "private.pem"}
@@ -66,6 +68,8 @@ Here's an example configuration file:
        }
      }
    }
+
+**listen_ip** and **listen_port** contain the port on which the broker listens.
 
 **base_url** contains the web origin for this broker instance.
 

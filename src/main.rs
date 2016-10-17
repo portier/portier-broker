@@ -23,16 +23,14 @@ const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 ///
 /// [Docopt](http://docopt.org) parses this and generates a custom argv parser.
 const USAGE: &'static str = r#"
-Portier broker
+Portier Broker
 
 Usage:
-  portier_broker [options] CONFIG
+  portier_broker CONFIG
   portier_broker --version
   portier_broker --help
 
 Options:
-  --address=<ip>  Address to listen on [default: 127.0.0.1]
-  --port=<port>   Port to listen on [default: 3333]
   --version       Print version information and exit
   --help          Print this help message and exit
 "#;
@@ -43,8 +41,6 @@ Options:
 #[allow(non_snake_case)]
 struct Args {
     arg_CONFIG: String,
-    flag_address: String,
-    flag_port: u16,
 }
 
 
@@ -77,9 +73,8 @@ fn main() {
         get "/callback" => broker::CallbackHandler::new(&app),
     };
 
-    let ip_address = std::net::IpAddr::from_str(&args.flag_address).unwrap();
-    let socket = std::net::SocketAddr::new(ip_address, args.flag_port);
-
+    let ipaddr = std::net::IpAddr::from_str(&app.listen_ip).unwrap();
+    let socket = std::net::SocketAddr::new(ipaddr, app.listen_port);
     info!("listening on http://{}", socket);
 
     Iron::new(router).http("0.0.0.0:3333").unwrap();
