@@ -121,25 +121,63 @@ fn return_to_relier(app: &AppConfig, redirect_uri: &str, params: &[(&str, &str)]
 /// The `broker_handler!` macro calls this on error. We don't use a `From`
 /// implementation, because this way we get app and request context, and we
 /// don't necessarily have to pass the error on to Iron.
-fn handle_error(app: &AppConfig, _: &mut Request, err: BrokerError) -> IronResult<Response> {
-    match err {
-        BrokerError::Input(_) => {
-            let obj = ObjectBuilder::new()
-                .insert("error", err.description())
-                .build();
-            let content = serde_json::to_string(&obj).unwrap();
-            let content_type = modifiers::Header(ContentType::json());
-            Ok(Response::with((status::BadRequest, content_type, content)))
-        }
-        BrokerError::Provider(_) => {
-            // TODO: Redirect to RP with the error description
-            Err(IronError::new(err, status::ServiceUnavailable))
-        }
-        _ => {
+///
+/// When we handle an error, we want to:
+///
+///  - Log internal errors and errors related to communcation with providers.
+///  - Not log input errors, such as missing parameters.
+///
+///  - Hide the details of internal errors from the user.
+///  - Show a description for input and provider errors.
+///
+///  - Return the error to the relier via redirect, as per the OAuth2 spec.
+///  - Always show something to the user, even if we cannot redirect.
+///
+/// The large match-statement below handles all these scenario's properly,
+/// and sets proper response codes for each category.
+fn handle_error(app: &AppConfig, req: &mut Request, err: BrokerError) -> IronResult<Response> {
+    let redirect_uri = req.extensions.remove::<RedirectUri>().map(|url| url.to_string());
+    match (err, redirect_uri) {
+        (err @ BrokerError::Input(_), Some(redirect_uri)) => {
+            Ok(Response::with(return_to_relier(app, &redirect_uri, &[
+                ("error", "invalid_request"),
+                ("error_description", err.description()),
+            ])))
+        },
+        (err @ BrokerError::Input(_), None) => {
+            Ok(Response::with((status::BadRequest,
+                               modifiers::Header(ContentType::html()),
+                               app.templates.error.render(&[
+                                   ("error", err.description()),
+                               ]))))
+        },
+        (err @ BrokerError::Provider(_), Some(redirect_uri)) => {
+            let description = err.description().to_string();
+            Err(IronError::new(err, return_to_relier(app, &redirect_uri, &[
+                ("error", "temporarily_unavailable"),
+                ("error_description", &description),
+            ])))
+        },
+        (err @ BrokerError::Provider(_), None) => {
+            let description = err.description().to_string();
+            Err(IronError::new(err, (status::ServiceUnavailable,
+                                     modifiers::Header(ContentType::html()),
+                                     app.templates.error.render(&[
+                                         ("error", &description),
+                                     ]))))
+        },
+        (err @ _, Some(redirect_uri)) => {
+            Err(IronError::new(err, return_to_relier(app, &redirect_uri, &[
+                ("error", "server_error"),
+            ])))
+        },
+        (err @ _, None) => {
             Err(IronError::new(err, (status::InternalServerError,
                                      modifiers::Header(ContentType::html()),
-                                     app.templates.error.render(&[]))))
-        }
+                                     app.templates.error.render(&[
+                                         ("error", "internal server error"),
+                                     ]))))
+        },
     }
 }
 
