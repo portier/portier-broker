@@ -18,6 +18,7 @@ use iron::modifiers;
 use iron::method::Method;
 use iron::prelude::*;
 use iron::status;
+use iron::typemap;
 use iron::Url;
 use serde_json::builder::{ArrayBuilder, ObjectBuilder};
 use serde_json::value::Value;
@@ -39,6 +40,12 @@ pub mod store;
 pub mod store_cache;
 
 use error::{BrokerResult, BrokerError};
+
+
+/// Iron extension key we use to store the redirect_uri.
+/// Once set, the error handler will return errors to the RP.
+struct RedirectUri;
+impl typemap::Key for RedirectUri { type Value = Url; }
 
 
 /// Macro that creates Handler implementations that log the request,
@@ -211,16 +218,21 @@ broker_handler!(AuthHandler, |app, req| {
             }
         }
     );
+
+    // Per the OAuth2 spec, we may redirect to the RP once we have validated client_id and
+    // redirect_uri. In our case, this means we make redirect_uri available to error handling.
     let client_id = try_get_param!(params, "client_id");
-    let nonce = try_get_param!(params, "nonce");
     let redirect_uri = try!(
         Url::parse(try_get_param!(params, "redirect_uri"))
             .map_err(|_| BrokerError::Input("redirect_uri is not a valid URL".to_string()))
     );
+    req.extensions.insert::<RedirectUri>(redirect_uri.clone());
+
     let email_addr = try!(
         EmailAddress::new(try_get_param!(params, "login_hint"))
             .map_err(|_| BrokerError::Input("login_hint is not a valid email address".to_string()))
     );
+    let nonce = try_get_param!(params, "nonce");
     if app.providers.contains_key(&email_addr.domain) {
 
         // OIDC authentication. Redirect to the identity provider.
@@ -287,7 +299,10 @@ broker_handler!(ConfirmHandler, |app, req| {
         req.compute::<UrlEncodedQuery>()
             .map_err(|_| BrokerError::Input("no query string in GET request".to_string()))
     );
+
     let stored = try!(app.store.get_session("email", &try_get_param!(params, "session")));
+    req.extensions.insert::<RedirectUri>(Url::parse(&stored["redirect"]).unwrap());
+
     let code = try_get_param!(params, "code");
     return_to_relier(app, try!(email::verify(app, &stored, code)))
 });
@@ -303,7 +318,10 @@ broker_handler!(CallbackHandler, |app, req| {
         req.compute::<UrlEncodedQuery>()
             .map_err(|_| BrokerError::Input("no query string in GET request".to_string()))
     );
+
     let stored = try!(app.store.get_session("oidc", &try_get_param!(params, "state")));
+    req.extensions.insert::<RedirectUri>(Url::parse(&stored["redirect"]).unwrap());
+
     let code = try_get_param!(params, "code");
     return_to_relier(app, try!(oidc::verify(app, &stored, code)))
 });
