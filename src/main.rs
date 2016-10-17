@@ -77,5 +77,5 @@ fn main() {
     let socket = std::net::SocketAddr::new(ipaddr, app.listen_port);
     info!("listening on http://{}", socket);
 
-    Iron::new(router).http("0.0.0.0:3333").unwrap();
+    Iron::new(router).http(socket).unwrap();
 }
