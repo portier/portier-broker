@@ -26,9 +26,9 @@ const USAGE: &'static str = r#"
 Portier Broker
 
 Usage:
-  portier_broker CONFIG
-  portier_broker --version
-  portier_broker --help
+  portier-broker CONFIG
+  portier-broker --version
+  portier-broker --help
 
 Options:
   --version       Print version information and exit
