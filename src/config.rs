@@ -1,4 +1,3 @@
-extern crate mustache;
 extern crate serde;
 extern crate serde_json;
 
@@ -10,7 +9,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 
-use super::{crypto, store};
+use super::{crypto, store, mustache};
 
 include!(concat!(env!("OUT_DIR"), "/serde_types.rs"));
 
