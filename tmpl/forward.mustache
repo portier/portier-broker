@@ -9,8 +9,10 @@
     </script>
   </head>
   <body>
-    <form id="form" action="{{ return_url }}" method="post">
-      <input type="hidden" name="id_token" value="{{ jwt }}">
+    <form id="form" action="{{ redirect_uri }}" method="post">
+      {{# params }}
+        <input type="hidden" name="{{ name }}" value="{{ value }}">
+      {{/ params }}
     </form>
   </body>
 </html>

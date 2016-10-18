@@ -4,6 +4,7 @@ extern crate log;
 extern crate hyper;
 extern crate iron;
 extern crate lettre;
+extern crate mustache;
 extern crate redis;
 extern crate serde;
 extern crate serde_json;
@@ -274,19 +275,30 @@ fn create_jwt(app: &AppConfig, email: &str, origin: &str, nonce: &str) -> String
 }
 
 
-/// Helper function for returning result to the Relying Party.
+/// Helper function for returning a result to the Relying Party.
 ///
-/// Takes a `(jwt, redirect)` pair from one of the verification functions and
-/// embeds it in a form in `tmpl/forward.html`, from where it's POSTed to
-/// the RP's `redirect` as soon as the page has loaded.
-fn return_to_relier(app: &AppConfig, result: (String, String)) -> BrokerResult<Response> {
-    let (jwt, redirect) = result;
-    Ok(Response::with((status::Ok,
-                       modifiers::Header(ContentType::html()),
-                       app.templates.forward.render(&[
-                           ("return_url", &redirect),
-                           ("jwt", &jwt),
-                       ]))))
+/// Takes an array of `(name, value)` parameter pairs to send to the relier and
+/// embeds them in a form in `tmpl/forward.html`, from where it's POSTed to the
+/// RP's `redirect_uri` as soon as the page has loaded.
+///
+/// The return value is a tuple of response modifiers.
+fn return_to_relier(app: &AppConfig, redirect_uri: &str, params: &[(&str, &str)])
+    -> (hyper::status::StatusCode, modifiers::Header<ContentType>, String) {
+    let data = mustache::MapBuilder::new()
+        .insert_str("redirect_uri", redirect_uri)
+        .insert_map("params", |mut builder| {
+            for &param in params {
+                let (name, value) = param;
+                builder = builder
+                    .insert_str("name", name)
+                    .insert_str("value", value);
+            }
+            builder
+        })
+        .build();
+    (status::Ok,
+     modifiers::Header(ContentType::html()),
+     app.templates.forward.render_data(&data))
 }
 
 
@@ -304,7 +316,8 @@ broker_handler!(ConfirmHandler, |app, req| {
     req.extensions.insert::<RedirectUri>(Url::parse(&stored["redirect"]).unwrap());
 
     let code = try_get_param!(params, "code");
-    return_to_relier(app, try!(email::verify(app, &stored, code)))
+    let (jwt, redirect_uri) = try!(email::verify(app, &stored, code));
+    Ok(Response::with(return_to_relier(app, &redirect_uri, &[("id_token", &jwt)])))
 });
 
 
@@ -323,5 +336,6 @@ broker_handler!(CallbackHandler, |app, req| {
     req.extensions.insert::<RedirectUri>(Url::parse(&stored["redirect"]).unwrap());
 
     let code = try_get_param!(params, "code");
-    return_to_relier(app, try!(oidc::verify(app, &stored, code)))
+    let (jwt, redirect_uri) = try!(oidc::verify(app, &stored, code));
+    Ok(Response::with(return_to_relier(app, &redirect_uri, &[("id_token", &jwt)])))
 });
