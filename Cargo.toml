@@ -30,5 +30,6 @@ rustc-serialize = "0.3.19"
 serde = "0.8.0"
 serde_json = "0.8.0"
 time = "0.1.35"
+toml = { version = "0.2.1", default-features = false, features = ["serde"]}
 url = "1.1.0"
 urlencoded = "0.4.0"

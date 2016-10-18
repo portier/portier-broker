@@ -2,3 +2,4 @@ target
 *.pem
 Cargo.lock
 .well-known/*
+config.toml

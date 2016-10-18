@@ -43,7 +43,7 @@ USER 65534:65534
 ENV SSL_CERT_FILE=/certs/ca-certificates.crt \
     SSL_CERT_DIR=/certs
 ENTRYPOINT ["/portier-broker"]
-CMD ["/cfg/config.json"]
+CMD ["/cfg/config.toml"]
 EXPOSE 3333
 EOF
 docker build -t portier/broker .

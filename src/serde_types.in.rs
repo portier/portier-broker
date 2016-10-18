@@ -52,6 +52,10 @@ pub struct Templates {
 /// Holds runtime configuration data for this daemon instance.
 #[derive(Clone, Deserialize)]
 pub struct AppConfig {
+    /// Address to listen on
+    pub listen_ip: String,
+    /// Port to listen on
+    pub listen_port: u16,
     /// Origin of this instance, used for constructing URLs
     pub base_url: String,
     /// Signing keys

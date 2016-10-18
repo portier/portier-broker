@@ -1,13 +1,13 @@
 extern crate serde;
 extern crate serde_json;
+extern crate toml;
 
 use serde::de::Deserialize;
-use serde_json::de::from_reader;
 use serde_json::value::Value;
 use std;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::BufReader;
+use std::io::Read;
 
 use super::{crypto, store, mustache};
 
@@ -104,8 +104,12 @@ impl Default for Templates {
 
 /// Implementation with single method to read configuration from JSON.
 impl AppConfig {
-    pub fn from_json_file(file_name: &str) -> Result<AppConfig, ConfigError> {
-        let file = try!(File::open(file_name));
-        Ok(try!(from_reader(BufReader::new(file))))
+    /// Read a TOML configuration file.
+    pub fn from_toml_file(file_name: &str) -> Result<AppConfig, ConfigError> {
+        let mut file = try!(File::open(file_name));
+        let mut file_contents = String::new();
+        try!(file.read_to_string(&mut file_contents));
+
+        Ok(toml::decode_str(&file_contents).unwrap())
     }
 }
