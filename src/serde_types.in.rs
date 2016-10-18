@@ -38,6 +38,8 @@ pub struct Provider {
 pub struct Templates {
     /// Page displayed when the confirmation email was sent.
     pub confirm_email: Template,
+    /// HTML formatted email containing the one-type pad.
+    pub email_html: Template,
     /// Plain text email containing the one-type pad.
     pub email_text: Template,
     /// A dummy form used to redirect back to the RP with a POST request.

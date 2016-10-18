@@ -69,7 +69,8 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
     let email = EmailBuilder::new()
         .to(email_addr.to_string().as_str())
         .from((&*app.sender.address, &*app.sender.name))
-        .text(&app.templates.email_text.render(params))
+        .alternative(&app.templates.email_html.render(params),
+                     &app.templates.email_text.render(params))
         .subject(&format!("Finish logging in to {}", client_id))
         .build().unwrap();
     // TODO: Add support for authentication.
