@@ -94,6 +94,7 @@ impl Default for Templates {
     fn default() -> Templates {
         Templates {
             confirm_email: Self::compile_template("tmpl/confirm_email.mustache"),
+            email_text: Self::compile_template("tmpl/email_text.mustache"),
             forward: Self::compile_template("tmpl/forward.mustache"),
         }
     }

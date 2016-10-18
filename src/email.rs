@@ -61,13 +61,16 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
 
     // Generate a simple email and send it through the SMTP server.
     // We can unwrap here, because the possible errors cannot happen here.
-    // TODO: Use templates for the email message.
+    let params = &[
+        ("client_id", client_id),
+        ("code", &chars),
+        ("link", &href),
+    ];
     let email = EmailBuilder::new()
         .to(email_addr.to_string().as_str())
         .from((&*app.sender.address, &*app.sender.name))
-        .body(&format!("Enter your login code:\n\n{}\n\nOr click this link:\n\n{}",
-                       chars, href))
-        .subject(&format!("Code: {} - Finish logging in to {}", chars, client_id))
+        .text(&app.templates.email_text.render(params))
+        .subject(&format!("Finish logging in to {}", client_id))
         .build().unwrap();
     // TODO: Add support for authentication.
     let mut mailer = try!(
