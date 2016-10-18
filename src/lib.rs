@@ -89,6 +89,33 @@ macro_rules! try_get_param {
 }
 
 
+/// Helper function for returning a result to the Relying Party.
+///
+/// Takes an array of `(name, value)` parameter pairs to send to the relier and
+/// embeds them in a form in `tmpl/forward.html`, from where it's POSTed to the
+/// RP's `redirect_uri` as soon as the page has loaded.
+///
+/// The return value is a tuple of response modifiers.
+fn return_to_relier(app: &AppConfig, redirect_uri: &str, params: &[(&str, &str)])
+    -> (hyper::status::StatusCode, modifiers::Header<ContentType>, String) {
+    let data = mustache::MapBuilder::new()
+        .insert_str("redirect_uri", redirect_uri)
+        .insert_map("params", |mut builder| {
+            for &param in params {
+                let (name, value) = param;
+                builder = builder
+                    .insert_str("name", name)
+                    .insert_str("value", value);
+            }
+            builder
+        })
+        .build();
+    (status::Ok,
+     modifiers::Header(ContentType::html()),
+     app.templates.forward.render_data(&data))
+}
+
+
 /// Handle an BrokerError and create an IronResult.
 ///
 /// The `broker_handler!` macro calls this on error. We don't use a `From`
@@ -272,33 +299,6 @@ fn create_jwt(app: &AppConfig, email: &str, origin: &str, nonce: &str) -> String
         .insert("nonce", nonce)
         .build();
     app.keys.last().unwrap().sign_jws(&payload)
-}
-
-
-/// Helper function for returning a result to the Relying Party.
-///
-/// Takes an array of `(name, value)` parameter pairs to send to the relier and
-/// embeds them in a form in `tmpl/forward.html`, from where it's POSTed to the
-/// RP's `redirect_uri` as soon as the page has loaded.
-///
-/// The return value is a tuple of response modifiers.
-fn return_to_relier(app: &AppConfig, redirect_uri: &str, params: &[(&str, &str)])
-    -> (hyper::status::StatusCode, modifiers::Header<ContentType>, String) {
-    let data = mustache::MapBuilder::new()
-        .insert_str("redirect_uri", redirect_uri)
-        .insert_map("params", |mut builder| {
-            for &param in params {
-                let (name, value) = param;
-                builder = builder
-                    .insert_str("name", name)
-                    .insert_str("value", value);
-            }
-            builder
-        })
-        .build();
-    (status::Ok,
-     modifiers::Header(ContentType::html()),
-     app.templates.forward.render_data(&data))
 }
 
 
