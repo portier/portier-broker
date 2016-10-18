@@ -25,8 +25,7 @@ Rust toolchain `installed`_, building portier broker is very simple:
 
 This should fetch and install the Portier broker. The binary is installed into
 ``~/.cargo/bin/`` by default. Running the `portier-broker` binary requires
-a short configuration file, an example of which is provided as ``test.json``.
-You may also want to refer to the output of ``portier-broker --help``.
+a short configuration file. An example is provided in ``config.toml.dist``.
 
 .. _installed: https://doc.rust-lang.org/book/getting-started.html
 
@@ -36,44 +35,44 @@ Configuration
 
 Here's an example configuration file:
 
-.. code-block:: json
+.. code-block:: toml
 
-   {
-     "listen_ip": "127.0.0.1",
-     "listen_port": 3333,
-     "base_url": "https://portier.example.com",
-     "keys": [
-       {"id": "base", "file": "private.pem"}
-     ],
-     "store": {
-       "redis_url": "redis://127.0.0.1/5",
-       "expire_sessions": 900,
-       "expire_cache": 3600,
-       "max_response_size": 8096
-     },
-     "smtp": {
-       "address": "localhost:25"
-     },
-     "sender": {
-       "name": "Portier",
-       "address": "portier@example.com"
-     },
-     "token_validity": 600,
-     "providers": {
-       "gmail.com": {
-         "discovery": "https://accounts.google.com/.well-known/openid-configuration",
-         "client_id": "1234567890-example-client-id.apps.googleusercontent.com",
-         "secret": "<your-secret-goes-here>",
-         "issuer": "accounts.google.com"
-       }
-     }
-   }
+    listen_ip = "127.0.0.1"
+    listen_port = 3333
+    base_url = "https://portier.example.com"
+    token_validity = 600
+
+    [[keys]]
+    id = "base"
+    file = "private.pem"
+
+    [store]
+    redis_url = "redis://127.0.0.1/5"
+    expire_sessions = 900
+    expire_cache = 3600
+    max_response_size = 8096
+
+    [smtp]
+    address = "localhost:25"
+
+    [sender]
+    name = "Portier"
+    address = "portier@example.com"
+
+    [providers . "gmail.com"]
+    discovery = "https://accounts.google.com/.well-known/openid-configuration"
+    client_id = "1234567890-example-client-id.apps.googleusercontent.com"
+    secret = "<your-secret-goes-here>"
+    issuer = "accounts.google.com"
 
 **listen_ip** and **listen_port** contain the port on which the broker listens.
 
 **base_url** contains the web origin for this broker instance.
 
-**key** is a list of keys, with an ``id`` and ``file`` for each key.
+**token_validity** is a value in seconds, that determines how long outgoing
+authentication tokens are allowed to live. Defaults to 600s, or 10 minutes.
+
+**keys** is a list of keys, with an ``id`` and ``file`` for each key.
 Multiple keys can be used to implement key rotation. By default, the last key
 in the list will be used for signing the outgoing JWTs.
 
@@ -93,9 +92,6 @@ should be in the format ``<host>:<port>``.
 
 **sender** is the sender information used when sending email for the email
 loop authentication. It requires ``name`` and ``address`` keys.
-
-**token_validity** is a value in seconds, that determines how long outgoing
-authentication tokens are allowed to live. Defaults to 600s, or 10 minutes.
 
 **providers** is an object containing well-known Identity Providers, for
 which an account is required to authenticate. Keys in this object represent
@@ -117,12 +113,11 @@ Contributing
 If you want to hack on the broker code, clone this repository. If you have the
 Rust toolchain installed (see above), you can run ``cargo build`` to build the
 project in debug mode. ``cargo run <config-file>`` will run the project. You
-will have to set up your own configuration file; use the ``test.json`` file
-in the repository as a template.
+will have to set up your own configuration file; use ``config.toml.dist``
+as a template.
 
-The broker binds to ``localhost:3333`` by default; this can be changed using
-the ``--address`` and ``--port`` options. It only speaks HTTP, so if you want
-to run it behind through a TLS connection, you will need to set up a proxy.
+The broker binds to ``127.0.0.1:3333`` by default. It only speaks HTTP, so you
+must run it behind a reverse proxy like nginx to expose it to the web via TLS.
 Note that the broker will serve up files from the ``.well-known`` directory
 in the current working directory when executed; this makes it relatively easy
 to request a certificate from `Let's Encrypt`_.
