@@ -4,7 +4,6 @@ base_url = "https://portier.example.com"
 token_validity = 600
 
 [[keys]]
-id = "base"
 file = "private.pem"
 
 [store]
