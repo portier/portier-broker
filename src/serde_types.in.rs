@@ -4,12 +4,11 @@
 
 
 // Newtype so we can implement Deserialize for templates.
-#[derive(Clone)]
 pub struct Template(mustache::Template);
 
 
-/// Represents an email address.
-#[derive(Clone, Deserialize)]
+/// Contains the SMTP server connection settings.
+#[derive(Deserialize)]
 pub struct Smtp {
     pub address: String,
     pub username: Option<String>,
@@ -18,7 +17,7 @@ pub struct Smtp {
 
 
 /// Represents an email address.
-#[derive(Clone, Deserialize)]
+#[derive(Deserialize)]
 pub struct Email {
     pub address: String,
     pub name: String,
@@ -26,7 +25,7 @@ pub struct Email {
 
 
 /// Represents an OpenID Connect provider.
-#[derive(Clone, Deserialize)]
+#[derive(Deserialize)]
 pub struct Provider {
     pub discovery: String,
     pub client_id: String,
@@ -36,7 +35,6 @@ pub struct Provider {
 
 
 // Contains all templates we use in compiled form.
-#[derive(Clone)]
 pub struct Templates {
     /// Page displayed when the confirmation email was sent.
     pub confirm_email: Template,
@@ -52,7 +50,7 @@ pub struct Templates {
 
 
 /// Holds runtime configuration data for this daemon instance.
-#[derive(Clone, Deserialize)]
+#[derive(Deserialize)]
 pub struct AppConfig {
     /// Address to listen on
     pub listen_ip: String,
