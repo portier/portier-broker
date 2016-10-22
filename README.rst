@@ -54,6 +54,8 @@ Here's an example configuration file:
 
     [smtp]
     address = "localhost:25"
+    username = "johndoe"
+    password = "supersecret"
 
     [sender]
     name = "Portier"
@@ -87,8 +89,9 @@ individual entries may be kept longer if this is indicated in the HTTP headers
 providers send. ``max_response_size`` is the maximum allowed size (in bytes) of
 configuration documents from identity providers.
 
-**smtp** contains SMTP client settings, currently just the ``address``, which
-should be in the format ``<host>:<port>``.
+**smtp** contains SMTP client settings, most importantly the ``address``, which
+should be in the format ``<host>:<port>``. The ``username`` and ``password``
+fields are optional, and may be set to provide login credentials.
 
 **sender** is the sender information used when sending email for the email
 loop authentication. It requires ``name`` and ``address`` keys.

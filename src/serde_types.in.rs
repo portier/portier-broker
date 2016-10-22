@@ -11,7 +11,9 @@ pub struct Template(mustache::Template);
 /// Represents an email address.
 #[derive(Clone, Deserialize)]
 pub struct Smtp {
-    pub address: String
+    pub address: String,
+    pub username: Option<String>,
+    pub password: Option<String>,
 }
 
 

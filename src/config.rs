@@ -17,6 +17,7 @@ include!(concat!(env!("OUT_DIR"), "/serde_types.rs"));
 /// Union of all possible error types seen while parsing.
 #[derive(Debug)]
 pub enum ConfigError {
+    Custom(String),
     Io(std::io::Error),
     De(serde_json::error::Error),
     Store(&'static str),
@@ -109,7 +110,15 @@ impl AppConfig {
         let mut file = try!(File::open(file_name));
         let mut file_contents = String::new();
         try!(file.read_to_string(&mut file_contents));
+        let app: AppConfig = toml::decode_str(&file_contents).unwrap();
 
-        Ok(toml::decode_str(&file_contents).unwrap())
+        // Additional validations.
+        if app.smtp.username.is_none() != app.smtp.password.is_none() {
+            return Err(ConfigError::Custom(
+                "only one of smtp username and password specified; provide both or neither".to_string()
+            ));
+        }
+
+        Ok(app)
     }
 }

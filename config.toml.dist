@@ -15,6 +15,8 @@ max_response_size = 8096
 
 [smtp]
 address = "localhost:25"
+username = "johndoe"
+password = "supersecret"
 
 [sender]
 name = "Portier"
