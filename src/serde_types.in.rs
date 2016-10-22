@@ -3,11 +3,6 @@
 // See https://serde.rs/codegen-stable.html for more information.
 
 
-// Newtype so we can implement Deserialize for templates.
-#[derive(Clone)]
-pub struct Template(mustache::Template);
-
-
 /// Represents an email address.
 #[derive(Clone, Deserialize)]
 pub struct Smtp {
@@ -30,22 +25,6 @@ pub struct Provider {
     pub client_id: String,
     pub secret: String,
     pub issuer: String,
-}
-
-
-// Contains all templates we use in compiled form.
-#[derive(Clone)]
-pub struct Templates {
-    /// Page displayed when the confirmation email was sent.
-    pub confirm_email: Template,
-    /// HTML formatted email containing the one-type pad.
-    pub email_html: Template,
-    /// Plain text email containing the one-type pad.
-    pub email_text: Template,
-    /// The error page template.
-    pub error: Template,
-    /// A dummy form used to redirect back to the RP with a POST request.
-    pub forward: Template,
 }
 
 

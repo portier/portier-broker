@@ -63,6 +63,11 @@ impl Deserialize for store::Store {
 }
 
 
+// Newtype so we can implement helpers for templates.
+#[derive(Clone)]
+pub struct Template(mustache::Template);
+
+
 impl Template {
     pub fn render(&self, params: &[(&str, &str)]) -> String {
         let mut builder = mustache::MapBuilder::new();
@@ -78,6 +83,22 @@ impl Template {
         self.0.render_data(&mut out, data);
         String::from_utf8(out).unwrap()
     }
+}
+
+
+// Contains all templates we use in compiled form.
+#[derive(Clone)]
+pub struct Templates {
+    /// Page displayed when the confirmation email was sent.
+    pub confirm_email: Template,
+    /// HTML formatted email containing the one-type pad.
+    pub email_html: Template,
+    /// Plain text email containing the one-type pad.
+    pub email_text: Template,
+    /// The error page template.
+    pub error: Template,
+    /// A dummy form used to redirect back to the RP with a POST request.
+    pub forward: Template,
 }
 
 
