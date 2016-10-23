@@ -145,31 +145,55 @@ impl Builder {
         let toml_config: TomlConfig = toml::decode_str(&file_contents)
             .expect("unable to parse config file");
 
-        self.listen_ip = toml_config.server.listen_ip;
+        if let Some(table) = toml_config.server {
+            if let Some(val) = table.listen_ip {
+                self.listen_ip = val;
+            }
 
-        self.listen_port = toml_config.server.listen_port;
+            if let Some(val) = table.listen_port {
+                self.listen_port = val;
+            }
 
-        self.public_url = Some(toml_config.server.public_url);
-
-        self.token_ttl = toml_config.crypto.token_ttl;
-
-        for path in toml_config.crypto.keyfiles.iter() {
-            self.keyfiles.push(path.clone());
+            self.public_url = table.public_url.or(self.public_url.clone());
         }
 
-        self.redis_url = Some(toml_config.redis.url);
+        if let Some(table) = toml_config.crypto {
+            if let Some(val) = table.token_ttl {
+                self.token_ttl = val;
+            }
 
-        self.redis_session_ttl = toml_config.redis.session_ttl;
+            if let Some(val) = table.keyfiles {
+                for path in val.iter() {
+                    self.keyfiles.push(path.clone());
+                }
+            }
+        }
 
-        self.redis_cache_ttl = toml_config.redis.cache_ttl;
+        if let Some(table) = toml_config.redis {
+            self.redis_url = table.url.or(self.redis_url.clone());
 
-        self.redis_cache_max_doc_size = toml_config.redis.cache_max_doc_size;
+            if let Some(val) = table.session_ttl {
+                self.redis_session_ttl = val;
+            }
 
-        self.from_name = toml_config.smtp.from_name;
+            if let Some(val) = table.cache_ttl {
+                self.redis_cache_ttl = val;
+            }
 
-        self.from_address = Some(toml_config.smtp.from_address);
+            if let Some(val) = table.cache_max_doc_size {
+                self.redis_cache_max_doc_size = val;
+            }
+        }
 
-        self.smtp_server = Some(toml_config.smtp.server);
+        if let Some(table) = toml_config.smtp {
+            self.smtp_server = table.server;
+
+            self.from_address = table.from_address;
+
+            if let Some(val) = table.from_name {
+                self.from_name = val;
+            }
+        }
 
         self
     }
