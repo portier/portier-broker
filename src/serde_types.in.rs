@@ -3,53 +3,50 @@
 // See https://serde.rs/codegen-stable.html for more information.
 
 
-/// Represents an email address.
-#[derive(Clone, Deserialize)]
-pub struct Smtp {
-    pub address: String
+#[derive(Clone,Debug,Deserialize)]
+struct TomlConfig {
+    server: TomlServerTable,
+    crypto: TomlCryptoTable,
+    redis: TomlRedisTable,
+    smtp: TomlSmtpTable,
+    providers: HashMap<String, TomlProviderTable>,
 }
 
 
-/// Represents an email address.
-#[derive(Clone, Deserialize)]
-pub struct Email {
-    pub address: String,
-    pub name: String,
+#[derive(Clone,Debug,Deserialize)]
+struct TomlServerTable {
+    listen_ip: String,
+    listen_port: u16,
+    public_url: String,
 }
 
 
-/// Represents an OpenID Connect provider.
-#[derive(Clone, Deserialize)]
-pub struct Provider {
-    pub discovery: String,
-    pub client_id: String,
-    pub secret: String,
-    pub issuer: String,
+#[derive(Clone,Debug,Deserialize)]
+struct TomlCryptoTable {
+    token_ttl: u16,
+    keyfiles: Vec<String>,
+}
+
+#[derive(Clone,Debug,Deserialize)]
+struct TomlRedisTable {
+    url: String,
+    session_ttl: u16,
+    cache_ttl: u16,
+    cache_max_doc_size: u16,
+}
+
+#[derive(Clone,Debug,Deserialize)]
+struct TomlSmtpTable {
+    from_name: String,
+    from_address: String,
+    server: String,
 }
 
 
-/// Holds runtime configuration data for this daemon instance.
-#[derive(Clone, Deserialize)]
-pub struct AppConfig {
-    /// Address to listen on
-    pub listen_ip: String,
-    /// Port to listen on
-    pub listen_port: u16,
-    /// Origin of this instance, used for constructing URLs
-    pub base_url: String,
-    /// Signing keys
-    pub keys: Vec<crypto::NamedKey>,
-    /// Redis Client
-    pub store: store::Store,
-    /// SMTP client
-    pub smtp: Smtp,
-    /// From address for email
-    pub sender: Email,
-    /// JWT validity duration, in seconds
-    pub token_validity: usize,
-    /// Mapping of Domain -> OIDC Provider
-    pub providers: HashMap<String, Provider>,
-    /// Template files
-    #[serde(skip_deserializing)]
-    pub templates: Templates,
+#[derive(Clone,Debug,Deserialize)]
+struct TomlProviderTable {
+    client_id: String,
+    secret: String,
+    discovery_url: String,
+    issuer_domain: String,
 }

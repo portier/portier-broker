@@ -1,26 +1,53 @@
+[server]
+# IP address to bind to - Default: "127.0.0.1"
 listen_ip = "127.0.0.1"
+
+# Port to bind to - Default: 3333
 listen_port = 3333
-base_url = "https://portier.example.com"
-token_validity = 600
 
-[[keys]]
-file = "private.pem"
+# Server's user-facing URL - Default: (none)
+public_url = 
 
-[store]
-redis_url = "redis://127.0.0.1/5"
-expire_sessions = 900
-expire_cache = 3600
-max_response_size = 8096
+
+[crypto]
+# Duration that id_tokens are valid for - Default: 600 (10 minutes)
+token_ttl = 600
+
+# Array of file paths to PEM-formatted signing keys - Default: [] (empty array)
+keyfiles = []
+
+[redis]
+# Redis connection URL - Default: (none)
+url = 
+
+# Time that users have to complete authentication - Default: 900 (15 minutes)
+session_ttl = 900
+
+# Time that provider discovery documents are cached - Default: 3600 (1 hour)
+cache_ttl = 3600
+
+# Maximum size of each cached discovery document - Default: 8096 (8 KiB)
+cache_max_doc_size = 8096
 
 [smtp]
-address = "localhost:25"
+# Display name for confirmation emails - Default: "Portier"
+from_name = "Portier"
 
-[sender]
-name = "Portier"
-address = "portier@example.com"
+# Sender address for confirmation emails - Default: (none)
+from_address = 
 
-[providers . "gmail.com"]
-discovery = "https://accounts.google.com/.well-known/openid-configuration"
-client_id = "1234567890-example-client-id.apps.googleusercontent.com"
-secret = "<your-secret-goes-here>"
-issuer = "accounts.google.com"
+# Outgoing mailserver address - Default: (none)
+server = 
+
+[providers."gmail.com"]
+# Google OAuth API Client ID - Default: (none)
+client_id = 
+
+# Google OAuth API Secret Key - Default: (none)
+secret = 
+
+# Google OpenID Connect discovery URL - Default: "https://accounts.google.com/.well-known/openid-configuration"
+discovery_url = "https://accounts.google.com/.well-known/openid-configuration"
+
+# Google OpenID Connect id_token issuer domain - Default: "accounts.google.com"
+issuer_domain = "accounts.google.com"
