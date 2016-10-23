@@ -4,6 +4,7 @@ extern crate toml;
 
 use std;
 use std::collections::HashMap;
+use std::env;
 use std::fs::File;
 use std::io::Read;
 
@@ -259,6 +260,92 @@ impl Builder {
                     provider.issuer_domain = values.issuer_domain;
                 }
             }
+        }
+
+        self
+    }
+
+    pub fn update_from_broker_env(&mut self) -> &mut Builder {
+        let env_config = EnvConfig::from_env();
+
+        // TODO: This is ripe for a macro...
+
+        if let Some(val) = env_config.broker_ip {
+            self.listen_ip = val
+        }
+
+        if let Some(val) = env_config.broker_port {
+            self.listen_port = val;
+        }
+
+        if let Some(val) = env_config.broker_public_url {
+            self.public_url = Some(val);
+        }
+
+        if let Some(val) = env_config.broker_token_ttl {
+            self.token_ttl = val;
+        }
+
+        if let Some(val) = env_config.broker_keyfiles {
+            // Should this append instead of replacing?
+            // Append seems more convenient, but everything else replaces.
+            self.keyfiles = val;
+        }
+
+        if let Some(val) = env_config.broker_redis_url {
+            self.redis_url = Some(val);
+        }
+
+        if let Some(val) = env_config.broker_session_ttl {
+            self.redis_session_ttl = val;
+        }
+
+        if let Some(val) = env_config.broker_cache_ttl {
+            self.redis_cache_ttl = val;
+        }
+
+        if let Some(val) = env_config.broker_cache_max_doc_size {
+            self.redis_cache_max_doc_size = val;
+        }
+
+        if let Some(val) = env_config.broker_from_name {
+            self.from_name = val;
+        }
+
+        if let Some(val) = env_config.broker_from_address {
+            self.from_address = Some(val);
+        }
+
+        if let Some(val) = env_config.broker_smtp_server {
+            self.smtp_server = Some(val);
+        }
+
+        if let Some(val) = env_config.broker_gmail_secret {
+            let provider = self.providers.entry("gmail.com".to_string())
+                .or_insert_with(|| ProviderBuilder::new());
+
+            provider.secret = Some(val);
+        }
+
+        if let Some(val) = env_config.broker_gmail_client {
+            let provider = self.providers.entry("gmail.com".to_string())
+                .or_insert_with(|| ProviderBuilder::new());
+
+            provider.client_id = Some(val);
+        }
+
+        if let Some(val) = env_config.broker_gmail_discovery {
+            let provider = self.providers.entry("gmail.com".to_string())
+                .or_insert_with(|| ProviderBuilder::new());
+
+            provider.discovery_url = Some(val);
+        }
+
+        if let Some(val) = env_config.broker_gmail_issuer {
+            let provider = self.providers.entry("gmail.com".to_string())
+                .or_insert_with(|| ProviderBuilder::new());
+
+            provider.issuer_domain = Some(val);
         }
 
         self
