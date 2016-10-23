@@ -3,6 +3,7 @@
 // See https://serde.rs/codegen-stable.html for more information.
 
 
+/// Intermediate structure for deserializing TOML files
 #[derive(Clone,Debug,Deserialize)]
 struct TomlConfig {
     server: Option<TomlServerTable>,
