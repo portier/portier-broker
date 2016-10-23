@@ -101,6 +101,108 @@ pub struct Provider {
 }
 
 
+pub struct Builder {
+    pub listen_ip: String,
+    pub listen_port: u16,
+    pub public_url: Option<String>,
+    pub token_ttl: u16,
+    pub keyfiles: Vec<String>,
+    pub redis_url: Option<String>,
+    pub redis_session_ttl: u16,
+    pub redis_cache_ttl: u16,
+    pub redis_cache_max_doc_size: u16,
+    pub from_name: String,
+    pub from_address: Option<String>,
+    pub smtp_server: Option<String>,
+    pub providers: HashMap<String, Provider>,
+}
+
+
+impl Builder {
+    pub fn new() -> Builder {
+        Builder {
+            listen_ip: "127.0.0.1".to_string(),
+            listen_port: 3333,
+            public_url: None,
+            token_ttl: 600,
+            keyfiles: Vec::new(),
+            redis_url: None,
+            redis_session_ttl: 900,
+            redis_cache_ttl: 3600,
+            redis_cache_max_doc_size: 8096,
+            from_name: "Portier".to_string(),
+            from_address: None,
+            smtp_server: None,
+            providers: HashMap::new(),
+        }
+    }
+
+    pub fn update_from_file(&mut self, path: &String) -> &mut Builder {
+        let mut file = File::open(path).unwrap();
+        let mut file_contents = String::new();
+        file.read_to_string(&mut file_contents).unwrap();
+
+        let toml_config: TomlConfig = toml::decode_str(&file_contents)
+            .expect("unable to parse config file");
+
+        self.listen_ip = toml_config.server.listen_ip;
+
+        self.listen_port = toml_config.server.listen_port;
+
+        self.public_url = Some(toml_config.server.public_url);
+
+        self.token_ttl = toml_config.crypto.token_ttl;
+
+        for path in toml_config.crypto.keyfiles.iter() {
+            self.keyfiles.push(path.clone());
+        }
+
+        self.redis_url = Some(toml_config.redis.url);
+
+        self.redis_session_ttl = toml_config.redis.session_ttl;
+
+        self.redis_cache_ttl = toml_config.redis.cache_ttl;
+
+        self.redis_cache_max_doc_size = toml_config.redis.cache_max_doc_size;
+
+        self.from_name = toml_config.smtp.from_name;
+
+        self.from_address = Some(toml_config.smtp.from_address);
+
+        self.smtp_server = Some(toml_config.smtp.server);
+
+        self
+    }
+
+    pub fn done(self) -> Config {
+        let keys = self.keyfiles.into_iter().filter_map(|path| {
+            crypto::NamedKey::from_file(&path).ok()
+        }).collect();
+
+        let store = store::Store::new(
+            &self.redis_url.unwrap(),
+            self.redis_cache_ttl as usize,
+            self.redis_session_ttl as usize,
+            self.redis_cache_max_doc_size as u64,
+        ).unwrap();
+
+        Config {
+            listen_ip: self.listen_ip,
+            listen_port: self.listen_port,
+            public_url: self.public_url.unwrap(),
+            token_ttl: self.token_ttl,
+            keys: keys,
+            store: store,
+            from_name: self.from_name,
+            from_address: self.from_address.unwrap(),
+            smtp_server: self.smtp_server.unwrap(),
+            providers: self.providers,
+            templates: Templates::default(),
+        }
+    }
+}
+
+
 pub struct Config {
     pub listen_ip: String,
     pub listen_port: u16,
@@ -113,57 +215,4 @@ pub struct Config {
     pub smtp_server: String,
     pub providers: HashMap<String, Provider>,
     pub templates: Templates,
-}
-
-
-/// Implementation with single method to read configuration from JSON.
-impl Config {
-    /// Read a TOML configuration file.
-    pub fn from_toml_file(file_name: &str) -> Result<Config, ConfigError> {
-        let mut file = try!(File::open(file_name));
-        let mut file_contents = String::new();
-        try!(file.read_to_string(&mut file_contents));
-
-        let toml_config: TomlConfig = toml::decode_str(&file_contents)
-            .expect("unable to parse config file");
-
-        let mut keys: Vec<crypto::NamedKey> = Vec::new();
-        for path in toml_config.crypto.keyfiles.iter() {
-            keys.push(try!(crypto::NamedKey::from_file(path)));
-        }
-
-        let store = try!(store::Store::new(
-            &toml_config.redis.url,
-            toml_config.redis.session_ttl as usize,
-            toml_config.redis.cache_ttl as usize,
-            toml_config.redis.cache_max_doc_size as u64
-        ));
-
-        let mut providers: HashMap<String, Provider> = HashMap::new();
-        for (domain, settings) in toml_config.providers.iter() {
-            let provider = Provider {
-                client_id: settings.client_id.clone(),
-                secret: settings.secret.clone(),
-                discovery_url: settings.discovery_url.clone(),
-                issuer_domain: settings.issuer_domain.clone(),
-            };
-
-            providers.insert(domain.to_string(), provider);
-        }
-
-
-        Ok(Config {
-            listen_ip: toml_config.server.listen_ip,
-            listen_port: toml_config.server.listen_port,
-            public_url: toml_config.server.public_url,
-            token_ttl: toml_config.crypto.token_ttl,
-            keys: keys,
-            store: store,
-            from_name: toml_config.smtp.from_name,
-            from_address: toml_config.smtp.from_address,
-            smtp_server: toml_config.smtp.server,
-            providers: providers,
-            templates: Templates::default(),
-        })
-    }
 }
