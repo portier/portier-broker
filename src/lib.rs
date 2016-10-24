@@ -105,12 +105,12 @@ fn return_to_relier(app: &Config, redirect_uri: &str, params: &[(&str, &str)])
     -> (hyper::status::StatusCode, modifiers::Header<ContentType>, String) {
     let data = mustache::MapBuilder::new()
         .insert_str("redirect_uri", redirect_uri)
-        .insert_map("params", |mut builder| {
+        .insert_vec("params", |mut builder| {
             for &param in params {
-                let (name, value) = param;
-                builder = builder
-                    .insert_str("name", name)
-                    .insert_str("value", value);
+                builder = builder.push_map(|builder| {
+                    let (name, value) = param;
+                    builder.insert_str("name", name).insert_str("value", value)
+                });
             }
             builder
         })
