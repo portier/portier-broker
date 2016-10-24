@@ -41,9 +41,62 @@ You will also need a Redis server and an outgoing SMTP server.
 Configuration
 -------------
 
-See ``config.toml.dist`` for an example configuration file. The example file
-includes reasonable default values for most settings, but you must explicitly
-set:
+See ``config.toml.dist`` for an example configuration file. The available values
+are:
+
+**[server] section:**
+
+============== ==================== ===========
+``config.ini`` Environment Variable Default
+============== ==================== ===========
+listen_ip      BROKER_IP            "127.0.0.1"
+listen_port    BROKER_PORT          3333
+public_url     BROKER_PUBLIC_URL    (none)
+============== ==================== ===========
+
+**[crypto] section:**
+
+============== ==================== ================
+``config.ini`` Environment Variable Default
+============== ==================== ================
+token_ttl      BROKER_TOKEN_TTL     600 (10 minutes)
+keyfiles       BROKER_KEYFILES      [] (empty array)
+============== ==================== ================
+
+**[redis] section:**
+
+================== ========================= ================
+``config.ini``     Environment Variable       Default
+================== ========================= ================
+url                BROKER_REDIS_URL          (none)
+session_ttl        BROKER_SESSION_TTL        900 (15 minutes)
+cache_ttl          BROKER_CACHE_TTL          3600 (1 hour)
+cache_max_doc_size BROKER_CACHE_MAX_DOC_SIZE 8096 (8 KiB)
+================== ========================= ================
+
+**[smtp] section:**
+
+============== ==================== ===========
+``config.ini`` Environment Variable Default
+============== ==================== ===========
+from_name      BROKER_FROM_NAME     "Portier"
+from_address   BROKER_FROM_ADDRESS  (none)
+server         BROKER_SMTP_SERVER   (none)
+============== ==================== ===========
+
+**[providers."gmail.com"] section:**
+
+============== ====================== ==============================================================
+``config.ini`` Environment Variable   Default
+============== ====================== ==============================================================
+client_id      BROKER_GMAIL_CLIENT    (none)
+secret         BROKER_GMAIL_SECRET    (none)
+discovery_url  BROKER_GMAIL_DISCOVERY "https://accounts.google.com/.well-known/openid-configuration"
+issuer_domain  BROKER_GMAIL_ISSUER    "accounts.google.com"
+============== ====================== ==============================================================
+
+The example configuration file, ``config.ini.dist``, includes reasonable default
+values for most settings, but you must explicitly set:
 
 * ``server.public_url``: The server's public-facing URL.
 * ``crypto.keyfiles``: An array of paths to encryption keys (create keys with

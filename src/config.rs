@@ -119,6 +119,7 @@ pub struct Builder {
 }
 
 
+#[derive(Clone)]
 pub struct ProviderBuilder {
     pub client_id: Option<String>,
     pub secret: Option<String>,
@@ -134,6 +135,15 @@ impl ProviderBuilder {
             secret: None,
             discovery_url: None,
             issuer_domain: None,
+        }
+    }
+
+    pub fn new_gmail() -> ProviderBuilder {
+        ProviderBuilder {
+            client_id: None,
+            secret: None,
+            discovery_url: Some("https://accounts.google.com/.well-known/openid-configuration".to_string()),
+            issuer_domain: Some("accounts.google.com".to_string()),
         }
     }
 
@@ -232,30 +242,35 @@ impl Builder {
 
         if let Some(table) = toml_config.providers {
             for (domain, values) in table {
+                let default = match domain.as_str() {
+                    "gmail.com" => ProviderBuilder::new_gmail(),
+                    _ => ProviderBuilder::new(),
+                };
+
                 if values.client_id.is_some() {
                     let provider = self.providers.entry(domain.clone())
-                        .or_insert_with(|| ProviderBuilder::new());
+                        .or_insert(default.clone());
 
                     provider.client_id = values.client_id;
                 }
 
                 if values.secret.is_some() {
                     let provider = self.providers.entry(domain.clone())
-                        .or_insert_with(|| ProviderBuilder::new());
+                        .or_insert(default.clone());
 
                     provider.secret = values.secret;
                 }
 
                 if values.discovery_url.is_some() {
                     let provider = self.providers.entry(domain.clone())
-                        .or_insert_with(|| ProviderBuilder::new());
+                        .or_insert(default.clone());
 
                     provider.discovery_url = values.discovery_url;
                 }
 
                 if values.issuer_domain.is_some() {
                     let provider = self.providers.entry(domain.clone())
-                        .or_insert_with(|| ProviderBuilder::new());
+                        .or_insert(default.clone());
 
                     provider.issuer_domain = values.issuer_domain;
                 }
@@ -342,28 +357,28 @@ impl Builder {
 
         if let Some(val) = env_config.broker_gmail_secret {
             let provider = self.providers.entry("gmail.com".to_string())
-                .or_insert_with(|| ProviderBuilder::new());
+                .or_insert_with(|| ProviderBuilder::new_gmail());
 
             provider.secret = Some(val);
         }
 
         if let Some(val) = env_config.broker_gmail_client {
             let provider = self.providers.entry("gmail.com".to_string())
-                .or_insert_with(|| ProviderBuilder::new());
+                .or_insert_with(|| ProviderBuilder::new_gmail());
 
             provider.client_id = Some(val);
         }
 
         if let Some(val) = env_config.broker_gmail_discovery {
             let provider = self.providers.entry("gmail.com".to_string())
-                .or_insert_with(|| ProviderBuilder::new());
+                .or_insert_with(|| ProviderBuilder::new_gmail());
 
             provider.discovery_url = Some(val);
         }
 
         if let Some(val) = env_config.broker_gmail_issuer {
             let provider = self.providers.entry("gmail.com".to_string())
-                .or_insert_with(|| ProviderBuilder::new());
+                .or_insert_with(|| ProviderBuilder::new_gmail());
 
             provider.issuer_domain = Some(val);
         }
