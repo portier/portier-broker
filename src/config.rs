@@ -1,5 +1,4 @@
 extern crate serde;
-extern crate serde_json;
 extern crate toml;
 
 use std;
@@ -17,7 +16,6 @@ include!(concat!(env!("OUT_DIR"), "/serde_types.rs"));
 #[derive(Debug)]
 pub enum ConfigError {
     Io(std::io::Error),
-    De(serde_json::error::Error),
     Store(&'static str),
 }
 
@@ -32,7 +30,6 @@ macro_rules! from_error {
 }
 
 from_error!(std::io::Error, Io);
-from_error!(serde_json::error::Error, De);
 from_error!(&'static str, Store);
 
 
