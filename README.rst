@@ -43,7 +43,6 @@ Here's an example configuration file:
     token_validity = 600
 
     [[keys]]
-    id = "base"
     file = "private.pem"
 
     [store]
@@ -74,7 +73,7 @@ Here's an example configuration file:
 **token_validity** is a value in seconds, that determines how long outgoing
 authentication tokens are allowed to live. Defaults to 600s, or 10 minutes.
 
-**keys** is a list of keys, with an ``id`` and ``file`` for each key.
+**keys** is a list of RSA private keys, with a ``file`` path for each key.
 Multiple keys can be used to implement key rotation. By default, the last key
 in the list will be used for signing the outgoing JWTs.
 

@@ -26,19 +26,25 @@ pub struct NamedKey {
 
 
 impl NamedKey {
-    /// Creates a NamedKey for the given key ID. Reads the key pair from the
-    /// PEM-encoded file named by the `file` argument.
-    pub fn from_file(id: &str, file: &str) -> Result<NamedKey, &'static str> {
+    /// Creates a NameKey by reading a `file` path and generating an `id`.
+    pub fn from_file(file: &str) -> Result<NamedKey, &'static str> {
         let file_res = File::open(file);
         if file_res.is_err() {
             return Err("could not open key file");
         }
         let private_key_file = file_res.unwrap();
-        let key_res = PKey::private_key_from_pem(&mut BufReader::new(private_key_file));
-        if key_res.is_err() {
-            return Err("could not instantiate private key");
+        match PKey::private_key_from_pem(&mut BufReader::new(private_key_file)) {
+            Err(_) => Err("could not instantiate private key"),
+            Ok(pkey) => {
+                let mut hasher = hash::Hasher::new(hash::Type::SHA256);
+                hasher.write(pkey.get_rsa().e().unwrap().to_vec().as_slice()).unwrap();
+                hasher.write(b".").unwrap();
+                hasher.write(pkey.get_rsa().n().unwrap().to_vec().as_slice()).unwrap();
+                let name = hasher.finish().to_base64(base64::URL_SAFE);
+
+                Ok(NamedKey { id: name, key: pkey })
+            }
         }
-        Ok(NamedKey { id: id.to_string(), key: key_res.unwrap() })
     }
 
     /// Create a JSON Web Signature (JWS) for the given JSON structure.

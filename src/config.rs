@@ -38,15 +38,13 @@ from_error!(serde_json::error::Error, De);
 from_error!(&'static str, Store);
 
 
-/// Takes a JSON object containing "id" and "file" properties, and attempts
-/// to instantiate the `NamedKey` object matching the property values.
+/// Instantiate a `NamedKey` object from a value with a `file` property.
 impl Deserialize for crypto::NamedKey {
     fn deserialize<D>(de: &mut D) -> Result<crypto::NamedKey, D::Error>
                       where D: serde::Deserializer {
         let value: Value = try!(serde::Deserialize::deserialize(de));
-        let id = value.find("id").unwrap().as_str().unwrap();
         let file_name = value.find("file").unwrap().as_str().unwrap();
-        let res = crypto::NamedKey::from_file(id, file_name);
+        let res = crypto::NamedKey::from_file(file_name);
         res.or_else(|err| Err(serde::de::Error::custom(err)))
     }
 }
