@@ -50,3 +50,30 @@ struct TomlProviderTable {
     discovery_url: Option<String>,
     issuer_domain: Option<String>,
 }
+
+
+/// Intermediate structure for deserializing environment variables
+///
+/// Environment variable `FOO_BAR` deserializes in to struct member `foo_bar`.
+/// These vars have high precendence and must be prefixed to avoid collisions.
+#[derive(Clone,Debug,Deserialize)]
+struct EnvConfig {
+    broker_ip: Option<String>,
+    broker_port: Option<u16>,
+    broker_public_url: Option<String>,
+    broker_token_ttl: Option<u16>,
+    broker_keyfiles: Option<Vec<String>>,
+    broker_redis_url: Option<String>,
+    broker_session_ttl: Option<u16>,
+    broker_cache_ttl: Option<u16>,
+    broker_cache_max_doc_size: Option<u16>,
+    broker_from_name: Option<String>,
+    broker_from_address: Option<String>,
+    broker_smtp_server: Option<String>,
+    broker_smtp_username: Option<String>,
+    broker_smtp_password: Option<String>,
+    broker_gmail_client: Option<String>,
+    broker_gmail_secret: Option<String>,
+    broker_gmail_discovery: Option<String>,
+    broker_gmail_issuer: Option<String>,
+}

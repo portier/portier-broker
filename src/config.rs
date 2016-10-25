@@ -3,6 +3,7 @@ extern crate toml;
 
 use std;
 use std::collections::HashMap;
+use std::env;
 use std::fs::File;
 use std::io::Read;
 
@@ -240,6 +241,41 @@ impl ConfigBuilder {
         Ok(self)
     }
 
+    pub fn update_from_broker_env(&mut self) -> &mut ConfigBuilder {
+        let env_config = EnvConfig::from_env();
+
+        if let Some(val) = env_config.broker_ip { self.listen_ip = val }
+        if let Some(val) = env_config.broker_port { self.listen_port = val; }
+        if let Some(val) = env_config.broker_public_url { self.public_url = Some(val); }
+
+        if let Some(val) = env_config.broker_token_ttl { self.token_ttl = val; }
+        if let Some(val) = env_config.broker_keyfiles { self.keyfiles = val; }
+
+        if let Some(val) = env_config.broker_redis_url { self.redis_url = Some(val); }
+        if let Some(val) = env_config.broker_session_ttl { self.redis_session_ttl = val; }
+        if let Some(val) = env_config.broker_cache_ttl { self.redis_cache_ttl = val; }
+        if let Some(val) = env_config.broker_cache_max_doc_size { self.redis_cache_max_doc_size = val; }
+
+        if let Some(val) = env_config.broker_from_name { self.from_name = val; }
+        if let Some(val) = env_config.broker_from_address { self.from_address = Some(val); }
+        if let Some(val) = env_config.broker_smtp_server { self.smtp_server = Some(val); }
+        if let Some(val) = env_config.broker_smtp_username { self.smtp_username = Some(val); }
+        if let Some(val) = env_config.broker_smtp_password { self.smtp_password = Some(val); }
+
+        // New scope to avoid mutably borrowing `self` twice
+        {
+            let mut gmail_provider = self.providers.entry("gmail.com".to_string())
+                .or_insert_with(|| ProviderBuilder::new());
+
+            if let Some(val) = env_config.broker_gmail_secret { gmail_provider.secret = Some(val); }
+            if let Some(val) = env_config.broker_gmail_client { gmail_provider.client_id = Some(val); }
+            if let Some(val) = env_config.broker_gmail_discovery { gmail_provider.discovery_url = Some(val); }
+            if let Some(val) = env_config.broker_gmail_issuer { gmail_provider.issuer_domain = Some(val); }
+        }
+
+        self
+    }
+
     pub fn done(self) -> Result<Config, ConfigError> {
         // Additional validations
         if self.smtp_username.is_none() != self.smtp_password.is_none() {
@@ -282,5 +318,38 @@ impl ConfigBuilder {
             providers: providers,
             templates: Templates::default(),
         })
+    }
+}
+
+
+impl EnvConfig {
+    /// Manually deserialize from environment variables
+    ///
+    /// Redundant once [Envy](https://crates.io/crates/envy) supports Serde 0.8
+    pub fn from_env() -> EnvConfig {
+        EnvConfig {
+            broker_ip: env::var("BROKER_IP").ok(),
+            broker_port: env::var("BROKER_PORT").ok().and_then(|x| x.parse().ok()),
+            broker_public_url: env::var("BROKER_PUBLIC_URL").ok(),
+
+            broker_token_ttl: env::var("BROKER_TOKEN_TTL").ok().and_then(|x| x.parse().ok()),
+            broker_keyfiles: env::var("BROKER_KEYFILES").ok().map(|x| x.split(',').map(|x| x.to_string()).collect()),
+
+            broker_redis_url: env::var("BROKER_REDIS_URL").ok(),
+            broker_session_ttl: env::var("BROKER_SESSION_TTL").ok().and_then(|x| x.parse().ok()),
+            broker_cache_ttl: env::var("BROKER_CACHE_TTL").ok().and_then(|x| x.parse().ok()),
+            broker_cache_max_doc_size: env::var("BROKER_CACHE_MAX_DOC_SIZE").ok().and_then(|x| x.parse().ok()),
+
+            broker_from_name: env::var("BROKER_FROM_NAME").ok(),
+            broker_from_address: env::var("BROKER_FROM_ADDRESS").ok(),
+            broker_smtp_server: env::var("BROKER_SMTP_SERVER").ok(),
+            broker_smtp_username: env::var("BROKER_SMTP_USERNAME").ok(),
+            broker_smtp_password: env::var("BROKER_SMTP_PASSWORD").ok(),
+
+            broker_gmail_client: env::var("BROKER_GMAIL_CLIENT").ok(),
+            broker_gmail_secret: env::var("BROKER_GMAIL_SECRET").ok(),
+            broker_gmail_discovery: env::var("BROKER_GMAIL_DISCOVERY").ok(),
+            broker_gmail_issuer: env::var("BROKER_GMAIL_ISSUER").ok(),
+        }
     }
 }
