@@ -130,7 +130,41 @@ pub struct ConfigBuilder {
     pub smtp_server: Option<String>,
     pub smtp_username: Option<String>,
     pub smtp_password: Option<String>,
-    pub providers: HashMap<String, Provider>,
+    pub providers: HashMap<String, ProviderBuilder>,
+}
+
+
+pub struct ProviderBuilder {
+    pub client_id: Option<String>,
+    pub secret: Option<String>,
+    pub discovery_url: Option<String>,
+    pub issuer_domain: Option<String>,
+}
+
+
+impl ProviderBuilder {
+    pub fn new() -> ProviderBuilder {
+        ProviderBuilder {
+            client_id: None,
+            secret: None,
+            discovery_url: None,
+            issuer_domain: None,
+        }
+    }
+
+    pub fn done(self) -> Option<Provider> {
+        match (self.client_id, self.secret, self.discovery_url, self.issuer_domain) {
+            (Some(id), Some(secret), Some(url), Some(iss)) => {
+                Some(Provider {
+                    client_id: id,
+                    secret: secret,
+                    discovery_url: url,
+                    issuer_domain: iss,
+                })
+            }
+            _ => None
+        }
+    }
 }
 
 
@@ -193,14 +227,13 @@ impl ConfigBuilder {
 
         if let Some(table) = toml_config.providers {
             for (domain, values) in table {
-                if let (Some(id), Some(secret), Some(disco), Some(iss)) = (values.client_id, values.secret, values.discovery_url, values.issuer_domain) {
-                    self.providers.insert(domain, Provider {
-                        client_id: id,
-                        secret: secret,
-                        discovery_url: disco,
-                        issuer_domain: iss,
-                    });
-                }
+                let provider = self.providers.entry(domain.clone())
+                    .or_insert_with(|| ProviderBuilder::new());
+
+                if values.client_id.is_some() { provider.client_id = values.client_id; }
+                if values.secret.is_some() { provider.secret = values.secret; }
+                if values.discovery_url.is_some() { provider.discovery_url = values.discovery_url; }
+                if values.issuer_domain.is_some() { provider.issuer_domain = values.issuer_domain; }
             }
         }
 
@@ -216,7 +249,7 @@ impl ConfigBuilder {
         }
 
         // Child structs
-        let keys = self.keyfiles.into_iter().filter_map(|path| {
+        let keys = self.keyfiles.iter().filter_map(|path| {
             crypto::NamedKey::from_file(&path).ok()
         }).collect();
 
@@ -226,6 +259,13 @@ impl ConfigBuilder {
             self.redis_session_ttl as usize,
             self.redis_cache_max_doc_size as u64,
         ).unwrap();
+
+        let mut providers = HashMap::new();
+        for (domain, builder) in self.providers {
+            if let Some(provider) = builder.done() {
+                providers.insert(domain.clone(), provider);
+            }
+        }
 
         Ok(Config {
             listen_ip: self.listen_ip,
@@ -239,7 +279,7 @@ impl ConfigBuilder {
             smtp_server: self.smtp_server.unwrap(),
             smtp_username: self.smtp_username,
             smtp_password: self.smtp_password,
-            providers: self.providers,
+            providers: providers,
             templates: Templates::default(),
         })
     }
