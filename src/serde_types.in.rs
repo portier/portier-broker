@@ -6,47 +6,47 @@
 /// Intermediate structure for deserializing TOML files
 #[derive(Clone,Debug,Deserialize)]
 struct TomlConfig {
-    server: TomlServerTable,
-    crypto: TomlCryptoTable,
-    redis: TomlRedisTable,
-    smtp: TomlSmtpTable,
-    providers: HashMap<String, TomlProviderTable>,
+    server: Option<TomlServerTable>,
+    crypto: Option<TomlCryptoTable>,
+    redis: Option<TomlRedisTable>,
+    smtp: Option<TomlSmtpTable>,
+    providers: Option<HashMap<String, TomlProviderTable>>,
 }
 
 #[derive(Clone,Debug,Deserialize)]
 struct TomlServerTable {
-    listen_ip: String,
-    listen_port: u16,
-    public_url: String,
+    listen_ip: Option<String>,
+    listen_port: Option<u16>,
+    public_url: Option<String>,
 }
 
 #[derive(Clone,Debug,Deserialize)]
 struct TomlCryptoTable {
-    token_ttl: u16,
-    keyfiles: Vec<String>,
+    token_ttl: Option<u16>,
+    keyfiles: Option<Vec<String>>,
 }
 
 #[derive(Clone,Debug,Deserialize)]
 struct TomlRedisTable {
-    url: String,
-    session_ttl: u16,
-    cache_ttl: u16,
-    cache_max_doc_size: u16,
+    url: Option<String>,
+    session_ttl: Option<u16>,
+    cache_ttl: Option<u16>,
+    cache_max_doc_size: Option<u16>,
 }
 
 #[derive(Clone,Debug,Deserialize)]
 struct TomlSmtpTable {
-    from_name: String,
-    from_address: String,
-    server: String,
+    from_name: Option<String>,
+    from_address: Option<String>,
+    server: Option<String>,
     username: Option<String>,
     password: Option<String>,
 }
 
 #[derive(Clone,Debug,Deserialize)]
 struct TomlProviderTable {
-    client_id: String,
-    secret: String,
-    discovery_url: String,
-    issuer_domain: String,
+    client_id: Option<String>,
+    secret: Option<String>,
+    discovery_url: Option<String>,
+    issuer_domain: Option<String>,
 }
