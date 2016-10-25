@@ -6,7 +6,7 @@ use super::error::{BrokerError, BrokerResult};
 use super::lettre::email::EmailBuilder;
 use super::lettre::transport::EmailTransport;
 use super::lettre::transport::smtp::SmtpTransportBuilder;
-use super::{AppConfig, create_jwt};
+use super::{Config, create_jwt};
 use super::crypto::session_id;
 use std::collections::HashMap;
 use std::iter::Iterator;
@@ -36,7 +36,7 @@ const CODE_CHARS: &'static [char] = &[
 ///
 /// Returns the session ID, so a form can be rendered as an alternative way
 /// to confirm, without following the link.
-pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &Url)
+pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &Url)
                -> BrokerResult<String> {
 
     let session = session_id(&email_addr, client_id);
@@ -57,7 +57,7 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
 
     // Generate the URL used to verify email address ownership.
     let href = format!("{}/confirm?session={}&code={}",
-                       app.base_url,
+                       app.public_url,
                        utf8_percent_encode(&session, QUERY_ENCODE_SET),
                        utf8_percent_encode(&chars, QUERY_ENCODE_SET));
 
@@ -70,13 +70,13 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
     ];
     let email = EmailBuilder::new()
         .to(email_addr.to_string().as_str())
-        .from((&*app.sender.address, &*app.sender.name))
+        .from((&*app.from_address, &*app.from_name))
         .alternative(&app.templates.email_html.render(params),
                      &app.templates.email_text.render(params))
         .subject(&format!("Finish logging in to {}", client_id))
         .build().unwrap();
-    let mut builder = try!(SmtpTransportBuilder::new(app.smtp.address.as_str()));
-    if let (&Some(ref username), &Some(ref password)) = (&app.smtp.username, &app.smtp.password) {
+    let mut builder = try!(SmtpTransportBuilder::new(app.smtp_server.as_str()));
+    if let (&Some(ref username), &Some(ref password)) = (&app.smtp_username, &app.smtp_password) {
         builder = builder.credentials(username, password);
     }
     let mut mailer = builder.build();
@@ -90,7 +90,7 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
 ///
 /// Checks the one-time pad against the stored session data. If a match,
 /// returns the Identity Token; otherwise, returns an error message.
-pub fn verify(app: &AppConfig, stored: &HashMap<String, String>, code: &str)
+pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
               -> BrokerResult<(String, String)> {
 
     if code != &stored["code"] {

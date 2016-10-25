@@ -3,74 +3,77 @@
 // See https://serde.rs/codegen-stable.html for more information.
 
 
-// Newtype so we can implement Deserialize for templates.
-pub struct Template(mustache::Template);
+/// Intermediate structure for deserializing TOML files
+#[derive(Clone,Debug,Deserialize)]
+struct TomlConfig {
+    server: Option<TomlServerTable>,
+    crypto: Option<TomlCryptoTable>,
+    redis: Option<TomlRedisTable>,
+    smtp: Option<TomlSmtpTable>,
+    providers: Option<HashMap<String, TomlProviderTable>>,
+}
 
+#[derive(Clone,Debug,Deserialize)]
+struct TomlServerTable {
+    listen_ip: Option<String>,
+    listen_port: Option<u16>,
+    public_url: Option<String>,
+}
 
-/// Contains the SMTP server connection settings.
-#[derive(Deserialize)]
-pub struct Smtp {
-    pub address: String,
-    pub username: Option<String>,
-    pub password: Option<String>,
+#[derive(Clone,Debug,Deserialize)]
+struct TomlCryptoTable {
+    token_ttl: Option<u16>,
+    keyfiles: Option<Vec<String>>,
+}
+
+#[derive(Clone,Debug,Deserialize)]
+struct TomlRedisTable {
+    url: Option<String>,
+    session_ttl: Option<u16>,
+    cache_ttl: Option<u16>,
+    cache_max_doc_size: Option<u16>,
+}
+
+#[derive(Clone,Debug,Deserialize)]
+struct TomlSmtpTable {
+    from_name: Option<String>,
+    from_address: Option<String>,
+    server: Option<String>,
+    username: Option<String>,
+    password: Option<String>,
+}
+
+#[derive(Clone,Debug,Deserialize)]
+struct TomlProviderTable {
+    client_id: Option<String>,
+    secret: Option<String>,
+    discovery_url: Option<String>,
+    issuer_domain: Option<String>,
 }
 
 
-/// Represents an email address.
-#[derive(Deserialize)]
-pub struct Email {
-    pub address: String,
-    pub name: String,
-}
-
-
-/// Represents an OpenID Connect provider.
-#[derive(Deserialize)]
-pub struct Provider {
-    pub discovery: String,
-    pub client_id: String,
-    pub secret: String,
-    pub issuer: String,
-}
-
-
-// Contains all templates we use in compiled form.
-pub struct Templates {
-    /// Page displayed when the confirmation email was sent.
-    pub confirm_email: Template,
-    /// HTML formatted email containing the one-type pad.
-    pub email_html: Template,
-    /// Plain text email containing the one-type pad.
-    pub email_text: Template,
-    /// The error page template.
-    pub error: Template,
-    /// A dummy form used to redirect back to the RP with a POST request.
-    pub forward: Template,
-}
-
-
-/// Holds runtime configuration data for this daemon instance.
-#[derive(Deserialize)]
-pub struct AppConfig {
-    /// Address to listen on
-    pub listen_ip: String,
-    /// Port to listen on
-    pub listen_port: u16,
-    /// Origin of this instance, used for constructing URLs
-    pub base_url: String,
-    /// Signing keys
-    pub keys: Vec<crypto::NamedKey>,
-    /// Redis Client
-    pub store: store::Store,
-    /// SMTP client
-    pub smtp: Smtp,
-    /// From address for email
-    pub sender: Email,
-    /// JWT validity duration, in seconds
-    pub token_validity: usize,
-    /// Mapping of Domain -> OIDC Provider
-    pub providers: HashMap<String, Provider>,
-    /// Template files
-    #[serde(skip_deserializing)]
-    pub templates: Templates,
+/// Intermediate structure for deserializing environment variables
+///
+/// Environment variable `FOO_BAR` deserializes in to struct member `foo_bar`.
+/// These vars have high precendence and must be prefixed to avoid collisions.
+#[derive(Clone,Debug,Deserialize)]
+struct EnvConfig {
+    broker_ip: Option<String>,
+    broker_port: Option<u16>,
+    broker_public_url: Option<String>,
+    broker_token_ttl: Option<u16>,
+    broker_keyfiles: Option<Vec<String>>,
+    broker_redis_url: Option<String>,
+    broker_session_ttl: Option<u16>,
+    broker_cache_ttl: Option<u16>,
+    broker_cache_max_doc_size: Option<u16>,
+    broker_from_name: Option<String>,
+    broker_from_address: Option<String>,
+    broker_smtp_server: Option<String>,
+    broker_smtp_username: Option<String>,
+    broker_smtp_password: Option<String>,
+    broker_gmail_client: Option<String>,
+    broker_gmail_secret: Option<String>,
+    broker_gmail_discovery: Option<String>,
+    broker_gmail_issuer: Option<String>,
 }
