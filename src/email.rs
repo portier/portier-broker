@@ -57,7 +57,7 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
 
     // Generate the URL used to verify email address ownership.
     let href = format!("{}/confirm?session={}&code={}",
-                       app.base_url,
+                       app.public_url,
                        utf8_percent_encode(&session, QUERY_ENCODE_SET),
                        utf8_percent_encode(&chars, QUERY_ENCODE_SET));
 
@@ -70,12 +70,12 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
     ];
     let email = EmailBuilder::new()
         .to(email_addr.to_string().as_str())
-        .from((&*app.sender_address, &*app.sender_name))
+        .from((&*app.from_address, &*app.from_name))
         .alternative(&app.templates.email_html.render(params),
                      &app.templates.email_text.render(params))
         .subject(&format!("Finish logging in to {}", client_id))
         .build().unwrap();
-    let mut builder = try!(SmtpTransportBuilder::new(app.smtp_address.as_str()));
+    let mut builder = try!(SmtpTransportBuilder::new(app.smtp_server.as_str()));
     if let (&Some(ref username), &Some(ref password)) = (&app.smtp_username, &app.smtp_password) {
         builder = builder.credentials(username, password);
     }

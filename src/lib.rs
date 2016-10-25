@@ -227,13 +227,13 @@ broker_handler!(WellKnownHandler, |_app, req| {
 /// Iron handler to return the OpenID Discovery document.
 ///
 /// Most of this is hard-coded for now, although the URLs are constructed by
-/// using the base URL as configured in the `base_url` configuration value.
+/// using the base URL as configured in the `public_url` configuration value.
 broker_handler!(OIDConfigHandler, |app, _req| {
     json_response(&ObjectBuilder::new()
-        .insert("issuer", &app.base_url)
+        .insert("issuer", &app.public_url)
         .insert("authorization_endpoint",
-                format!("{}/auth", app.base_url))
-        .insert("jwks_uri", format!("{}/keys.json", app.base_url))
+                format!("{}/auth", app.public_url))
+        .insert("jwks_uri", format!("{}/keys.json", app.public_url))
         .insert("scopes_supported", vec!["openid", "email"])
         .insert("claims_supported",
                 vec!["aud", "email", "email_verified", "exp", "iat", "iss", "sub"])
@@ -330,9 +330,9 @@ fn create_jwt(app: &Config, email: &str, origin: &str, nonce: &str) -> String {
         .insert("aud", origin)
         .insert("email", email)
         .insert("email_verified", email)
-        .insert("exp", now + app.token_validity as i64)
+        .insert("exp", now + app.token_ttl as i64)
         .insert("iat", now)
-        .insert("iss", &app.base_url)
+        .insert("iss", &app.public_url)
         .insert("sub", email)
         .insert("nonce", nonce)
         .build();

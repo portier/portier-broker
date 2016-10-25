@@ -93,21 +93,21 @@ impl Default for Templates {
 pub struct Provider {
     pub client_id: String,
     pub secret: String,
-    pub discovery: String,
-    pub issuer: String,
+    pub discovery_url: String,
+    pub issuer_domain: String,
 }
 
 
 pub struct Config {
     pub listen_ip: String,
     pub listen_port: u16,
-    pub base_url: String,
-    pub token_validity: u16,
+    pub public_url: String,
+    pub token_ttl: u16,
     pub keys: Vec<crypto::NamedKey>,
     pub store: store::Store,
-    pub sender_name: String,
-    pub sender_address: String,
-    pub smtp_address: String,
+    pub from_name: String,
+    pub from_address: String,
+    pub smtp_server: String,
     pub smtp_username: Option<String>,
     pub smtp_password: Option<String>,
     pub providers: HashMap<String, Provider>,
@@ -149,8 +149,8 @@ impl Config {
             let provider = Provider {
                 client_id: settings.client_id.clone(),
                 secret: settings.secret.clone(),
-                discovery: settings.discovery_url.clone(),
-                issuer: settings.issuer_domain.clone(),
+                discovery_url: settings.discovery_url.clone(),
+                issuer_domain: settings.issuer_domain.clone(),
             };
 
             providers.insert(domain.to_string(), provider);
@@ -160,13 +160,13 @@ impl Config {
         Ok(Config {
             listen_ip: toml_config.server.listen_ip,
             listen_port: toml_config.server.listen_port,
-            base_url: toml_config.server.public_url,
-            token_validity: toml_config.crypto.token_ttl,
+            public_url: toml_config.server.public_url,
+            token_ttl: toml_config.crypto.token_ttl,
             keys: keys,
             store: store,
-            sender_name: toml_config.smtp.from_name,
-            sender_address: toml_config.smtp.from_address,
-            smtp_address: toml_config.smtp.server,
+            from_name: toml_config.smtp.from_name,
+            from_address: toml_config.smtp.from_address,
+            smtp_server: toml_config.smtp.server,
             smtp_username: toml_config.smtp.username,
             smtp_password: toml_config.smtp.password,
             providers: providers,

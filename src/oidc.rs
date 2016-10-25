@@ -68,7 +68,7 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
             &app.store,
             CacheKey::Discovery { domain: &email_addr.domain },
             &client,
-            &provider.discovery
+            &provider.discovery_url
         ).map_err(|e| {
             BrokerError::Provider(format!("could not fetch {}'s discovery document: {}",
                                           domain, e.description()))
@@ -87,7 +87,7 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
         "&scope=",
         &utf8_percent_encode("openid email", QUERY_ENCODE_SET).to_string(),
         "&redirect_uri=",
-        &utf8_percent_encode(&format!("{}/callback", &app.base_url),
+        &utf8_percent_encode(&format!("{}/callback", &app.public_url),
                              QUERY_ENCODE_SET).to_string(),
         "&state=",
         &utf8_percent_encode(&session, QUERY_ENCODE_SET).to_string(),
@@ -154,7 +154,7 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
             &app.store,
             CacheKey::Discovery { domain: domain },
             &client,
-            &provider.discovery
+            &provider.discovery_url
         ).map_err(|e| {
             BrokerError::Provider(format!("could not fetch {}'s discovery document: {}",
                                           domain, e.description()))
@@ -175,7 +175,7 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
         "&client_secret=",
         &utf8_percent_encode(&provider.secret, QUERY_ENCODE_SET).to_string(),
         "&redirect_uri=",
-        &utf8_percent_encode(&format!("{}/callback", &app.base_url),
+        &utf8_percent_encode(&format!("{}/callback", &app.public_url),
                              QUERY_ENCODE_SET).to_string(),
         "&grant_type=authorization_code",
     ].join("");
@@ -225,8 +225,8 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
     let aud = try_get_json_field!(jwt_payload, "aud", as_str, descr);
     let token_addr = try_get_json_field!(jwt_payload, "email", as_str, descr);
     let exp = try_get_json_field!(jwt_payload, "exp", as_i64, descr);
-    let issuer_origin = vec!["https://", &provider.issuer].join("");
-    assert!(iss == provider.issuer || iss == issuer_origin);
+    let issuer_origin = vec!["https://", &provider.issuer_domain].join("");
+    assert!(iss == provider.issuer_domain || iss == issuer_origin);
     assert!(aud == provider.client_id);
     assert!(canonicalized(token_addr) == canonicalized(&email_addr.to_string()));
     let now = now_utc().to_timespec().sec;
