@@ -33,7 +33,7 @@ use urlencoded::{UrlEncodedBody, UrlEncodedQuery};
 
 pub mod error;
 pub mod config;
-pub use config::AppConfig;
+pub use config::Config;
 pub mod crypto;
 pub mod email;
 pub mod oidc;
@@ -50,17 +50,17 @@ impl typemap::Key for RedirectUri { type Value = Url; }
 
 
 /// Macro that creates Handler implementations that log the request,
-/// and keep a reference to the AppConfig.
+/// and keep a reference to the Config.
 macro_rules! broker_handler {
     ( $name:ident , | $app:ident, $req:ident | $body:block ) => {
         pub struct $name {
-            pub app: Arc<AppConfig>,
+            pub app: Arc<Config>,
         }
         impl $name {
-            pub fn new(app: &Arc<AppConfig>) -> Self {
+            pub fn new(app: &Arc<Config>) -> Self {
                 $name { app: app.clone() }
             }
-            fn handle_body($app: &AppConfig, $req: &mut Request)
+            fn handle_body($app: &Config, $req: &mut Request)
                 -> BrokerResult<Response> $body
         }
         impl Handler for $name {
@@ -96,7 +96,7 @@ macro_rules! try_get_param {
 /// RP's `redirect_uri` as soon as the page has loaded.
 ///
 /// The return value is a tuple of response modifiers.
-fn return_to_relier(app: &AppConfig, redirect_uri: &str, params: &[(&str, &str)])
+fn return_to_relier(app: &Config, redirect_uri: &str, params: &[(&str, &str)])
     -> (hyper::status::StatusCode, modifiers::Header<ContentType>, String) {
     let data = mustache::MapBuilder::new()
         .insert_str("redirect_uri", redirect_uri)
@@ -135,7 +135,7 @@ fn return_to_relier(app: &AppConfig, redirect_uri: &str, params: &[(&str, &str)]
 ///
 /// The large match-statement below handles all these scenario's properly,
 /// and sets proper response codes for each category.
-fn handle_error(app: &AppConfig, req: &mut Request, err: BrokerError) -> IronResult<Response> {
+fn handle_error(app: &Config, req: &mut Request, err: BrokerError) -> IronResult<Response> {
     let redirect_uri = req.extensions.remove::<RedirectUri>().map(|url| url.to_string());
     match (err, redirect_uri) {
         (err @ BrokerError::Input(_), Some(redirect_uri)) => {
@@ -324,7 +324,7 @@ broker_handler!(AuthHandler, |app, req| {
 ///
 /// Builds the JSON payload, then signs it using the last key provided in
 /// the configuration object.
-fn create_jwt(app: &AppConfig, email: &str, origin: &str, nonce: &str) -> String {
+fn create_jwt(app: &Config, email: &str, origin: &str, nonce: &str) -> String {
     let now = now_utc().to_timespec().sec;
     let payload = &ObjectBuilder::new()
         .insert("aud", origin)

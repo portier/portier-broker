@@ -6,7 +6,7 @@ use super::error::{BrokerError, BrokerResult};
 use super::lettre::email::EmailBuilder;
 use super::lettre::transport::EmailTransport;
 use super::lettre::transport::smtp::SmtpTransportBuilder;
-use super::{AppConfig, create_jwt};
+use super::{Config, create_jwt};
 use super::crypto::session_id;
 use std::collections::HashMap;
 use std::iter::Iterator;
@@ -36,7 +36,7 @@ const CODE_CHARS: &'static [char] = &[
 ///
 /// Returns the session ID, so a form can be rendered as an alternative way
 /// to confirm, without following the link.
-pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &Url)
+pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &Url)
                -> BrokerResult<String> {
 
     let session = session_id(&email_addr, client_id);
@@ -90,7 +90,7 @@ pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce
 ///
 /// Checks the one-time pad against the stored session data. If a match,
 /// returns the Identity Token; otherwise, returns an error message.
-pub fn verify(app: &AppConfig, stored: &HashMap<String, String>, code: &str)
+pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
               -> BrokerResult<(String, String)> {
 
     if code != &stored["code"] {

@@ -8,7 +8,7 @@ use super::error::{BrokerError, BrokerResult};
 use super::hyper::client::Client as HttpClient;
 use super::hyper::header::ContentType as HyContentType;
 use super::hyper::header::Headers;
-use super::{AppConfig, create_jwt};
+use super::{Config, create_jwt};
 use super::crypto::{session_id, verify_jws};
 use super::store_cache::CacheKey;
 use time::now_utc;
@@ -35,14 +35,14 @@ macro_rules! try_get_json_field {
 /// Helper method to issue an OAuth authorization request.
 ///
 /// When an authentication request comes in and matches one of the "famous"
-/// identity providers configured in the `AppConfig`, we redirect the client
+/// identity providers configured in the `Config`, we redirect the client
 /// to an Authentication Request URL, which we discover by reading the
 /// provider's configured Discovery URL. We pass in the client ID we received
 /// when pre-registering for the provider, as well as a callback URL which the
 /// user will be redirected back to after confirming (or denying) the
 /// Authentication Request. Included in the request is a nonce which we can
 /// later use to definitively match the callback to this request.
-pub fn request(app: &AppConfig, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &Url)
+pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &Url)
                -> BrokerResult<Url> {
 
     let session = session_id(&email_addr, client_id);
@@ -134,7 +134,7 @@ pub fn canonicalized(email: &str) -> String {
 /// Match the returned email address and nonce against our Redis data, then
 /// extract the identity token returned by the provider and verify it. Return
 /// an identity token for the RP if successful, or an error message otherwise.
-pub fn verify(app: &AppConfig, stored: &HashMap<String, String>, code: &str)
+pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
               -> BrokerResult<(String, String)> {
 
     let email_addr = EmailAddress::new(&stored["email"]).unwrap();

@@ -32,7 +32,7 @@ pub struct Provider {
 
 /// Holds runtime configuration data for this daemon instance.
 #[derive(Deserialize)]
-pub struct AppConfig {
+pub struct Config {
     /// Address to listen on
     pub listen_ip: String,
     /// Port to listen on

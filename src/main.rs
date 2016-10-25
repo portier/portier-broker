@@ -53,7 +53,7 @@ fn main() {
 
     // Read the configuration from the provided file.
     let app = Arc::new(
-        broker::AppConfig::from_toml_file(&args.arg_CONFIG).unwrap()
+        broker::Config::from_toml_file(&args.arg_CONFIG).unwrap()
     );
 
     let router = router!{

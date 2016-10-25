@@ -122,13 +122,13 @@ impl Default for Templates {
 
 
 /// Implementation with single method to read configuration from JSON.
-impl AppConfig {
+impl Config {
     /// Read a TOML configuration file.
-    pub fn from_toml_file(file_name: &str) -> Result<AppConfig, ConfigError> {
+    pub fn from_toml_file(file_name: &str) -> Result<Config, ConfigError> {
         let mut file = try!(File::open(file_name));
         let mut file_contents = String::new();
         try!(file.read_to_string(&mut file_contents));
-        let app: AppConfig = toml::decode_str(&file_contents).unwrap();
+        let app: Config = toml::decode_str(&file_contents).unwrap();
 
         // Additional validations.
         if app.smtp.username.is_none() != app.smtp.password.is_none() {
