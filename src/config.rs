@@ -135,6 +135,7 @@ pub struct ConfigBuilder {
 }
 
 
+#[derive(Clone)]
 pub struct ProviderBuilder {
     pub client_id: Option<String>,
     pub secret: Option<String>,
@@ -150,6 +151,15 @@ impl ProviderBuilder {
             secret: None,
             discovery_url: None,
             issuer_domain: None,
+        }
+    }
+
+    pub fn new_gmail() -> ProviderBuilder {
+        ProviderBuilder {
+            client_id: None,
+            secret: None,
+            discovery_url: Some("https://accounts.google.com/.well-known/openid-configuration".to_string()),
+            issuer_domain: Some("accounts.google.com".to_string()),
         }
     }
 
@@ -229,7 +239,10 @@ impl ConfigBuilder {
         if let Some(table) = toml_config.providers {
             for (domain, values) in table {
                 let provider = self.providers.entry(domain.clone())
-                    .or_insert_with(|| ProviderBuilder::new());
+                    .or_insert(match domain.as_str() {
+                        "gmail.com" => ProviderBuilder::new_gmail(),
+                        _ => ProviderBuilder::new(),
+                    });
 
                 if values.client_id.is_some() { provider.client_id = values.client_id; }
                 if values.secret.is_some() { provider.secret = values.secret; }
@@ -286,7 +299,7 @@ impl ConfigBuilder {
         // New scope to avoid mutably borrowing `self` twice
         {
             let mut gmail_provider = self.providers.entry("gmail.com".to_string())
-                .or_insert_with(|| ProviderBuilder::new());
+                .or_insert_with(|| ProviderBuilder::new_gmail());
 
             if let Some(val) = env_config.broker_gmail_secret { gmail_provider.secret = Some(val); }
             if let Some(val) = env_config.broker_gmail_client { gmail_provider.client_id = Some(val); }
