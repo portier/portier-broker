@@ -54,6 +54,7 @@ fn main() {
     // Read the configuration from the provided file.
     let mut builder = broker::config::ConfigBuilder::new();
     builder.update_from_file(&args.arg_CONFIG).unwrap();
+    builder.update_from_common_env();
     builder.update_from_broker_env();
     let app = Arc::new(builder.done().unwrap());
 

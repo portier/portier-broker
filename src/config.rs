@@ -241,6 +241,27 @@ impl ConfigBuilder {
         Ok(self)
     }
 
+    pub fn update_from_common_env(&mut self) -> &mut ConfigBuilder {
+        if let Some(port) = env::var("PORT").ok().and_then(|s| s.parse().ok()) {
+            // If $PORT is set, also bind to 0.0.0.0. Common PaaS convention.
+            self.listen_ip = "0.0.0.0".to_string();
+            self.listen_port = port;
+        }
+
+        if let Ok(val) = env::var("HEROKU_APP_NAME") {
+            self.public_url = Some(format!("https://{}.herokuapp.com", val));
+        }
+
+        for var in ["REDISTOGO_URL", "REDISGREEN_URL", "REDISCLOUD_URL", "REDIS_URL", "OPENREDIS_URL"].iter() {
+            if let Ok(val) = env::var(var) {
+                self.redis_url = Some(val);
+                break;
+            }
+        }
+
+        self
+    }
+
     pub fn update_from_broker_env(&mut self) -> &mut ConfigBuilder {
         let env_config = EnvConfig::from_env();
 
