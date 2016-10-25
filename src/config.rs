@@ -115,61 +115,117 @@ pub struct Config {
 }
 
 
-/// Implementation with single method to read configuration from JSON.
-impl Config {
-    /// Read a TOML configuration file.
-    pub fn from_toml_file(file_name: &str) -> Result<Config, ConfigError> {
-        let mut file = try!(File::open(file_name));
+pub struct ConfigBuilder {
+    pub listen_ip: String,
+    pub listen_port: u16,
+    pub public_url: Option<String>,
+    pub token_ttl: u16,
+    pub keyfiles: Vec<String>,
+    pub redis_url: Option<String>,
+    pub redis_session_ttl: u16,
+    pub redis_cache_ttl: u16,
+    pub redis_cache_max_doc_size: u16,
+    pub from_name: String,
+    pub from_address: Option<String>,
+    pub smtp_server: Option<String>,
+    pub smtp_username: Option<String>,
+    pub smtp_password: Option<String>,
+    pub providers: HashMap<String, Provider>,
+}
+
+
+impl ConfigBuilder {
+    pub fn new() -> ConfigBuilder {
+        ConfigBuilder {
+            listen_ip: "127.0.0.1".to_string(),
+            listen_port: 3333,
+            public_url: None,
+            token_ttl: 600,
+            keyfiles: Vec::new(),
+            redis_url: None,
+            redis_session_ttl: 900,
+            redis_cache_ttl: 3600,
+            redis_cache_max_doc_size: 8096,
+            from_name: "Portier".to_string(),
+            from_address: None,
+            smtp_username: None,
+            smtp_password: None,
+            smtp_server: None,
+            providers: HashMap::new(),
+        }
+    }
+
+    pub fn update_from_file(&mut self, path: &String) -> Result<&mut ConfigBuilder, ConfigError> {
+        let mut file = try!(File::open(path));
         let mut file_contents = String::new();
         try!(file.read_to_string(&mut file_contents));
-        let toml_config: TomlConfig = toml::decode_str(&file_contents)
-            .expect("unable to parse config file");
+        let mut toml_config: TomlConfig = try!(
+            toml::decode_str(&file_contents).ok_or("unable to parse config file")
+        );
 
-        // Additional validations.
-        if toml_config.smtp.username.is_none() != toml_config.smtp.password.is_none() {
+        self.listen_ip = toml_config.server.listen_ip;
+        self.listen_port = toml_config.server.listen_port;
+        self.public_url = Some(toml_config.server.public_url);
+
+        self.keyfiles.append(&mut toml_config.crypto.keyfiles);
+        self.token_ttl = toml_config.crypto.token_ttl;
+
+        self.redis_url = Some(toml_config.redis.url);
+        self.redis_session_ttl = toml_config.redis.session_ttl;
+        self.redis_cache_ttl = toml_config.redis.cache_ttl;
+        self.redis_cache_max_doc_size = toml_config.redis.cache_max_doc_size;
+
+        self.from_name = toml_config.smtp.from_name;
+        self.from_address = Some(toml_config.smtp.from_address);
+        self.smtp_server = Some(toml_config.smtp.server);
+        self.smtp_username = toml_config.smtp.username;
+        self.smtp_password = toml_config.smtp.password;
+
+        for (domain, values) in toml_config.providers {
+            self.providers.insert(domain, Provider {
+                client_id: values.client_id,
+                secret: values.secret,
+                discovery_url: values.discovery_url,
+                issuer_domain: values.issuer_domain,
+            });
+        }
+
+        Ok(self)
+    }
+
+    pub fn done(self) -> Result<Config, ConfigError> {
+        // Additional validations
+        if self.smtp_username.is_none() != self.smtp_password.is_none() {
             return Err(ConfigError::Custom(
                 "only one of smtp username and password specified; provide both or neither".to_string()
             ));
         }
 
-        let mut keys: Vec<crypto::NamedKey> = Vec::new();
-        for path in toml_config.crypto.keyfiles.iter() {
-            keys.push(try!(crypto::NamedKey::from_file(path)));
-        }
+        // Child structs
+        let keys = self.keyfiles.into_iter().filter_map(|path| {
+            crypto::NamedKey::from_file(&path).ok()
+        }).collect();
 
-        let store = try!(store::Store::new(
-            &toml_config.redis.url,
-            toml_config.redis.session_ttl as usize,
-            toml_config.redis.cache_ttl as usize,
-            toml_config.redis.cache_max_doc_size as u64
-        ));
-
-        let mut providers: HashMap<String, Provider> = HashMap::new();
-        for (domain, settings) in toml_config.providers.iter() {
-            let provider = Provider {
-                client_id: settings.client_id.clone(),
-                secret: settings.secret.clone(),
-                discovery_url: settings.discovery_url.clone(),
-                issuer_domain: settings.issuer_domain.clone(),
-            };
-
-            providers.insert(domain.to_string(), provider);
-        }
-
+        let store = store::Store::new(
+            &self.redis_url.unwrap(),
+            self.redis_cache_ttl as usize,
+            self.redis_session_ttl as usize,
+            self.redis_cache_max_doc_size as u64,
+        ).unwrap();
 
         Ok(Config {
-            listen_ip: toml_config.server.listen_ip,
-            listen_port: toml_config.server.listen_port,
-            public_url: toml_config.server.public_url,
-            token_ttl: toml_config.crypto.token_ttl,
+            listen_ip: self.listen_ip,
+            listen_port: self.listen_port,
+            public_url: self.public_url.unwrap(),
+            token_ttl: self.token_ttl,
             keys: keys,
             store: store,
-            from_name: toml_config.smtp.from_name,
-            from_address: toml_config.smtp.from_address,
-            smtp_server: toml_config.smtp.server,
-            smtp_username: toml_config.smtp.username,
-            smtp_password: toml_config.smtp.password,
-            providers: providers,
+            from_name: self.from_name,
+            from_address: self.from_address.unwrap(),
+            smtp_server: self.smtp_server.unwrap(),
+            smtp_username: self.smtp_username,
+            smtp_password: self.smtp_password,
+            providers: self.providers,
             templates: Templates::default(),
         })
     }

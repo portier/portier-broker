@@ -52,9 +52,9 @@ fn main() {
                          .unwrap_or_else(|e| e.exit());
 
     // Read the configuration from the provided file.
-    let app = Arc::new(
-        broker::Config::from_toml_file(&args.arg_CONFIG).unwrap()
-    );
+    let mut builder = broker::config::ConfigBuilder::new();
+    builder.update_from_file(&args.arg_CONFIG).unwrap();
+    let app = Arc::new(builder.done().unwrap());
 
     let router = router!{
         // Human-targeted endpoints

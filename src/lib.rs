@@ -33,7 +33,7 @@ use urlencoded::{UrlEncodedBody, UrlEncodedQuery};
 
 pub mod error;
 pub mod config;
-pub use config::Config;
+pub use config::{Config, ConfigBuilder};
 pub mod crypto;
 pub mod email;
 pub mod oidc;
