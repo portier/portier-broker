@@ -3,55 +3,50 @@
 // See https://serde.rs/codegen-stable.html for more information.
 
 
-/// Contains the SMTP server connection settings.
-#[derive(Deserialize)]
-pub struct Smtp {
-    pub address: String,
-    pub username: Option<String>,
-    pub password: Option<String>,
+/// Intermediate structure for deserializing TOML files
+#[derive(Clone,Debug,Deserialize)]
+struct TomlConfig {
+    server: TomlServerTable,
+    crypto: TomlCryptoTable,
+    redis: TomlRedisTable,
+    smtp: TomlSmtpTable,
+    providers: HashMap<String, TomlProviderTable>,
 }
 
-
-/// Represents an email address.
-#[derive(Deserialize)]
-pub struct Email {
-    pub address: String,
-    pub name: String,
+#[derive(Clone,Debug,Deserialize)]
+struct TomlServerTable {
+    listen_ip: String,
+    listen_port: u16,
+    public_url: String,
 }
 
-
-/// Represents an OpenID Connect provider.
-#[derive(Deserialize)]
-pub struct Provider {
-    pub discovery: String,
-    pub client_id: String,
-    pub secret: String,
-    pub issuer: String,
+#[derive(Clone,Debug,Deserialize)]
+struct TomlCryptoTable {
+    token_ttl: u16,
+    keyfiles: Vec<String>,
 }
 
+#[derive(Clone,Debug,Deserialize)]
+struct TomlRedisTable {
+    url: String,
+    session_ttl: u16,
+    cache_ttl: u16,
+    cache_max_doc_size: u16,
+}
 
-/// Holds runtime configuration data for this daemon instance.
-#[derive(Deserialize)]
-pub struct Config {
-    /// Address to listen on
-    pub listen_ip: String,
-    /// Port to listen on
-    pub listen_port: u16,
-    /// Origin of this instance, used for constructing URLs
-    pub base_url: String,
-    /// Signing keys
-    pub keys: Vec<crypto::NamedKey>,
-    /// Redis Client
-    pub store: store::Store,
-    /// SMTP client
-    pub smtp: Smtp,
-    /// From address for email
-    pub sender: Email,
-    /// JWT validity duration, in seconds
-    pub token_validity: usize,
-    /// Mapping of Domain -> OIDC Provider
-    pub providers: HashMap<String, Provider>,
-    /// Template files
-    #[serde(skip_deserializing)]
-    pub templates: Templates,
+#[derive(Clone,Debug,Deserialize)]
+struct TomlSmtpTable {
+    from_name: String,
+    from_address: String,
+    server: String,
+    username: Option<String>,
+    password: Option<String>,
+}
+
+#[derive(Clone,Debug,Deserialize)]
+struct TomlProviderTable {
+    client_id: String,
+    secret: String,
+    discovery_url: String,
+    issuer_domain: String,
 }

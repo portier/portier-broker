@@ -1,9 +1,6 @@
 extern crate serde;
-extern crate serde_json;
 extern crate toml;
 
-use serde::de::Deserialize;
-use serde_json::value::Value;
 use std;
 use std::collections::HashMap;
 use std::fs::File;
@@ -19,7 +16,6 @@ include!(concat!(env!("OUT_DIR"), "/serde_types.rs"));
 pub enum ConfigError {
     Custom(String),
     Io(std::io::Error),
-    De(serde_json::error::Error),
     Store(&'static str),
 }
 
@@ -34,34 +30,7 @@ macro_rules! from_error {
 }
 
 from_error!(std::io::Error, Io);
-from_error!(serde_json::error::Error, De);
 from_error!(&'static str, Store);
-
-
-/// Instantiate a `NamedKey` object from a value with a `file` property.
-impl Deserialize for crypto::NamedKey {
-    fn deserialize<D>(de: &mut D) -> Result<crypto::NamedKey, D::Error>
-                      where D: serde::Deserializer {
-        let value: Value = try!(serde::Deserialize::deserialize(de));
-        let file_name = value.find("file").unwrap().as_str().unwrap();
-        let res = crypto::NamedKey::from_file(file_name);
-        res.or_else(|err| Err(serde::de::Error::custom(err)))
-    }
-}
-
-
-impl Deserialize for store::Store {
-    fn deserialize<D>(de: &mut D) -> Result<store::Store, D::Error>
-                      where D: serde::Deserializer {
-        let value: Value = try!(serde::Deserialize::deserialize(de));
-        let url = value.find("redis_url").unwrap().as_str().unwrap();
-        let expire_sessions = value.find("expire_sessions").unwrap().as_u64().unwrap() as usize;
-        let expire_cache = value.find("expire_cache").unwrap().as_u64().unwrap() as usize;
-        let max_response_size = value.find("max_response_size").unwrap().as_u64().unwrap();
-        let res = store::Store::new(url, expire_sessions, expire_cache, max_response_size);
-        res.or_else(|err| Err(serde::de::Error::custom(err)))
-    }
-}
 
 
 // Newtype so we can implement helpers for templates.
@@ -121,6 +90,31 @@ impl Default for Templates {
 }
 
 
+pub struct Provider {
+    pub client_id: String,
+    pub secret: String,
+    pub discovery: String,
+    pub issuer: String,
+}
+
+
+pub struct Config {
+    pub listen_ip: String,
+    pub listen_port: u16,
+    pub base_url: String,
+    pub token_validity: u16,
+    pub keys: Vec<crypto::NamedKey>,
+    pub store: store::Store,
+    pub sender_name: String,
+    pub sender_address: String,
+    pub smtp_address: String,
+    pub smtp_username: Option<String>,
+    pub smtp_password: Option<String>,
+    pub providers: HashMap<String, Provider>,
+    pub templates: Templates,
+}
+
+
 /// Implementation with single method to read configuration from JSON.
 impl Config {
     /// Read a TOML configuration file.
@@ -128,15 +122,55 @@ impl Config {
         let mut file = try!(File::open(file_name));
         let mut file_contents = String::new();
         try!(file.read_to_string(&mut file_contents));
-        let app: Config = toml::decode_str(&file_contents).unwrap();
+        let toml_config: TomlConfig = toml::decode_str(&file_contents)
+            .expect("unable to parse config file");
 
         // Additional validations.
-        if app.smtp.username.is_none() != app.smtp.password.is_none() {
+        if toml_config.smtp.username.is_none() != toml_config.smtp.password.is_none() {
             return Err(ConfigError::Custom(
                 "only one of smtp username and password specified; provide both or neither".to_string()
             ));
         }
 
-        Ok(app)
+        let mut keys: Vec<crypto::NamedKey> = Vec::new();
+        for path in toml_config.crypto.keyfiles.iter() {
+            keys.push(try!(crypto::NamedKey::from_file(path)));
+        }
+
+        let store = try!(store::Store::new(
+            &toml_config.redis.url,
+            toml_config.redis.session_ttl as usize,
+            toml_config.redis.cache_ttl as usize,
+            toml_config.redis.cache_max_doc_size as u64
+        ));
+
+        let mut providers: HashMap<String, Provider> = HashMap::new();
+        for (domain, settings) in toml_config.providers.iter() {
+            let provider = Provider {
+                client_id: settings.client_id.clone(),
+                secret: settings.secret.clone(),
+                discovery: settings.discovery_url.clone(),
+                issuer: settings.issuer_domain.clone(),
+            };
+
+            providers.insert(domain.to_string(), provider);
+        }
+
+
+        Ok(Config {
+            listen_ip: toml_config.server.listen_ip,
+            listen_port: toml_config.server.listen_port,
+            base_url: toml_config.server.public_url,
+            token_validity: toml_config.crypto.token_ttl,
+            keys: keys,
+            store: store,
+            sender_name: toml_config.smtp.from_name,
+            sender_address: toml_config.smtp.from_address,
+            smtp_address: toml_config.smtp.server,
+            smtp_username: toml_config.smtp.username,
+            smtp_password: toml_config.smtp.password,
+            providers: providers,
+            templates: Templates::default(),
+        })
     }
 }

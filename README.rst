@@ -27,87 +27,41 @@ This should fetch and install the Portier broker. The binary is installed into
 ``~/.cargo/bin/`` by default. Running the `portier-broker` binary requires
 a short configuration file. An example is provided in ``config.toml.dist``.
 
+To run the broker, invoke it with the path to a configuration file:
+
+.. code-block:: shell
+
+   $ portier-broker config.toml
+
+You will also need a Redis server and an outgoing SMTP server.
+
 .. _installed: https://doc.rust-lang.org/book/getting-started.html
 
+should be in the format ``<host>:<port>``. The ``username`` and ``password``
+fields are optional, and may be set to provide login credentials.
 
 Configuration
 -------------
 
-Here's an example configuration file:
+See ``config.toml.dist`` for an example configuration file. The example file
+includes reasonable default values for most settings, but you must explicitly
+set:
 
-.. code-block:: toml
+* ``server.public_url``: The server's public-facing URL.
+* ``crypto.keyfiles``: An array of paths to encryption keys (create keys with
+  ``openssl genrsa 4096 > private.pem``).
+* ``redis.url``: The URL of a Redis server for temporary session storage.
+* ``smtp.from_address``: The email address that outgoing mail is from.
+* ``smtp.server``: The host and port of the outgoing mail server.
 
-    listen_ip = "127.0.0.1"
-    listen_port = 3333
-    base_url = "https://portier.example.com"
-    token_validity = 600
+If necessary, set ``smtp.username`` and ``smtp.password`` to your SMTP server's
+username and password.
 
-    [[keys]]
-    file = "private.pem"
+To support in-browser Google Authentication for Gmail users, you must also
+specify:
 
-    [store]
-    redis_url = "redis://127.0.0.1/5"
-    expire_sessions = 900
-    expire_cache = 3600
-    max_response_size = 8096
-
-    [smtp]
-    address = "localhost:25"
-    username = "johndoe"
-    password = "supersecret"
-
-    [sender]
-    name = "Portier"
-    address = "portier@example.com"
-
-    [providers . "gmail.com"]
-    discovery = "https://accounts.google.com/.well-known/openid-configuration"
-    client_id = "1234567890-example-client-id.apps.googleusercontent.com"
-    secret = "<your-secret-goes-here>"
-    issuer = "accounts.google.com"
-
-**listen_ip** and **listen_port** contain the port on which the broker listens.
-
-**base_url** contains the web origin for this broker instance.
-
-**token_validity** is a value in seconds, that determines how long outgoing
-authentication tokens are allowed to live. Defaults to 600s, or 10 minutes.
-
-**keys** is a list of RSA private keys, with a ``file`` path for each key.
-Multiple keys can be used to implement key rotation. By default, the last key
-in the list will be used for signing the outgoing JWTs.
-
-**store** has a ``redis_url`` value that points to a Redis database. This is
-used for ephemeral state, most importantly for tracking login attempts while
-waiting for authorization from the user, and caching of identity provider
-configuration. The broker itself is stateless. ``expire_sessions`` contains the
-lifetime (in seconds) for sessions kept during login attempts. In the example,
-login attempts are timed out after 900s, or 15 minutes. ``expire_cache``
-contains the minimum lifetime (in seconds) for the cache entries, but
-individual entries may be kept longer if this is indicated in the HTTP headers
-providers send. ``max_response_size`` is the maximum allowed size (in bytes) of
-configuration documents from identity providers.
-
-**smtp** contains SMTP client settings, most importantly the ``address``, which
-should be in the format ``<host>:<port>``. The ``username`` and ``password``
-fields are optional, and may be set to provide login credentials.
-
-**sender** is the sender information used when sending email for the email
-loop authentication. It requires ``name`` and ``address`` keys.
-
-**providers** is an object containing well-known Identity Providers, for
-which an account is required to authenticate. Keys in this object represent
-an email address domain name for which this IdP will be used. The value is
-another object, which contains four more key-value pairs:
-
-* ``discovery``: the `OpenID Provider Configuration Document URL`_ for the
-  provider
-* ``client_id``: the client ID for the broker registration with the IdP
-* ``secret``: the secret for this broker's registration with the IdP
-* ``issuer``: the expected issuer for identity tokens received from this IdP
-
-.. _OpenID Provider Configuration Document URL: https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderConfig
-
+* ``providers."gmail.com".client_id``: Your Google OAuth API Client ID
+* ``providers."gmail.com".secret``: Your Google OAuth API Secret Key
 
 Contributing
 ------------
