@@ -24,6 +24,7 @@ struct TomlServerTable {
 struct TomlCryptoTable {
     token_ttl: Option<u16>,
     keyfiles: Option<Vec<String>>,
+    keytext: Option<String>,
 }
 
 #[derive(Clone,Debug,Deserialize)]
@@ -63,6 +64,7 @@ struct EnvConfig {
     broker_public_url: Option<String>,
     broker_token_ttl: Option<u16>,
     broker_keyfiles: Option<Vec<String>>,
+    broker_keytext: Option<String>,
     broker_redis_url: Option<String>,
     broker_session_ttl: Option<u16>,
     broker_cache_ttl: Option<u16>,

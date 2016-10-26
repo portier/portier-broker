@@ -123,6 +123,7 @@ pub struct ConfigBuilder {
     pub public_url: Option<String>,
     pub token_ttl: u16,
     pub keyfiles: Vec<String>,
+    pub keytext: Option<String>,
     pub redis_url: Option<String>,
     pub redis_session_ttl: u16,
     pub redis_cache_ttl: u16,
@@ -188,6 +189,7 @@ impl ConfigBuilder {
             public_url: None,
             token_ttl: 600,
             keyfiles: Vec::new(),
+            keytext: None,
             redis_url: None,
             redis_session_ttl: 900,
             redis_cache_ttl: 3600,
@@ -220,6 +222,7 @@ impl ConfigBuilder {
             if let Some(val) = table.keyfiles {
                 self.keyfiles.append(&mut val.clone());
             }
+            self.keytext = table.keytext.or(self.keytext.clone());
         }
 
         if let Some(table) = toml_config.redis {
@@ -285,6 +288,7 @@ impl ConfigBuilder {
 
         if let Some(val) = env_config.broker_token_ttl { self.token_ttl = val; }
         if let Some(val) = env_config.broker_keyfiles { self.keyfiles = val; }
+        if let Some(val) = env_config.broker_keytext { self.keytext = Some(val); }
 
         if let Some(val) = env_config.broker_redis_url { self.redis_url = Some(val); }
         if let Some(val) = env_config.broker_session_ttl { self.redis_session_ttl = val; }
@@ -320,9 +324,15 @@ impl ConfigBuilder {
         }
 
         // Child structs
-        let keys = self.keyfiles.iter().filter_map(|path| {
+        let mut keys: Vec<crypto::NamedKey> = self.keyfiles.iter().filter_map(|path| {
             crypto::NamedKey::from_file(path).ok()
         }).collect();
+
+        if let Some(keytext) = self.keytext {
+            if let Ok(pkey) = crypto::NamedKey::from_pem_str(&keytext) {
+                keys.push(pkey)
+            }
+        }
 
         let store = store::Store::new(
             &self.redis_url.unwrap(),
@@ -369,6 +379,7 @@ impl EnvConfig {
 
             broker_token_ttl: env::var("BROKER_TOKEN_TTL").ok().and_then(|x| x.parse().ok()),
             broker_keyfiles: env::var("BROKER_KEYFILES").ok().map(|x| x.split(',').map(|x| x.to_string()).collect()),
+            broker_keytext: env::var("BROKER_KEYTEXT").ok().and_then(|x| x.parse().ok()),
 
             broker_redis_url: env::var("BROKER_REDIS_URL").ok(),
             broker_session_ttl: env::var("BROKER_SESSION_TTL").ok().and_then(|x| x.parse().ok()),
