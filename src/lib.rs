@@ -43,7 +43,7 @@ pub mod store_cache;
 use error::{BrokerResult, BrokerError};
 
 
-/// Iron extension key we use to store the redirect_uri.
+/// Iron extension key we use to store the `redirect_uri`.
 /// Once set, the error handler will return errors to the RP.
 struct RedirectUri;
 impl typemap::Key for RedirectUri { type Value = Url; }
@@ -75,7 +75,7 @@ macro_rules! broker_handler {
 
 /// Macro used to extract a parameter from a QueryMap.
 ///
-/// Will return from the caller with a BrokerError if
+/// Will return from the caller with a `BrokerError` if
 /// the parameter is missing and has no default.
 ///
 /// ```
@@ -84,12 +84,17 @@ macro_rules! broker_handler {
 /// ```
 macro_rules! try_get_param {
     ( $input:expr , $param:tt ) => {
-        try!($input.get($param).map(|list| list[0].as_str()).ok_or_else(|| {
-            BrokerError::Input(concat!("missing request parameter ", $param).to_string())
-        }))
+        try!($input.get($param)
+                   .and_then(|list| list.into_iter().nth(0))
+                   .map(|s| s.as_str())
+                   .ok_or_else(|| BrokerError::Input(concat!("missing request parameter ", $param).to_string()))
+        )
     };
     ( $input:expr , $param:tt, $default:tt ) => {
-        $input.get($param).map(|list| list[0].as_str()).unwrap_or($default)
+        $input.get($param)
+              .and_then(|list| list.into_iter().nth(0))
+              .map(|s| s.as_str())
+              .unwrap_or($default)
     };
 }
 
@@ -121,7 +126,7 @@ fn return_to_relier(app: &Config, redirect_uri: &str, params: &[(&str, &str)])
 }
 
 
-/// Handle an BrokerError and create an IronResult.
+/// Handle an `BrokerError` and create an `IronResult`.
 ///
 /// The `broker_handler!` macro calls this on error. We don't use a `From`
 /// implementation, because this way we get app and request context, and we
@@ -171,12 +176,12 @@ fn handle_error(app: &Config, req: &mut Request, err: BrokerError) -> IronResult
                                          ("error", &description),
                                      ]))))
         },
-        (err @ _, Some(redirect_uri)) => {
+        (err, Some(redirect_uri)) => {
             Err(IronError::new(err, return_to_relier(app, &redirect_uri, &[
                 ("error", "server_error"),
             ])))
         },
-        (err @ _, None) => {
+        (err, None) => {
             Err(IronError::new(err, (status::InternalServerError,
                                      modifiers::Header(ContentType::html()),
                                      app.templates.error.render(&[
@@ -347,7 +352,7 @@ fn create_jwt(app: &Config, email: &str, origin: &str, nonce: &str) -> String {
         .insert("sub", email)
         .insert("nonce", nonce)
         .build();
-    app.keys.last().unwrap().sign_jws(&payload)
+    app.keys.last().unwrap().sign_jws(payload)
 }
 
 

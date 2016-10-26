@@ -100,13 +100,13 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
 }
 
 pub fn canonicalize_google(email: String) -> String {
-    let at = email.find("@").unwrap();
+    let at = email.find('@').unwrap();
     let (user, domain) = email.split_at(at);
     let domain = &domain[1..];
     let user = &user.replace(".", ""); // Ignore dots
 
     // Trim plus addresses
-    let user = match user.find("+") {
+    let user = match user.find('+') {
         Some(pos) => user.split_at(pos).0,
         None => user,
     };
@@ -186,7 +186,7 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
         headers.set(HyContentType::form_url_encoded());
         try!(
             client.post(token_url).headers(headers).body(&body).send()
-                .map_err(|e| BrokerError::Http(e))
+                .map_err(BrokerError::Http)
                 .and_then(|rsp| from_reader(rsp).map_err(|_| {
                     BrokerError::Provider("failed to parse response as JSON".to_string())
                 }))
