@@ -75,17 +75,22 @@ macro_rules! broker_handler {
 
 /// Macro used to extract a parameter from a QueryMap.
 ///
-/// Will return from the caller with a BrokerError if the parameter is missing.
+/// Will return from the caller with a BrokerError if
+/// the parameter is missing and has no default.
 ///
 /// ```
 /// let foo = try_get_param!(params, "foo");
+/// let foo = try_get_param!(params, "foo", "default");
 /// ```
 macro_rules! try_get_param {
     ( $input:expr , $param:tt ) => {
-        try!($input.get($param).map(|list| &list[0]).ok_or_else(|| {
+        try!($input.get($param).map(|list| list[0].as_str()).ok_or_else(|| {
             BrokerError::Input(concat!("missing request parameter ", $param).to_string())
         }))
-    }
+    };
+    ( $input:expr , $param:tt, $default:tt ) => {
+        $input.get($param).map(|list| list[0].as_str()).unwrap_or($default)
+    };
 }
 
 
@@ -100,12 +105,12 @@ fn return_to_relier(app: &Config, redirect_uri: &str, params: &[(&str, &str)])
     -> (hyper::status::StatusCode, modifiers::Header<ContentType>, String) {
     let data = mustache::MapBuilder::new()
         .insert_str("redirect_uri", redirect_uri)
-        .insert_map("params", |mut builder| {
+        .insert_vec("params", |mut builder| {
             for &param in params {
-                let (name, value) = param;
-                builder = builder
-                    .insert_str("name", name)
-                    .insert_str("value", value);
+                builder = builder.push_map(|builder| {
+                    let (name, value) = param;
+                    builder.insert_str("name", name).insert_str("value", value)
+                });
             }
             builder
         })
@@ -294,6 +299,12 @@ broker_handler!(AuthHandler, |app, req| {
     );
     req.extensions.insert::<RedirectUri>(redirect_uri.clone());
 
+    if try_get_param!(params, "response_type") != "id_token" {
+        return Err(BrokerError::Input("unsupported response_type, only id_token is supported".to_string()));
+    }
+    if try_get_param!(params, "response_mode", "fragment") != "form_post" {
+        return Err(BrokerError::Input("unsupported response_mode, only form_post is supported".to_string()))
+    }
     let email_addr = try!(
         EmailAddress::new(try_get_param!(params, "login_hint"))
             .map_err(|_| BrokerError::Input("login_hint is not a valid email address".to_string()))
