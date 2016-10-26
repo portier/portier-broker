@@ -11,6 +11,7 @@ DOCKER_SOCK="/var/run/docker.sock"
 
 docker run --rm \
     -v "${SOURCE_DIR}":/src -w /src \
+    -e CARGO_HOME="/src/${TARGET_DIR}/.cargo" \
     clux/muslrust cargo build --release
 
 container="$(
