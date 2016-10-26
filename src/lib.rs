@@ -304,6 +304,11 @@ broker_handler!(AuthHandler, |app, req| {
     try!(valid_uri(client_id));
     try!(same_origin(client_id, redirect_uri));
     try!(only_origin(client_id));
+    if let Some(ref whitelist) = app.allowed_origins {
+        if !whitelist.contains(&client_id.to_string()) {
+            return Err(BrokerError::Input("the origin is not whitelisted".to_string()));
+        }
+    }
 
     // Per the OAuth2 spec, we may redirect to the RP once we have validated client_id and
     // redirect_uri. In our case, this means we make redirect_uri available to error handling.

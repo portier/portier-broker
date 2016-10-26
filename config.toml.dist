@@ -5,6 +5,8 @@ listen_ip = "127.0.0.1"
 listen_port = 3333
 # Server's user-facing URL - Default: (none)
 public_url = 
+# Whitelist of client origins to allow - Default: (none) (unrestricted)
+allowed_origins = 
 
 
 [crypto]
