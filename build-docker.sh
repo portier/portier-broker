@@ -11,6 +11,7 @@ DOCKER_SOCK="/var/run/docker.sock"
 
 docker run --rm \
     -v "${SOURCE_DIR}":/src -w /src \
+    -e CARGO_HOME="/src/${TARGET_DIR}/.cargo" \
     clux/muslrust cargo build --release
 
 container="$(
@@ -41,7 +42,8 @@ FROM scratch
 COPY . /
 USER 65534:65534
 ENV SSL_CERT_FILE=/certs/ca-certificates.crt \
-    SSL_CERT_DIR=/certs
+    SSL_CERT_DIR=/certs \
+    BROKER_IP=::
 ENTRYPOINT ["/portier-broker"]
 CMD ["/cfg/config.toml"]
 EXPOSE 3333
