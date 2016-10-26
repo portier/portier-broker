@@ -33,6 +33,9 @@ To run the broker, invoke it with the path to a configuration file:
 
    $ portier-broker config.toml
 
+You can also supply all required settings as environment variables and
+completely omit the configuration file.
+
 You will also need a Redis server and an outgoing SMTP server.
 
 .. _installed: https://doc.rust-lang.org/book/getting-started.html
@@ -63,6 +66,7 @@ public_url     BROKER_PUBLIC_URL    (none)
 ============== ==================== ================
 token_ttl      BROKER_TOKEN_TTL     600 (10 minutes)
 keyfiles       BROKER_KEYFILES      [] (empty array)
+keytext        BROKER_KEYTEXT       (none)
 ============== ==================== ================
 
 **[redis] section:**
@@ -103,8 +107,8 @@ The example configuration file, ``config.ini.dist``, includes reasonable default
 values for most settings, but you must explicitly set:
 
 * ``server.public_url``: The server's public-facing URL.
-* ``crypto.keyfiles``: An array of paths to encryption keys (create keys with
-  ``openssl genrsa 4096 > private.pem``).
+* ``crypto.keyfiles``: An array of paths to encryption keys, or
+* ``crypto.keytext``: The text of an encryption key in PEM format
 * ``redis.url``: The URL of a Redis server for temporary session storage.
 * ``smtp.from_address``: The email address that outgoing mail is from.
 * ``smtp.server``: The host and port of the outgoing mail server.
@@ -117,6 +121,8 @@ specify:
 
 * ``providers."gmail.com".client_id``: Your Google OAuth API Client ID
 * ``providers."gmail.com".secret``: Your Google OAuth API Secret Key
+
+You can create encryption keys with ``openssl genrsa 4096 > private.pem``
 
 Contributing
 ------------

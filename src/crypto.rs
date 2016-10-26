@@ -13,8 +13,36 @@ use serde_json::builder::ObjectBuilder;
 use serde_json::de::from_slice;
 use serde_json::value::Value;
 use super::serde_json;
+use std;
 use std::fs::File;
-use std::io::{BufReader, Write};
+use std::io::{Read, Write};
+
+
+/// Union of all possible error types seen while parsing.
+#[derive(Debug)]
+pub enum CryptoError {
+    Custom(&'static str),
+    Io(std::io::Error),
+    Ssl(openssl::ssl::error::SslError),
+}
+
+impl From<&'static str> for CryptoError {
+    fn from(err: &'static str) -> CryptoError {
+        CryptoError::Custom(err)
+    }
+}
+
+impl From<std::io::Error> for CryptoError {
+    fn from(err: std::io::Error) -> CryptoError {
+        CryptoError::Io(err)
+    }
+}
+
+impl From<openssl::ssl::error::SslError> for CryptoError {
+    fn from(err: openssl::ssl::error::SslError) -> CryptoError {
+        CryptoError::Ssl(err)
+    }
+}
 
 
 /// A named key pair, for use in JWS signing.
@@ -26,25 +54,31 @@ pub struct NamedKey {
 
 
 impl NamedKey {
-    /// Creates a NameKey by reading a `file` path and generating an `id`.
-    pub fn from_file(file: &str) -> Result<NamedKey, &'static str> {
-        let file_res = File::open(file);
-        if file_res.is_err() {
-            return Err("could not open key file");
-        }
-        let private_key_file = file_res.unwrap();
-        match PKey::private_key_from_pem(&mut BufReader::new(private_key_file)) {
-            Err(_) => Err("could not instantiate private key"),
-            Ok(pkey) => {
-                let mut hasher = hash::Hasher::new(hash::Type::SHA256);
-                hasher.write(pkey.get_rsa().e().unwrap().to_vec().as_slice()).unwrap();
-                hasher.write(b".").unwrap();
-                hasher.write(pkey.get_rsa().n().unwrap().to_vec().as_slice()).unwrap();
-                let name = hasher.finish().to_base64(base64::URL_SAFE);
+    /// Creates a NamedKey by reading a `file` path and generating an `id`.
+    pub fn from_file(filename: &str) -> Result<NamedKey, CryptoError> {
+        let mut file = try!(File::open(filename));
+        let mut file_contents = String::new();
+        try!(file.read_to_string(&mut file_contents));
 
-                Ok(NamedKey { id: name, key: pkey })
-            }
-        }
+        NamedKey::from_pem_str(&file_contents)
+    }
+
+    /// Creates a NamedKey from a PEM-encoded str.
+    pub fn from_pem_str(pem: &str) -> Result<NamedKey, CryptoError> {
+        let pkey = try!(PKey::private_key_from_pem(&mut pem.as_bytes()));
+
+        NamedKey::from_pkey(pkey)
+    }
+
+    /// Creates a NamedKey from a PKey
+    pub fn from_pkey(pkey: PKey) -> Result<NamedKey,CryptoError> {
+        let mut hasher = hash::Hasher::new(hash::Type::SHA256);
+        hasher.write(pkey.get_rsa().e().unwrap().to_vec().as_slice()).unwrap();
+        hasher.write(b".").unwrap();
+        hasher.write(pkey.get_rsa().n().unwrap().to_vec().as_slice()).unwrap();
+        let name = hasher.finish().to_base64(base64::URL_SAFE);
+
+        Ok(NamedKey { id: name, key: pkey })
     }
 
     /// Create a JSON Web Signature (JWS) for the given JSON structure.
