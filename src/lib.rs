@@ -84,12 +84,17 @@ macro_rules! broker_handler {
 /// ```
 macro_rules! try_get_param {
     ( $input:expr , $param:tt ) => {
-        try!($input.get($param).map(|list| list[0].as_str()).ok_or_else(|| {
-            BrokerError::Input(concat!("missing request parameter ", $param).to_string())
-        }))
+        try!($input.get($param)
+                   .and_then(|list| list.into_iter().nth(0))
+                   .map(|s| s.as_str())
+                   .ok_or_else(|| BrokerError::Input(concat!("missing request parameter ", $param).to_string()))
+        )
     };
     ( $input:expr , $param:tt, $default:tt ) => {
-        $input.get($param).map(|list| list[0].as_str()).unwrap_or($default)
+        $input.get($param)
+              .and_then(|list| list.into_iter().nth(0))
+              .map(|s| s.as_str())
+              .unwrap_or($default)
     };
 }
 
