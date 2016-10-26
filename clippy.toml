@@ -1,1 +1,1 @@
-doc-valid-idents = ["OpenID", "OAuth", "POSTed"]
+doc-valid-idents = ["OpenID", "OAuth", "OAuth2", "POSTed"]

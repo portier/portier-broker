@@ -43,7 +43,7 @@ impl Template {
     pub fn render(&self, params: &[(&str, &str)]) -> String {
         let mut builder = mustache::MapBuilder::new();
         for &param in params {
-            let (ref key, ref value) = param;
+            let (key, value) = param;
             builder = builder.insert_str(key, value);
         }
         self.render_data(&builder.build())
@@ -116,6 +116,7 @@ pub struct Config {
 }
 
 
+#[derive(Clone, Debug, Default)]
 pub struct ConfigBuilder {
     pub listen_ip: String,
     pub listen_port: u16,
@@ -135,7 +136,7 @@ pub struct ConfigBuilder {
 }
 
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct ProviderBuilder {
     pub client_id: Option<String>,
     pub secret: Option<String>,
@@ -200,7 +201,7 @@ impl ConfigBuilder {
         }
     }
 
-    pub fn update_from_file(&mut self, path: &String) -> Result<&mut ConfigBuilder, ConfigError> {
+    pub fn update_from_file(&mut self, path: &str) -> Result<&mut ConfigBuilder, ConfigError> {
         let mut file = try!(File::open(path));
         let mut file_contents = String::new();
         try!(file.read_to_string(&mut file_contents));
@@ -265,7 +266,7 @@ impl ConfigBuilder {
             self.public_url = Some(format!("https://{}.herokuapp.com", val));
         }
 
-        for var in ["REDISTOGO_URL", "REDISGREEN_URL", "REDISCLOUD_URL", "REDIS_URL", "OPENREDIS_URL"].iter() {
+        for var in &["REDISTOGO_URL", "REDISGREEN_URL", "REDISCLOUD_URL", "REDIS_URL", "OPENREDIS_URL"] {
             if let Ok(val) = env::var(var) {
                 self.redis_url = Some(val);
                 break;
@@ -299,7 +300,7 @@ impl ConfigBuilder {
         // New scope to avoid mutably borrowing `self` twice
         {
             let mut gmail_provider = self.providers.entry("gmail.com".to_string())
-                .or_insert_with(|| ProviderBuilder::new_gmail());
+                .or_insert_with(ProviderBuilder::new_gmail);
 
             if let Some(val) = env_config.broker_gmail_secret { gmail_provider.secret = Some(val); }
             if let Some(val) = env_config.broker_gmail_client { gmail_provider.client_id = Some(val); }
@@ -320,7 +321,7 @@ impl ConfigBuilder {
 
         // Child structs
         let keys = self.keyfiles.iter().filter_map(|path| {
-            crypto::NamedKey::from_file(&path).ok()
+            crypto::NamedKey::from_file(path).ok()
         }).collect();
 
         let store = store::Store::new(
