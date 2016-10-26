@@ -18,6 +18,7 @@ struct TomlServerTable {
     listen_ip: Option<String>,
     listen_port: Option<u16>,
     public_url: Option<String>,
+    allowed_origins: Option<Vec<String>>,
 }
 
 #[derive(Clone,Debug,Deserialize)]
@@ -62,6 +63,7 @@ struct EnvConfig {
     broker_ip: Option<String>,
     broker_port: Option<u16>,
     broker_public_url: Option<String>,
+    broker_allowed_origins: Option<Vec<String>>,
     broker_token_ttl: Option<u16>,
     broker_keyfiles: Option<Vec<String>>,
     broker_keytext: Option<String>,

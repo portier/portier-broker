@@ -103,6 +103,7 @@ pub struct Config {
     pub listen_ip: String,
     pub listen_port: u16,
     pub public_url: String,
+    pub allowed_origins: Option<Vec<String>>,
     pub token_ttl: u16,
     pub keys: Vec<crypto::NamedKey>,
     pub store: store::Store,
@@ -121,6 +122,7 @@ pub struct ConfigBuilder {
     pub listen_ip: String,
     pub listen_port: u16,
     pub public_url: Option<String>,
+    pub allowed_origins: Option<Vec<String>>,
     pub token_ttl: u16,
     pub keyfiles: Vec<String>,
     pub keytext: Option<String>,
@@ -187,6 +189,7 @@ impl ConfigBuilder {
             listen_ip: "127.0.0.1".to_string(),
             listen_port: 3333,
             public_url: None,
+            allowed_origins: None,
             token_ttl: 600,
             keyfiles: Vec::new(),
             keytext: None,
@@ -215,6 +218,7 @@ impl ConfigBuilder {
             if let Some(val) = table.listen_ip { self.listen_ip = val; }
             if let Some(val) = table.listen_port { self.listen_port = val; }
             self.public_url = table.public_url.or(self.public_url.clone());
+            if let Some(val) = table.allowed_origins { self.allowed_origins = Some(val) };
         }
 
         if let Some(table) = toml_config.crypto {
@@ -285,6 +289,7 @@ impl ConfigBuilder {
         if let Some(val) = env_config.broker_ip { self.listen_ip = val }
         if let Some(val) = env_config.broker_port { self.listen_port = val; }
         if let Some(val) = env_config.broker_public_url { self.public_url = Some(val); }
+        if let Some(val) = env_config.broker_allowed_origins { self.allowed_origins = Some(val); }
 
         if let Some(val) = env_config.broker_token_ttl { self.token_ttl = val; }
         if let Some(val) = env_config.broker_keyfiles { self.keyfiles = val; }
@@ -352,6 +357,7 @@ impl ConfigBuilder {
             listen_ip: self.listen_ip,
             listen_port: self.listen_port,
             public_url: self.public_url.unwrap(),
+            allowed_origins: self.allowed_origins,
             token_ttl: self.token_ttl,
             keys: keys,
             store: store,
@@ -376,6 +382,7 @@ impl EnvConfig {
             broker_ip: env::var("BROKER_IP").ok(),
             broker_port: env::var("BROKER_PORT").ok().and_then(|x| x.parse().ok()),
             broker_public_url: env::var("BROKER_PUBLIC_URL").ok(),
+            broker_allowed_origins: env::var("BROKER_ALLOWED_ORIGINS").ok().map(|x| x.split(',').map(|x| x.to_string()).collect()),
 
             broker_token_ttl: env::var("BROKER_TOKEN_TTL").ok().and_then(|x| x.parse().ok()),
             broker_keyfiles: env::var("BROKER_KEYFILES").ok().map(|x| x.split(',').map(|x| x.to_string()).collect()),
