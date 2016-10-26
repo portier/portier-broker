@@ -33,6 +33,9 @@ To run the broker, invoke it with the path to a configuration file:
 
    $ portier-broker config.toml
 
+You can also supply all required settings as environment variables and
+completely omit the configuration file.
+
 You will also need a Redis server and an outgoing SMTP server.
 
 .. _installed: https://doc.rust-lang.org/book/getting-started.html

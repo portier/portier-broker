@@ -26,7 +26,7 @@ const USAGE: &'static str = r#"
 Portier Broker
 
 Usage:
-  portier-broker CONFIG
+  portier-broker [CONFIG]
   portier-broker --version
   portier-broker --help
 
@@ -40,7 +40,7 @@ Options:
 #[derive(RustcDecodable)]
 #[allow(non_snake_case)]
 struct Args {
-    arg_CONFIG: String,
+    arg_CONFIG: Option<String>,
 }
 
 
@@ -53,7 +53,9 @@ fn main() {
 
     // Read the configuration from the provided file.
     let mut builder = broker::config::ConfigBuilder::new();
-    builder.update_from_file(&args.arg_CONFIG).unwrap();
+    if let Some(path) = args.arg_CONFIG {
+        builder.update_from_file(&path).unwrap();
+    }
     builder.update_from_common_env();
     builder.update_from_broker_env();
     let app = Arc::new(builder.done().unwrap());
