@@ -45,7 +45,6 @@ ENV SSL_CERT_FILE=/certs/ca-certificates.crt \
     SSL_CERT_DIR=/certs \
     BROKER_IP=::
 ENTRYPOINT ["/portier-broker"]
-CMD ["/cfg/config.toml"]
 EXPOSE 3333
 EOF
 docker build -t portier/broker .
