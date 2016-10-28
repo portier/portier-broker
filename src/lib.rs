@@ -40,6 +40,7 @@ pub mod oidc;
 pub mod store;
 pub mod store_cache;
 pub mod validation;
+use validation::{valid_uri, only_origin, same_origin};
 
 use error::{BrokerResult, BrokerError};
 
@@ -296,14 +297,18 @@ broker_handler!(AuthHandler, |app, req| {
         }
     );
 
+    let client_id = try_get_param!(params, "client_id");
+    let redirect_uri = try_get_param!(params, "redirect_uri");
+
+    try!(valid_uri(redirect_uri));
+    try!(valid_uri(client_id));
+    try!(same_origin(client_id, redirect_uri));
+    try!(only_origin(client_id));
+
     // Per the OAuth2 spec, we may redirect to the RP once we have validated client_id and
     // redirect_uri. In our case, this means we make redirect_uri available to error handling.
-    let client_id = try_get_param!(params, "client_id");
-    let redirect_uri = try!(
-        Url::parse(try_get_param!(params, "redirect_uri"))
-            .map_err(|_| BrokerError::Input("redirect_uri is not a valid URL".to_string()))
-    );
-    req.extensions.insert::<RedirectUri>(redirect_uri.clone());
+    let parsed_redirect_uri = Url::parse(redirect_uri).unwrap();
+    req.extensions.insert::<RedirectUri>(parsed_redirect_uri.clone());
 
     if try_get_param!(params, "response_type") != "id_token" {
         return Err(BrokerError::Input("unsupported response_type, only id_token is supported".to_string()));
@@ -319,13 +324,13 @@ broker_handler!(AuthHandler, |app, req| {
     if app.providers.contains_key(&email_addr.domain) {
 
         // OIDC authentication. Redirect to the identity provider.
-        let auth_url = try!(oidc::request(app, email_addr, client_id, nonce, &redirect_uri));
+        let auth_url = try!(oidc::request(app, email_addr, client_id, nonce, &parsed_redirect_uri));
         Ok(Response::with((status::SeeOther, modifiers::Header(Location(auth_url.to_string())))))
 
     } else {
 
         // Email loop authentication. Render a message and form.
-        let session_id = try!(email::request(app, email_addr, client_id, nonce, &redirect_uri));
+        let session_id = try!(email::request(app, email_addr, client_id, nonce, &parsed_redirect_uri));
         Ok(Response::with((status::Ok,
                            modifiers::Header(ContentType::html()),
                            app.templates.confirm_email.render(&[
