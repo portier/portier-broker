@@ -39,6 +39,7 @@ pub mod email;
 pub mod oidc;
 pub mod store;
 pub mod store_cache;
+pub mod validation;
 
 use error::{BrokerResult, BrokerError};
 
