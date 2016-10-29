@@ -162,6 +162,7 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
     );
     let descr = format!("{}'s discovery document", domain);
     let token_url = try_get_json_field!(config_obj, "token_endpoint", as_str, descr);
+    let revoke_url = try_get_json_field!(config_obj, "revocation_endpoint", as_str, descr);
     let jwks_url = try_get_json_field!(config_obj, "jwks_uri", as_str, descr);
 
     let mut post_headers = Headers::new();
@@ -198,7 +199,16 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
         )
     };
     let descr = format!("{}'s token response", domain);
+    let access_token = try_get_json_field!(token_obj, "access_token", as_str, descr);
     let id_token = try_get_json_field!(token_obj, "id_token", as_str, descr);
+
+    // Immediately revoke the access token. We only care about the id_token,
+    // and this way we prevent scary 'offline access' requests on subsequent
+    // authorization for the same user.
+    try!(client.post(revoke_url).headers(post_headers.clone()).body(&vec![
+        "token=",
+        &utf8_percent_encode(access_token, QUERY_ENCODE_SET).to_string(),
+    ].join("")).send().map_err(BrokerError::Http));
 
     // Grab the keys from the provider, then verify the signature.
     let jwt_payload = {
