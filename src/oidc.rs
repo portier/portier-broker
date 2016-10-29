@@ -164,6 +164,9 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
     let token_url = try_get_json_field!(config_obj, "token_endpoint", as_str, descr);
     let jwks_url = try_get_json_field!(config_obj, "jwks_uri", as_str, descr);
 
+    let mut post_headers = Headers::new();
+    post_headers.set(HyContentType::form_url_encoded());
+
     // Create form data for the Token Request, where we exchange the code
     // received in this callback request for an identity token (while
     // proving our identity by passing the client secret value).
@@ -182,10 +185,8 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
 
     // Send the Token Request and extract the `id_token` from the response.
     let token_obj: Value = {
-        let mut headers = Headers::new();
-        headers.set(HyContentType::form_url_encoded());
         try!(
-            client.post(token_url).headers(headers).body(&body).send()
+            client.post(token_url).headers(post_headers.clone()).body(&body).send()
                 .map_err(BrokerError::Http)
                 .and_then(|rsp| from_reader(rsp).map_err(|_| {
                     BrokerError::Provider("failed to parse response as JSON".to_string())
