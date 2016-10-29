@@ -93,7 +93,6 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
         &utf8_percent_encode(&session, QUERY_ENCODE_SET).to_string(),
         "&login_hint=",
         &utf8_percent_encode(&email_addr.to_string(), QUERY_ENCODE_SET).to_string(),
-        "&prompt=consent",
     ].join("")).map_err(|_| {
         BrokerError::Provider(format!("failed to build valid authorization URL from {}'s 'authorization_endpoint'", domain))
     })
