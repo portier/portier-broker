@@ -5,6 +5,7 @@ use std::io::Error as IoError;
 use super::hyper::Error as HttpError;
 use super::redis::RedisError;
 use super::lettre::transport::smtp::error::Error as MailError;
+use validation::ValidationError;
 
 
 /// Union of all possible runtime error types.
@@ -59,6 +60,11 @@ impl From<BrokerError> for String {
     }
 }
 
+impl From<ValidationError> for BrokerError {
+    fn from(err: ValidationError) -> BrokerError {
+        BrokerError::Input(err.description().to_string())
+    }
+}
 
 // Conversion from other error types.
 macro_rules! from_error {
