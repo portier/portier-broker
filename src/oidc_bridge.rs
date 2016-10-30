@@ -2,12 +2,9 @@ use std::error::Error;
 use std::collections::HashMap;
 use emailaddress::EmailAddress;
 use iron::Url;
-use serde_json::de::from_reader;
 use serde_json::value::Value;
 use super::error::{BrokerError, BrokerResult};
 use super::hyper::client::Client as HttpClient;
-use super::hyper::header::ContentType as HyContentType;
-use super::hyper::header::Headers;
 use super::{Config, create_jwt, crypto};
 use super::store_cache::{CacheKey, fetch_json_url};
 use time::now_utc;
@@ -46,6 +43,9 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
 
     let session = crypto::session_id(&email_addr, client_id);
 
+    // Generate a nonce for the provider.
+    let provider_nonce = crypto::nonce();
+
     // Store the nonce and the RP's `redirect_uri` in Redis for use in the
     // callback handler.
     app.store.store_session(&session, &[
@@ -53,6 +53,7 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
         ("email", &email_addr.to_string()),
         ("client_id", client_id),
         ("nonce", nonce),
+        ("provider_nonce", &provider_nonce),
         ("redirect", &redirect_uri.to_string()),
     ])?;
 
@@ -77,7 +78,7 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
         "?",
         "client_id=",
         &utf8_percent_encode(&provider.client_id, QUERY_ENCODE_SET).to_string(),
-        "&response_type=code",
+        "&response_type=id_token",
         "&scope=",
         &utf8_percent_encode("openid email", QUERY_ENCODE_SET).to_string(),
         "&redirect_uri=",
@@ -85,6 +86,8 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
                              QUERY_ENCODE_SET).to_string(),
         "&state=",
         &utf8_percent_encode(&session, QUERY_ENCODE_SET).to_string(),
+        "&nonce=",
+        &utf8_percent_encode(&provider_nonce, QUERY_ENCODE_SET).to_string(),
         "&login_hint=",
         &utf8_percent_encode(&email_addr.to_string(), QUERY_ENCODE_SET).to_string(),
     ].join("")).map_err(|_| {
@@ -128,19 +131,15 @@ pub fn canonicalized(email: &str) -> String {
 /// Match the returned email address and nonce against our Redis data, then
 /// extract the identity token returned by the provider and verify it. Return
 /// an identity token for the RP if successful, or an error message otherwise.
-pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
+pub fn verify(app: &Config, stored: &HashMap<String, String>, id_token: &str)
               -> BrokerResult<(String, String)> {
 
     let email_addr = EmailAddress::new(&stored["email"])?;
     let origin = &stored["client_id"];
-    let nonce = &stored["nonce"];
 
     let client = HttpClient::new();
 
-    // Request the provider's Discovery document to get the
-    // `token_endpoint` and `jwks_uri` values from it. TODO: save these
-    // when requesting the Discovery document in the `oauth_request()`
-    // function, and/or cache them by provider host.
+    // Request the provider's Discovery document to get the `jwks_uri` values from it.
     let domain = &email_addr.domain.to_lowercase();
     let provider = &app.providers[domain];
     let config_obj: Value = fetch_json_url(&app.store, CacheKey::Discovery { domain: domain },
@@ -150,41 +149,7 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
                                           domain, e.description()))
         })?;
     let descr = format!("{}'s discovery document", domain);
-    let token_url = try_get_json_field!(config_obj, "token_endpoint", as_str, descr);
     let jwks_url = try_get_json_field!(config_obj, "jwks_uri", as_str, descr);
-
-    // Create form data for the Token Request, where we exchange the code
-    // received in this callback request for an identity token (while
-    // proving our identity by passing the client secret value).
-    let body: String = vec![
-        "code=",
-        &utf8_percent_encode(code, QUERY_ENCODE_SET).to_string(),
-        "&client_id=",
-        &utf8_percent_encode(&provider.client_id, QUERY_ENCODE_SET).to_string(),
-        "&client_secret=",
-        &utf8_percent_encode(&provider.secret, QUERY_ENCODE_SET).to_string(),
-        "&redirect_uri=",
-        &utf8_percent_encode(&format!("{}/callback", &app.public_url),
-                             QUERY_ENCODE_SET).to_string(),
-        "&grant_type=authorization_code",
-    ].join("");
-
-    // Send the Token Request and extract the `id_token` from the response.
-    let token_obj: Value = {
-        let mut headers = Headers::new();
-        headers.set(HyContentType::form_url_encoded());
-        client.post(token_url).headers(headers).body(&body).send()
-            .map_err(BrokerError::Http)
-            .and_then(|rsp| from_reader(rsp).map_err(|_| {
-                BrokerError::Provider("failed to parse response as JSON".to_string())
-            }))
-            .map_err(|e| {
-                BrokerError::Provider(format!("{} token request failed: {}",
-                                              domain, e.description()))
-            })?
-    };
-    let descr = format!("{}'s token response", domain);
-    let id_token = try_get_json_field!(token_obj, "id_token", as_str, descr);
 
     // Grab the keys from the provider, then verify the signature.
     let jwt_payload = {
@@ -205,16 +170,18 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
     let aud = try_get_json_field!(jwt_payload, "aud", as_str, descr);
     let token_addr = try_get_json_field!(jwt_payload, "email", as_str, descr);
     let exp = try_get_json_field!(jwt_payload, "exp", as_i64, descr);
+    let nonce = try_get_json_field!(jwt_payload, "nonce", as_str, descr);
     let issuer_origin = vec!["https://", &provider.issuer_domain].join("");
     assert!(iss == provider.issuer_domain || iss == issuer_origin);
     assert!(aud == provider.client_id);
     assert!(canonicalized(token_addr) == canonicalized(&email_addr.to_string()));
     let now = now_utc().to_timespec().sec;
     assert!(now < exp);
+    assert!(nonce == &stored["provider_nonce"]);
 
     // If everything is okay, build a new identity token and send it
     // to the relying party.
-    let id_token = create_jwt(app, &email_addr.to_string(), origin, nonce);
+    let id_token = create_jwt(app, &email_addr.to_string(), origin, &stored["nonce"]);
     let redirect = &stored["redirect"];
     Ok((id_token, redirect.to_string()))
 
