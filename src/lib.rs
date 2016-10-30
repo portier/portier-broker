@@ -1,6 +1,7 @@
 extern crate emailaddress;
 #[macro_use]
 extern crate log;
+#[macro_use]
 extern crate hyper;
 extern crate iron;
 extern crate lettre;
@@ -13,8 +14,8 @@ extern crate url;
 extern crate urlencoded;
 
 use emailaddress::EmailAddress;
-use iron::headers::{ContentType, Location};
-use iron::middleware::{Handler, BeforeMiddleware};
+use iron::headers::{ContentType, Location, StrictTransportSecurity};
+use iron::middleware::{Handler, BeforeMiddleware, AfterMiddleware};
 use iron::modifiers;
 use iron::method::Method;
 use iron::prelude::*;
@@ -43,6 +44,12 @@ pub mod validation;
 use validation::{valid_uri, only_origin, same_origin};
 
 use error::{BrokerResult, BrokerError};
+
+header! { (ContentSecurityPolicy, "Content-Security-Policy") => [String] }
+header! { (XContentSecurityPolicy, "X-Content-Security-Policy") => [String] }
+header! { (XContentTypeOptions, "X-Content-Type-Options") => [String] }
+header! { (XXSSProtection, "X-XSS-Protection") => [String] }
+header! { (XFrameOptions, "X-Frame-Options") => [String] }
 
 
 /// Iron extension key we use to store the `redirect_uri`.
@@ -199,6 +206,38 @@ impl BeforeMiddleware for LogMiddleware {
     fn before(&self, req: &mut Request) -> IronResult<()> {
         info!("{} {}", req.method, req.url);
         Ok(())
+    }
+}
+
+
+/// Middleware that sets common headers.
+pub struct DefaultHeadersMiddleware;
+impl DefaultHeadersMiddleware {
+    fn set_headers(&self, res: &mut Response) {
+        // Specify a tight content security policy. We need to be able to POST
+        // redirect anywhere, and run our own inline scripts.
+        let csp = vec![
+            "sandbox allow-scripts allow-forms",
+            "default-src 'none'",
+            "script-src 'unsafe-inline'",
+            "form-action *",
+        ].join("; ");
+        res.set_mut((modifiers::Header(StrictTransportSecurity::including_subdomains(31536000u64)),
+                     modifiers::Header(ContentSecurityPolicy(csp.clone())),
+                     modifiers::Header(XContentSecurityPolicy(csp)),
+                     modifiers::Header(XContentTypeOptions("nosniff".to_string())),
+                     modifiers::Header(XXSSProtection("1; mode=block".to_string())),
+                     modifiers::Header(XFrameOptions("DENY".to_string()))));
+    }
+}
+impl AfterMiddleware for DefaultHeadersMiddleware {
+    fn after(&self, _: &mut Request, mut res: Response) -> IronResult<Response> {
+        self.set_headers(&mut res);
+        Ok(res)
+    }
+    fn catch(&self, _: &mut Request, mut err: IronError) -> IronResult<Response> {
+        self.set_headers(&mut err.response);
+        Err(err)
     }
 }
 
