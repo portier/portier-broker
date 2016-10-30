@@ -14,7 +14,7 @@ extern crate urlencoded;
 
 use emailaddress::EmailAddress;
 use iron::headers::{ContentType, Location};
-use iron::middleware::Handler;
+use iron::middleware::{Handler, BeforeMiddleware};
 use iron::modifiers;
 use iron::method::Method;
 use iron::prelude::*;
@@ -67,7 +67,6 @@ macro_rules! broker_handler {
         }
         impl Handler for $name {
             fn handle(&self, req: &mut Request) -> IronResult<Response> {
-                info!("{} {}", req.method, req.url);
                 Self::handle_body(&self.app, req)
                     .or_else(|e| handle_error(&self.app, req, e))
             }
@@ -190,6 +189,16 @@ fn handle_error(app: &Config, req: &mut Request, err: BrokerError) -> IronResult
                                          ("error", "internal server error"),
                                      ]))))
         },
+    }
+}
+
+
+/// Middleware that logs each request.
+pub struct LogMiddleware;
+impl BeforeMiddleware for LogMiddleware {
+    fn before(&self, req: &mut Request) -> IronResult<()> {
+        info!("{} {}", req.method, req.url);
+        Ok(())
     }
 }
 
