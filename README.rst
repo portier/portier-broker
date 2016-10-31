@@ -109,7 +109,7 @@ values for most settings, but you must explicitly set:
 
 * ``server.public_url``: The server's public-facing URL.
 * ``crypto.keyfiles``: An array of paths to encryption keys, or
-* ``crypto.keytext``: The text of an encryption key in PEM format
+* ``crypto.keytext``: The text of an encryption key in PEM format (takes precedence over keyfiles).
 * ``redis.url``: The URL of a Redis server for temporary session storage.
 * ``smtp.from_address``: The email address that outgoing mail is from.
 * ``smtp.server``: The host and port of the outgoing mail server.
