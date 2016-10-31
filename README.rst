@@ -57,7 +57,7 @@ are:
 listen_ip       BROKER_IP              "127.0.0.1"
 listen_port     BROKER_PORT            3333
 public_url      BROKER_PUBLIC_URL      (none)
-allowed_origins BROKER_ALLOWED_ORIGINS (none) (unrestricted)
+allowed_origins BROKER_ALLOWED_ORIGINS (none (unrestricted))
 =============== ====================== =====================
 
 **[crypto] section:**
