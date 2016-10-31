@@ -10,7 +10,7 @@ extern crate rustc_serialize;
 
 use portier_broker as broker;
 use docopt::Docopt;
-use iron::Iron;
+use iron::{Iron, Chain};
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -77,9 +77,13 @@ fn main() {
         get "/callback" => broker::CallbackHandler::new(&app),
     };
 
+    let mut chain = Chain::new(router);
+    chain.link_before(broker::LogMiddleware);
+    chain.link_after(broker::DefaultHeadersMiddleware);
+
     let ipaddr = std::net::IpAddr::from_str(&app.listen_ip).unwrap();
     let socket = std::net::SocketAddr::new(ipaddr, app.listen_port);
     info!("listening on http://{}", socket);
 
-    Iron::new(router).http(socket).unwrap();
+    Iron::new(chain).http(socket).unwrap();
 }
