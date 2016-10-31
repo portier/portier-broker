@@ -24,9 +24,6 @@ use iron::typemap;
 use iron::Url;
 use serde_json::builder::{ArrayBuilder, ObjectBuilder};
 use serde_json::value::Value;
-use std::env;
-use std::fs::File;
-use std::io::{BufReader, Read};
 use std::sync::Arc;
 use std::error::Error;
 use time::now_utc;
@@ -262,25 +259,6 @@ broker_handler!(WelcomeHandler, |_app, _req| {
         .insert("ladaemon", "Welcome")
         .insert("version", env!("CARGO_PKG_VERSION"))
         .build())
-});
-
-
-/// Iron handler for files in .well-known.
-///
-/// Mainly directed at Let's Encrypt verification. Returns text/plain always.
-broker_handler!(WellKnownHandler, |_app, req| {
-    let mut file_name = env::current_dir().unwrap();
-    file_name.push(req.url.path().join("/"));
-    let file_res = File::open(file_name);
-    if file_res.is_err() {
-        return Ok(Response::with((status::NotFound)));
-    }
-    let mut bytes = Vec::<u8>::new();
-    let mut reader = BufReader::new(file_res.unwrap());
-    let _ = reader.read_to_end(&mut bytes).unwrap();
-    Ok(Response::with((status::Ok,
-                       modifiers::Header(ContentType::plaintext()),
-                       bytes)))
 });
 
 

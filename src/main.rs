@@ -6,6 +6,7 @@ extern crate log;
 extern crate portier_broker;
 #[macro_use(router)]
 extern crate router;
+extern crate staticfile;
 extern crate rustc_serialize;
 
 use portier_broker as broker;
@@ -13,6 +14,7 @@ use docopt::Docopt;
 use iron::{Iron, Chain};
 use std::str::FromStr;
 use std::sync::Arc;
+use std::path::Path;
 
 
 /// Defines the program's version, as set by Cargo at compile time.
@@ -63,7 +65,7 @@ fn main() {
     let router = router!{
         // Human-targeted endpoints
         get "/" => broker::WelcomeHandler::new(&app),
-        get "/.well-known/*" => broker::WellKnownHandler::new(&app),
+        get "/.well-known/*" => staticfile::Static::new(Path::new("")),
         get "/confirm" => broker::ConfirmHandler::new(&app),
 
         // OpenID Connect provider endpoints
