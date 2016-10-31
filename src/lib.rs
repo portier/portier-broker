@@ -216,7 +216,7 @@ impl DefaultHeadersMiddleware {
         let csp = vec![
             "sandbox allow-scripts allow-forms",
             "default-src 'none'",
-            "script-src 'unsafe-inline'",
+            "script-src 'self'",
             "form-action *",
         ].join("; ");
         res.set_mut((modifiers::Header(StrictTransportSecurity::excluding_subdomains(31536000u64)),

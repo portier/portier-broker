@@ -2,11 +2,7 @@
 <html>
   <head>
     <title>Portier &ndash; forwarding...</title>
-    <script>
-      document.addEventListener('DOMContentLoaded', function() {
-        document.getElementById('form').submit();
-      });
-    </script>
+    <script src="/static/forward.js"></script>
   </head>
   <body>
     <form id="form" action="{{ redirect_uri }}" method="post">
