@@ -162,7 +162,11 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
     );
     let descr = format!("{}'s discovery document", domain);
     let token_url = try_get_json_field!(config_obj, "token_endpoint", as_str, descr);
+    let revoke_url = try_get_json_field!(config_obj, "revocation_endpoint", as_str, descr);
     let jwks_url = try_get_json_field!(config_obj, "jwks_uri", as_str, descr);
+
+    let mut post_headers = Headers::new();
+    post_headers.set(HyContentType::form_url_encoded());
 
     // Create form data for the Token Request, where we exchange the code
     // received in this callback request for an identity token (while
@@ -182,10 +186,8 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
 
     // Send the Token Request and extract the `id_token` from the response.
     let token_obj: Value = {
-        let mut headers = Headers::new();
-        headers.set(HyContentType::form_url_encoded());
         try!(
-            client.post(token_url).headers(headers).body(&body).send()
+            client.post(token_url).headers(post_headers.clone()).body(&body).send()
                 .map_err(BrokerError::Http)
                 .and_then(|rsp| from_reader(rsp).map_err(|_| {
                     BrokerError::Provider("failed to parse response as JSON".to_string())
@@ -197,7 +199,16 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
         )
     };
     let descr = format!("{}'s token response", domain);
+    let access_token = try_get_json_field!(token_obj, "access_token", as_str, descr);
     let id_token = try_get_json_field!(token_obj, "id_token", as_str, descr);
+
+    // Immediately revoke the access token. We only care about the id_token,
+    // and this way we prevent scary 'offline access' requests on subsequent
+    // authorization for the same user.
+    try!(client.post(revoke_url).headers(post_headers.clone()).body(&vec![
+        "token=",
+        &utf8_percent_encode(access_token, QUERY_ENCODE_SET).to_string(),
+    ].join("")).send().map_err(BrokerError::Http));
 
     // Grab the keys from the provider, then verify the signature.
     let jwt_payload = {
