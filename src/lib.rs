@@ -217,6 +217,7 @@ impl DefaultHeadersMiddleware {
             "sandbox allow-scripts allow-forms",
             "default-src 'none'",
             "script-src 'self'",
+            "style-src 'self'",
             "form-action *",
         ].join("; ");
         res.set_mut((modifiers::Header(StrictTransportSecurity::excluding_subdomains(31536000u64)),
