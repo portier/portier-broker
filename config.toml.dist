@@ -14,7 +14,7 @@ allowed_origins =
 token_ttl = 600
 # Array of file paths to PEM-formatted signing keys - (mandatory, CHANGE THIS)
 keyfiles = []
-# No idea what this is - (mandatory, CHANGE THIS)
+# Text of the key file in PEM format (set either this or keyfiles) - Default: (none)
 keytext = 
 
 
