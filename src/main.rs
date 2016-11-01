@@ -81,8 +81,8 @@ fn main() {
     };
 
     let mut chain = Chain::new(router);
-    chain.link_before(broker::LogMiddleware);
-    chain.link_after(broker::DefaultHeadersMiddleware);
+    chain.link_before(broker::middleware::LogMiddleware);
+    chain.link_after(broker::middleware::DefaultHeadersMiddleware);
 
     let ipaddr = std::net::IpAddr::from_str(&app.listen_ip).unwrap();
     let socket = std::net::SocketAddr::new(ipaddr, app.listen_port);
