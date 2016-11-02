@@ -10,8 +10,8 @@ header! { (XXSSProtection, "X-XSS-Protection") => [String] }
 header! { (XFrameOptions, "X-Frame-Options") => [String] }
 
 /// Middleware that sets common headers.
-pub struct DefaultHeadersMiddleware;
-impl DefaultHeadersMiddleware {
+pub struct SecurityHeaders;
+impl SecurityHeaders {
     fn set_headers(&self, res: &mut Response) {
         // Specify a tight content security policy. We need to be able to POST
         // redirect anywhere, and run our own inline scripts.
@@ -30,7 +30,7 @@ impl DefaultHeadersMiddleware {
                      modifiers::Header(XFrameOptions("DENY".to_string()))));
     }
 }
-impl AfterMiddleware for DefaultHeadersMiddleware {
+impl AfterMiddleware for SecurityHeaders {
     fn after(&self, _: &mut Request, mut res: Response) -> IronResult<Response> {
         self.set_headers(&mut res);
         Ok(res)

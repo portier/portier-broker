@@ -1,5 +1,5 @@
 mod logging;
-pub use self::logging::LogMiddleware;
+pub use self::logging::LogRequest;
 
 mod headers;
-pub use self::headers::DefaultHeadersMiddleware;
+pub use self::headers::SecurityHeaders;
