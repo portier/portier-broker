@@ -1,3 +1,4 @@
+extern crate c_ares_resolver;
 extern crate serde;
 extern crate toml;
 
@@ -6,6 +7,8 @@ use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::io::Read;
+use std::sync::Mutex;
+use c_ares_resolver::{Options as DnsOptions, FutureResolver as DnsResolver};
 
 use super::{crypto, store, mustache};
 
@@ -114,6 +117,7 @@ pub struct Config {
     pub smtp_password: Option<String>,
     pub providers: HashMap<String, Provider>,
     pub templates: Templates,
+    pub dns: Mutex<DnsResolver>,
 }
 
 
@@ -353,6 +357,14 @@ impl ConfigBuilder {
             }
         }
 
+        let mut dns_options = DnsOptions::new();
+        // Reduce maximum time we wait for a result, because we want to respond timely.
+        dns_options.set_tries(2);
+        // Ignore special resolver settings. We just want to query FQDNs.
+        dns_options.set_ndots(0);
+        dns_options.set_domains(&[]);
+        dns_options.set_lookups("b");
+
         Ok(Config {
             listen_ip: self.listen_ip,
             listen_port: self.listen_port,
@@ -368,6 +380,7 @@ impl ConfigBuilder {
             smtp_password: self.smtp_password,
             providers: providers,
             templates: Templates::default(),
+            dns: Mutex::new(DnsResolver::new(dns_options).unwrap()),
         })
     }
 }

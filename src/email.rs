@@ -1,7 +1,9 @@
 extern crate rand;
+extern crate futures;
 
 use emailaddress::EmailAddress;
 use iron::Url;
+use self::futures::*;
 use super::error::{BrokerError, BrokerResult};
 use super::lettre::email::EmailBuilder;
 use super::lettre::transport::EmailTransport;
@@ -39,13 +41,20 @@ const CODE_CHARS: &'static [char] = &[
 pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &Url)
                -> BrokerResult<String> {
 
-    let session = session_id(&email_addr, client_id);
+    // Before trying to mail, see if there are MX records.
+    // TODO: Figure out a way to not block other threads.
+    {
+        let domain = &email_addr.domain;
+        try!(app.dns.lock().unwrap().query_mx(domain).wait()
+            .map_err(|_| BrokerError::Input(format!("Could not find any mailservers for {}", domain))));
+    }
 
     // Generate a 6-character one-time pad.
     let chars: String = (0..6).map(|_| CODE_CHARS[rand::random::<usize>() % CODE_CHARS.len()]).collect();
 
     // Store data for this request in Redis, to reference when user uses
     // the generated link.
+    let session = session_id(&email_addr, client_id);
     try!(app.store.store_session(&session, &[
         ("type", "email"),
         ("email", &email_addr.to_string()),

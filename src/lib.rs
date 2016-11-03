@@ -1,3 +1,4 @@
+extern crate c_ares_resolver;
 extern crate emailaddress;
 #[macro_use]
 extern crate log;
