@@ -3,21 +3,23 @@
 listen_ip = "127.0.0.1"
 # Port to bind to - Default: 3333
 listen_port = 3333
-# Server's user-facing URL - Default: (none)
+# Server's user-facing URL (mandatory, CHANGE THIS)
 public_url = 
-# Whitelist of client origins to allow - Default: (none) (unrestricted)
+# Whitelist of client origins to allow - Default: (none (unrestricted))
 allowed_origins = 
 
 
 [crypto]
 # Duration that id_tokens are valid for - Default: 600 (10 minutes)
 token_ttl = 600
-# Array of file paths to PEM-formatted signing keys - Default: [] (empty array)
+# Array of file paths to PEM-formatted signing keys - (mandatory, CHANGE THIS)
 keyfiles = []
+# Text of the key file in PEM format (set either this or keyfiles) - Default: (none)
+keytext = 
 
 
 [redis]
-# Redis connection URL - Default: (none)
+# Redis connection URL - Default: (mandatory, CHANGE THIS)
 url = 
 # Time that users have to complete authentication - Default: 900 (15 minutes)
 session_ttl = 900
@@ -30,9 +32,9 @@ cache_max_doc_size = 8096
 [smtp]
 # Display name for confirmation emails - Default: "Portier"
 from_name = "Portier"
-# Sender address for confirmation emails - Default: (none)
+# Sender address for confirmation emails - (mandatory, CHANGE THIS)
 from_address = 
-# Outgoing mailserver address - Default: (none)
+# Outgoing mailserver address - (mandatory, CHANGE THIS)
 server = 
 # Outgoing mailserver username - Default: (none)
 username = 

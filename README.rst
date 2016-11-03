@@ -52,28 +52,28 @@ are:
 **[server] section:**
 
 =============== ====================== =====================
-``config.ini``  Environment Variable   Default
+``config.toml`` Environment Variable   Default
 =============== ====================== =====================
 listen_ip       BROKER_IP              "127.0.0.1"
 listen_port     BROKER_PORT            3333
 public_url      BROKER_PUBLIC_URL      (none)
-allowed_origins BROKER_ALLOWED_ORIGINS (none) (unrestricted)
+allowed_origins BROKER_ALLOWED_ORIGINS (none (unrestricted))
 =============== ====================== =====================
 
 **[crypto] section:**
 
-============== ==================== ================
-``config.ini`` Environment Variable Default
-============== ==================== ================
-token_ttl      BROKER_TOKEN_TTL     600 (10 minutes)
-keyfiles       BROKER_KEYFILES      [] (empty array)
-keytext        BROKER_KEYTEXT       (none)
-============== ==================== ================
+=============== ==================== ================
+``config.toml`` Environment Variable Default
+=============== ==================== ================
+token_ttl       BROKER_TOKEN_TTL     600 (10 minutes)
+keyfiles        BROKER_KEYFILES      [] (empty array)
+keytext         BROKER_KEYTEXT       (none)
+=============== ==================== ================
 
 **[redis] section:**
 
 ================== ========================= ================
-``config.ini``     Environment Variable       Default
+``config.toml``    Environment Variable       Default
 ================== ========================= ================
 url                BROKER_REDIS_URL          (none)
 session_ttl        BROKER_SESSION_TTL        900 (15 minutes)
@@ -83,33 +83,33 @@ cache_max_doc_size BROKER_CACHE_MAX_DOC_SIZE 8096 (8 KiB)
 
 **[smtp] section:**
 
-============== ==================== ===========
-``config.ini`` Environment Variable Default
-============== ==================== ===========
-from_name      BROKER_FROM_NAME     "Portier"
-from_address   BROKER_FROM_ADDRESS  (none)
-server         BROKER_SMTP_SERVER   (none)
-username       BROKER_SMTP_USERNAME (none)
-password       BROKER_SMTP_PASSWORD (none)
-============== ==================== ===========
+=============== ==================== ===========
+``config.toml`` Environment Variable Default
+=============== ==================== ===========
+from_name       BROKER_FROM_NAME     "Portier"
+from_address    BROKER_FROM_ADDRESS  (none)
+server          BROKER_SMTP_SERVER   (none)
+username        BROKER_SMTP_USERNAME (none)
+password        BROKER_SMTP_PASSWORD (none)
+=============== ==================== ===========
 
 **[providers."gmail.com"] section:**
 
-============== ====================== ==============================================================
-``config.ini`` Environment Variable   Default
-============== ====================== ==============================================================
-client_id      BROKER_GMAIL_CLIENT    (none)
-secret         BROKER_GMAIL_SECRET    (none)
-discovery_url  BROKER_GMAIL_DISCOVERY "https://accounts.google.com/.well-known/openid-configuration"
-issuer_domain  BROKER_GMAIL_ISSUER    "accounts.google.com"
-============== ====================== ==============================================================
+=============== ====================== ==============================================================
+``config.toml`` Environment Variable   Default
+=============== ====================== ==============================================================
+client_id       BROKER_GMAIL_CLIENT    (none)
+secret          BROKER_GMAIL_SECRET    (none)
+discovery_url   BROKER_GMAIL_DISCOVERY "https://accounts.google.com/.well-known/openid-configuration"
+issuer_domain   BROKER_GMAIL_ISSUER    "accounts.google.com"
+=============== ====================== ==============================================================
 
-The example configuration file, ``config.ini.dist``, includes reasonable default
+The example configuration file, ``config.toml.dist``, includes reasonable default
 values for most settings, but you must explicitly set:
 
 * ``server.public_url``: The server's public-facing URL.
 * ``crypto.keyfiles``: An array of paths to encryption keys, or
-* ``crypto.keytext``: The text of an encryption key in PEM format
+* ``crypto.keytext``: The text of an encryption key in PEM format (takes precedence over keyfiles).
 * ``redis.url``: The URL of a Redis server for temporary session storage.
 * ``smtp.from_address``: The email address that outgoing mail is from.
 * ``smtp.server``: The host and port of the outgoing mail server.
