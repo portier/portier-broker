@@ -64,7 +64,7 @@ fn main() {
 
     let router = router!{
         // Human-targeted endpoints
-        get "/" => broker::handlers::index::Index::new(&app),
+        get "/" => broker::handlers::pages::Index,
         get "/static/*" => staticfile::Static::new(Path::new("")),
         get "/.well-known/*" => staticfile::Static::new(Path::new("")),
         get "/confirm" => broker::handlers::email::Confirmation::new(&app),

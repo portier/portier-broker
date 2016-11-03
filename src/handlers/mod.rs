@@ -173,7 +173,7 @@ fn json_response(obj: &Value) -> BrokerResult<Response> {
 }
 
 
-pub mod index;
+pub mod pages;
 pub mod oidc;
 pub mod oauth2;
 pub mod email;
