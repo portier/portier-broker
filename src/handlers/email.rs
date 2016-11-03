@@ -12,7 +12,7 @@ use urlencoded::UrlEncodedQuery;
 ///
 /// Retrieves the session based session ID and the expected one-time pad.
 /// Verify the code and return the resulting token or error to the RP.
-broker_handler!(ConfirmHandler, |app, req| {
+broker_handler!(Confirmation, |app, req| {
     let params = try!(
         req.compute::<UrlEncodedQuery>()
             .map_err(|_| BrokerError::Input("no query string in GET request".to_string()))

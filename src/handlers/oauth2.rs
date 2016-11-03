@@ -13,7 +13,7 @@ use urlencoded::UrlEncodedQuery;
 /// After the user allows or denies the Authentication Request with the famous
 /// identity provider, they will be redirected back to the callback handler.
 /// Verify the callback data and return the resulting token or error.
-broker_handler!(CallbackHandler, |app, req| {
+broker_handler!(Callback, |app, req| {
     let params = try!(
         req.compute::<UrlEncodedQuery>()
             .map_err(|_| BrokerError::Input("no query string in GET request".to_string()))

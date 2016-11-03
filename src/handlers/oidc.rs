@@ -19,7 +19,7 @@ use validation::{valid_uri, only_origin, same_origin};
 ///
 /// Most of this is hard-coded for now, although the URLs are constructed by
 /// using the base URL as configured in the `public_url` configuration value.
-broker_handler!(OIDConfigHandler, |app, _req| {
+broker_handler!(Discovery, |app, _req| {
     json_response(&ObjectBuilder::new()
         .insert("issuer", &app.public_url)
         .insert("authorization_endpoint",
@@ -43,7 +43,7 @@ broker_handler!(OIDConfigHandler, |app, _req| {
 ///
 /// Relying Parties will need to fetch this data to be able to verify identity
 /// tokens issued by this daemon instance.
-broker_handler!(KeysHandler, |app, _req| {
+broker_handler!(KeySet, |app, _req| {
     let mut keys = ArrayBuilder::new();
     for key in &app.keys {
         keys = keys.push(key.public_jwk())
@@ -59,7 +59,7 @@ broker_handler!(KeysHandler, |app, _req| {
 /// Calls the `oidc::request()` function if the provided email address's
 /// domain matches one of the configured famous providers. Otherwise, calls the
 /// `email::request()` function to allow authentication through the email loop.
-broker_handler!(AuthHandler, |app, req| {
+broker_handler!(Auth, |app, req| {
     let params = try!(
         match req.method {
             Method::Get => {

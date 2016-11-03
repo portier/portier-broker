@@ -64,20 +64,20 @@ fn main() {
 
     let router = router!{
         // Human-targeted endpoints
-        get "/" => broker::handlers::index::WelcomeHandler::new(&app),
+        get "/" => broker::handlers::index::Index::new(&app),
         get "/static/*" => staticfile::Static::new(Path::new("")),
         get "/.well-known/*" => staticfile::Static::new(Path::new("")),
-        get "/confirm" => broker::handlers::email::ConfirmHandler::new(&app),
+        get "/confirm" => broker::handlers::email::Confirmation::new(&app),
 
         // OpenID Connect provider endpoints
         get "/.well-known/openid-configuration" =>
-               broker::handlers::oidc::OIDConfigHandler::new(&app),
-        get "/keys.json" => broker::handlers::oidc::KeysHandler::new(&app),
-        get "/auth" => broker::handlers::oidc::AuthHandler::new(&app),
-        post "/auth" => broker::handlers::oidc::AuthHandler::new(&app),
+               broker::handlers::oidc::Discovery::new(&app),
+        get "/keys.json" => broker::handlers::oidc::KeySet::new(&app),
+        get "/auth" => broker::handlers::oidc::Auth::new(&app),
+        post "/auth" => broker::handlers::oidc::Auth::new(&app),
 
         // OpenID Connect relying party endpoints
-        get "/callback" => broker::handlers::oauth2::CallbackHandler::new(&app),
+        get "/callback" => broker::handlers::oauth2::Callback::new(&app),
     };
 
     let mut chain = Chain::new(router);
