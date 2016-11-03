@@ -10,7 +10,7 @@ body {
   color: #444;
   font: normal 1em sans-serif;
 }
-p, .entry {
+h1, p, hr, .entry {
   margin: 24px;
 }
 .head {
@@ -47,4 +47,14 @@ p, .entry {
   border: 1px solid #23a1d9;
   background: #36abdf;
   color: #fff;
+}
+hr {
+  border: 0;
+  height: 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+aside p, aside .entry button, aside .entry input {
+  font-size: 0.9em;
 }

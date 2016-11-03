@@ -8,24 +8,29 @@
   </head>
   <body>
     <div class="container">
-      <p class="head">
-        We've sent you an email to confirm your address.
-      </p>
-      <p>
-        Use the link in that email to login to:<br>
-        <em>{{ client_id }}</em>
-      </p>
-      <p>
-        Alternatively, enter the code from the email
-        to continue in this browser tab:
-      </p>
-      <form id="form" action="/confirm" method="get">
-        <input type="hidden" name="session" value="{{ session_id }}">
-        <div class="entry">
-          <input type="text" name="code" maxlength="6" autofocus>
-          <button type="submit">Login</button>
-        </div>
-      </form>
+      <main>
+        <h1 class="head">
+          We've sent you an email to confirm your address.
+        </h1>
+        <p>
+          Use the link in that email to login to:<br>
+          <em>{{ client_id }}</em>
+        </p>
+      </main>
+      <hr />
+      <aside>
+        <p>
+          Alternatively, enter the code from the email
+          to continue in this browser tab:
+        </p>
+        <form id="form" action="/confirm" method="get">
+          <input type="hidden" name="session" value="{{ session_id }}">
+          <div class="entry">
+            <input type="text" name="code" maxlength="6" autofocus>
+            <button type="submit">Login</button>
+          </div>
+        </form>
+      </aside>
    </div>
 </body>
 </html>
