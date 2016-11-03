@@ -1,5 +1,5 @@
 use config::Config;
-use email;
+use email_bridge;
 use emailaddress::EmailAddress;
 use error::{BrokerResult, BrokerError};
 use hyper;
@@ -11,7 +11,7 @@ use iron::modifiers;
 use iron::status;
 use iron::typemap;
 use mustache;
-use oidc;
+use oidc_bridge;
 use serde_json;
 use serde_json::builder::{ArrayBuilder, ObjectBuilder};
 use serde_json::value::Value;
@@ -286,13 +286,13 @@ broker_handler!(AuthHandler, |app, req| {
     if app.providers.contains_key(&email_addr.domain) {
 
         // OIDC authentication. Redirect to the identity provider.
-        let auth_url = try!(oidc::request(app, email_addr, client_id, nonce, &parsed_redirect_uri));
+        let auth_url = try!(oidc_bridge::request(app, email_addr, client_id, nonce, &parsed_redirect_uri));
         Ok(Response::with((status::SeeOther, modifiers::Header(Location(auth_url.to_string())))))
 
     } else {
 
         // Email loop authentication. Render a message and form.
-        let session_id = try!(email::request(app, email_addr, client_id, nonce, &parsed_redirect_uri));
+        let session_id = try!(email_bridge::request(app, email_addr, client_id, nonce, &parsed_redirect_uri));
         Ok(Response::with((status::Ok,
                            modifiers::Header(ContentType::html()),
                            app.templates.confirm_email.render(&[
@@ -318,7 +318,7 @@ broker_handler!(ConfirmHandler, |app, req| {
     req.extensions.insert::<RedirectUri>(Url::parse(&stored["redirect"]).unwrap());
 
     let code = try_get_param!(params, "code");
-    let (jwt, redirect_uri) = try!(email::verify(app, &stored, code));
+    let (jwt, redirect_uri) = try!(email_bridge::verify(app, &stored, code));
     Ok(Response::with(return_to_relier(app, &redirect_uri, &[("id_token", &jwt)])))
 });
 
@@ -338,6 +338,6 @@ broker_handler!(CallbackHandler, |app, req| {
     req.extensions.insert::<RedirectUri>(Url::parse(&stored["redirect"]).unwrap());
 
     let code = try_get_param!(params, "code");
-    let (jwt, redirect_uri) = try!(oidc::verify(app, &stored, code));
+    let (jwt, redirect_uri) = try!(oidc_bridge::verify(app, &stored, code));
     Ok(Response::with(return_to_relier(app, &redirect_uri, &[("id_token", &jwt)])))
 });
