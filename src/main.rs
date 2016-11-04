@@ -66,8 +66,6 @@ fn main() {
         // Human-targeted endpoints
         get "/" => broker::handlers::pages::Index,
         get "/ver.txt" => broker::handlers::pages::Version,
-        get "/static/*" => staticfile::Static::new(Path::new("")),
-        get "/.well-known/*" => staticfile::Static::new(Path::new("")),
         get "/confirm" => broker::handlers::email::Confirmation::new(&app),
 
         // OpenID Connect provider endpoints
@@ -79,6 +77,9 @@ fn main() {
 
         // OpenID Connect relying party endpoints
         get "/callback" => broker::handlers::oauth2::Callback::new(&app),
+
+        // Lastly, fall back to trying to serve static files out of ./res/
+        get "/*" => staticfile::Static::new(Path::new("./res/")),
     };
 
     let mut chain = Chain::new(router);
