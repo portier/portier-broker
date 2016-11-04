@@ -90,7 +90,7 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
 pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
               -> BrokerResult<(String, String)> {
 
-    if code.to_lowercase() != (&stored["code"]).to_string() {
+    if &code.to_lowercase() != &stored["code"] {
         return Err(BrokerError::Input("incorrect code".to_string()));
     }
 
