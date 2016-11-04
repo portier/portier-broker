@@ -17,13 +17,10 @@ use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 ///
 /// Currently includes all numbers, lower- and upper-case ASCII letters,
 /// except those that could potentially cause confusion when reading back.
-/// (That is, '1', '5', '8', '0', 'b', 'i', 'l', 'o', 's', 'u', 'B', 'D', 'I'
-/// and 'O'.)
+/// (That is, '1', '5', '0', 'b', 'l')
 const CODE_CHARS: &'static [char] = &[
-    '2', '3', '4', '6', '7', '9', 'a', 'c', 'd', 'e', 'f', 'g', 'h', 'j', 'k',
-    'm', 'n', 'p', 'q', 'r', 't', 'v', 'w', 'x', 'y', 'z', 'A', 'C', 'E', 'F',
-    'G', 'H', 'J', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W',
-    'X', 'Y', 'Z',
+    '2', '3', '4', '6', '7', '8', '9', 'a', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k',
+    'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'
 ];
 
 
@@ -41,8 +38,8 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
 
     let session = session_id(&email_addr, client_id);
 
-    // Generate a 6-character one-time pad.
-    let chars: String = (0..6).map(|_| CODE_CHARS[rand::random::<usize>() % CODE_CHARS.len()]).collect();
+    // Generate a 8-character one-time pad.
+    let chars: String = (0..8).map(|_| CODE_CHARS[rand::random::<usize>() % CODE_CHARS.len()]).collect();
 
     // Store data for this request in Redis, to reference when user uses
     // the generated link.
@@ -93,7 +90,7 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
 pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
               -> BrokerResult<(String, String)> {
 
-    if code != &stored["code"] {
+    if code.to_lowercase() != (&stored["code"]).to_string() {
         return Err(BrokerError::Input("incorrect code".to_string()));
     }
 
