@@ -1,4 +1,4 @@
 target
 *.pem
-.well-known/*
+res/.well-known/*
 config.toml

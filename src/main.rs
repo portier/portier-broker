@@ -64,20 +64,22 @@ fn main() {
 
     let router = router!{
         // Human-targeted endpoints
-        get "/" => broker::WelcomeHandler::new(&app),
-        get "/static/*" => staticfile::Static::new(Path::new("")),
-        get "/.well-known/*" => staticfile::Static::new(Path::new("")),
-        get "/confirm" => broker::ConfirmHandler::new(&app),
+        get "/" => broker::handlers::pages::Index,
+        get "/ver.txt" => broker::handlers::pages::Version,
+        get "/confirm" => broker::handlers::email::Confirmation::new(&app),
 
         // OpenID Connect provider endpoints
         get "/.well-known/openid-configuration" =>
-               broker::OIDConfigHandler::new(&app),
-        get "/keys.json" => broker::KeysHandler::new(&app),
-        get "/auth" => broker::AuthHandler::new(&app),
-        post "/auth" => broker::AuthHandler::new(&app),
+               broker::handlers::oidc::Discovery::new(&app),
+        get "/keys.json" => broker::handlers::oidc::KeySet::new(&app),
+        get "/auth" => broker::handlers::oidc::Auth::new(&app),
+        post "/auth" => broker::handlers::oidc::Auth::new(&app),
 
         // OpenID Connect relying party endpoints
-        get "/callback" => broker::CallbackHandler::new(&app),
+        get "/callback" => broker::handlers::oauth2::Callback::new(&app),
+
+        // Lastly, fall back to trying to serve static files out of ./res/
+        get "/*" => staticfile::Static::new(Path::new("./res/")),
     };
 
     let mut chain = Chain::new(router);
