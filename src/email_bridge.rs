@@ -13,18 +13,8 @@ use std::iter::Iterator;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 
 
-/// Characters eligible for inclusion in the email loop one-time pad.
-///
-/// Currently includes all numbers, lower- and upper-case ASCII letters,
-/// except those that could potentially cause confusion when reading back.
-/// (That is, '1', '5', '8', '0', 'b', 'i', 'l', 'o', 's', 'u', 'B', 'D', 'I'
-/// and 'O'.)
-const CODE_CHARS: &'static [char] = &[
-    '2', '3', '4', '6', '7', '9', 'a', 'c', 'd', 'e', 'f', 'g', 'h', 'j', 'k',
-    'm', 'n', 'p', 'q', 'r', 't', 'v', 'w', 'x', 'y', 'z', 'A', 'C', 'E', 'F',
-    'G', 'H', 'J', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W',
-    'X', 'Y', 'Z',
-];
+/// The z-base-32 character set, from which we select characters for the one-time pad.
+const CODE_CHARS: &'static [u8] = b"13456789abcdefghijkmnopqrstuwxyz";
 
 
 /// Helper method to provide authentication through an email loop.
@@ -41,8 +31,12 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
 
     let session = session_id(&email_addr, client_id);
 
-    // Generate a 6-character one-time pad.
-    let chars: String = (0..6).map(|_| CODE_CHARS[rand::random::<usize>() % CODE_CHARS.len()]).collect();
+    // Generate a 12-character one-time pad.
+    let chars = String::from_utf8((0..12).map(|_| {
+        CODE_CHARS[rand::random::<usize>() % CODE_CHARS.len()]
+    }).collect()).unwrap();
+    // For display, we split it in two groups of 6.
+    let chars_fmt = [&chars[0..6], &chars[6..12]].join(" ");
 
     // Store data for this request in Redis, to reference when user uses
     // the generated link.
@@ -65,7 +59,7 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
     // We can unwrap here, because the possible errors cannot happen here.
     let params = &[
         ("client_id", client_id),
-        ("code", &chars),
+        ("code", &chars_fmt),
         ("link", &href),
     ];
     let email = EmailBuilder::new()
@@ -93,7 +87,8 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
 pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
               -> BrokerResult<(String, String)> {
 
-    if code != &stored["code"] {
+    let trimmed = code.replace(|c: char| c.is_whitespace(), "").to_lowercase();
+    if &trimmed != &stored["code"] {
         return Err(BrokerError::Input("incorrect code".to_string()));
     }
 
