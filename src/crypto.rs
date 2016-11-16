@@ -72,10 +72,13 @@ impl NamedKey {
 
     /// Creates a NamedKey from a PKey
     pub fn from_pkey(pkey: PKey) -> Result<NamedKey,CryptoError> {
+        let e = pkey.get_rsa().e().expect("unable to retrieve key's e value");
+        let n = pkey.get_rsa().n().expect("unable to retrieve key's n value");
+
         let mut hasher = hash::Hasher::new(hash::Type::SHA256);
-        hasher.write(pkey.get_rsa().e().unwrap().to_vec().as_slice()).unwrap();
-        hasher.write(b".").unwrap();
-        hasher.write(pkey.get_rsa().n().unwrap().to_vec().as_slice()).unwrap();
+        hasher.write(e.to_vec().as_slice()).expect("pubkey hashing failed");
+        hasher.write(b".").expect("pubkey hashing failed");
+        hasher.write(n.to_vec().as_slice()).expect("pubkey hashing failed");
         let name = hasher.finish().to_base64(base64::URL_SAFE);
 
         Ok(NamedKey { id: name, key: pkey })
@@ -88,9 +91,10 @@ impl NamedKey {
                 .insert("kid", &self.id)
                 .insert("alg", "RS256")
                 .build()
-            ).unwrap();
+            ).expect("unable to coerce jwt header into string");
 
-        let payload = serde_json::to_string(&payload).unwrap();
+        let payload = serde_json::to_string(&payload)
+            .expect("unable to coerce jwt payload into string");
         let mut input = Vec::<u8>::new();
         input.extend(header.as_bytes().to_base64(base64::URL_SAFE).into_bytes());
         input.push(b'.');
@@ -100,7 +104,7 @@ impl NamedKey {
         let sig = self.key.sign(&sha256);
         input.push(b'.');
         input.extend(sig.to_base64(base64::URL_SAFE).into_bytes());
-        String::from_utf8(input).unwrap()
+        String::from_utf8(input).expect("unable to coerce jwt into string")
     }
 
     /// Return JSON represenation of the public key for use in JWK key sets.
@@ -108,14 +112,15 @@ impl NamedKey {
         fn json_big_num(n: &BigNum) -> String {
             n.to_vec().to_base64(base64::URL_SAFE)
         }
-        let rsa = self.key.get_rsa();
+        let n = self.key.get_rsa().n().expect("unable to retrieve key's n value");
+        let e = self.key.get_rsa().e().expect("unable to retrieve key's e value");
         ObjectBuilder::new()
             .insert("kty", "RSA")
             .insert("alg", "RS256")
             .insert("use", "sig")
             .insert("kid", &self.id)
-            .insert("n", json_big_num(&rsa.n().unwrap()))
-            .insert("e", json_big_num(&rsa.e().unwrap()))
+            .insert("n", json_big_num(&n))
+            .insert("e", json_big_num(&e))
             .build()
     }
 }
@@ -127,14 +132,13 @@ impl NamedKey {
 /// a SHA256 hash, and encode it with URL-safe bas64 encoding. This is used
 /// as the key in Redis, as well as the state for OAuth authentication.
 pub fn session_id(email: &EmailAddress, client_id: &str) -> String {
-    let mut rng = OsRng::new().unwrap();
-    let mut bytes_iter = rng.gen_iter();
-    let rand_bytes: Vec<u8> = (0..16).map(|_| bytes_iter.next().unwrap()).collect();
+    let mut rng = OsRng::new().expect("unable to create rng");
+    let rand_bytes: Vec<u8> = (0..16).map(|_| rng.gen()).collect();
 
     let mut hasher = hash::Hasher::new(hash::Type::SHA256);
-    hasher.write(email.to_string().as_bytes()).unwrap();
-    hasher.write(client_id.as_bytes()).unwrap();
-    hasher.write(&rand_bytes).unwrap();
+    hasher.write(email.to_string().as_bytes()).expect("session hashing failed");
+    hasher.write(client_id.as_bytes()).expect("session hashing failed");
+    hasher.write(&rand_bytes).expect("session hashing failed");
     hasher.finish().to_base64(base64::URL_SAFE)
 }
 

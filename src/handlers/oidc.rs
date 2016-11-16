@@ -91,7 +91,7 @@ broker_handler!(Auth, |app, req| {
 
     // Per the OAuth2 spec, we may redirect to the RP once we have validated client_id and
     // redirect_uri. In our case, this means we make redirect_uri available to error handling.
-    let parsed_redirect_uri = Url::parse(redirect_uri).unwrap();
+    let parsed_redirect_uri = Url::parse(redirect_uri).expect("unable to parse redirect uri");
     req.extensions.insert::<RedirectUri>(parsed_redirect_uri.clone());
 
     if try_get_param!(params, "response_type") != "id_token" {

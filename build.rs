@@ -9,10 +9,10 @@ use std::env;
 use std::path::Path;
 
 pub fn main() {
-    let out_dir = env::var_os("OUT_DIR").unwrap();
+    let out_dir = env::var_os("OUT_DIR").expect("build.rs $OUT_DIR not specified");
 
     let src = Path::new("src/serde_types.in.rs");
     let dst = Path::new(&out_dir).join("serde_types.rs");
 
-    serde_codegen::expand(&src, &dst).unwrap();
+    serde_codegen::expand(&src, &dst).expect("serde codegen failed");
 }

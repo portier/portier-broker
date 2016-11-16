@@ -19,7 +19,7 @@ broker_handler!(Confirmation, |app, req| {
     );
 
     let stored = try!(app.store.get_session("email", &try_get_param!(params, "session")));
-    req.extensions.insert::<RedirectUri>(Url::parse(&stored["redirect"]).unwrap());
+    req.extensions.insert::<RedirectUri>(Url::parse(&stored["redirect"]).expect("unable to parse stored redirect uri"));
 
     let code = try_get_param!(params, "code");
     let (jwt, redirect_uri) = try!(email_bridge::verify(app, &stored, code));

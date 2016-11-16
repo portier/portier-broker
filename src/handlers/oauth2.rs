@@ -20,7 +20,7 @@ broker_handler!(Callback, |app, req| {
     );
 
     let stored = try!(app.store.get_session("oidc", &try_get_param!(params, "state")));
-    req.extensions.insert::<RedirectUri>(Url::parse(&stored["redirect"]).unwrap());
+    req.extensions.insert::<RedirectUri>(Url::parse(&stored["redirect"]).expect("unable to parse stored redirect uri"));
 
     let code = try_get_param!(params, "code");
     let (jwt, redirect_uri) = try!(oidc_bridge::verify(app, &stored, code));

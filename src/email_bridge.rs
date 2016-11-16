@@ -9,6 +9,7 @@ use super::lettre::transport::smtp::SmtpTransportBuilder;
 use super::{Config, create_jwt};
 use super::crypto::session_id;
 use std::collections::HashMap;
+use std::error::Error;
 use std::iter::Iterator;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 
@@ -55,8 +56,6 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
                        utf8_percent_encode(&session, QUERY_ENCODE_SET),
                        utf8_percent_encode(&chars, QUERY_ENCODE_SET));
 
-    // Generate a simple email and send it through the SMTP server.
-    // We can unwrap here, because the possible errors cannot happen here.
     let params = &[
         ("client_id", client_id),
         ("code", &chars_fmt),
@@ -68,7 +67,8 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
         .alternative(&app.templates.email_html.render(params),
                      &app.templates.email_text.render(params))
         .subject(&format!("Finish logging in to {}", client_id))
-        .build().unwrap();
+        .build()
+        .unwrap_or_else(|err| panic!("unhandled error building email: {}", err.description()));
     let mut builder = try!(SmtpTransportBuilder::new(app.smtp_server.as_str()));
     if let (&Some(ref username), &Some(ref password)) = (&app.smtp_username, &app.smtp_password) {
         builder = builder.credentials(username, password);

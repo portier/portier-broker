@@ -4,6 +4,8 @@ extern crate toml;
 use std;
 use std::collections::HashMap;
 use std::env;
+use std::fmt::{self, Display};
+use std::error::Error;
 use std::fs::File;
 use std::io::Read;
 
@@ -18,6 +20,26 @@ pub enum ConfigError {
     Custom(String),
     Io(std::io::Error),
     Store(&'static str),
+}
+
+impl Error for ConfigError {
+    fn description(&self) -> &str {
+        match *self {
+            ConfigError::Io(ref err) => err.description(),
+            ConfigError::Custom(ref string) => string,
+            ConfigError::Store(static_str) => static_str,
+        }
+    }
+}
+
+impl Display for ConfigError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self{
+            ConfigError::Io(ref err) => write!(f, "IO error: {}", err),
+            ConfigError::Custom(ref string) => write!(f, "Configuration error: {}", string),
+            ConfigError::Store(static_str) => write!(f, "Store error: {}", static_str),
+        }
+    }
 }
 
 macro_rules! from_error {
@@ -52,7 +74,7 @@ impl Template {
     pub fn render_data(&self, data: &mustache::Data) -> String {
         let mut out: Vec<u8> = Vec::new();
         self.0.render_data(&mut out, data);
-        String::from_utf8(out).unwrap()
+        String::from_utf8(out).expect("unable to render template as string")
     }
 }
 
@@ -74,7 +96,8 @@ pub struct Templates {
 
 impl Templates {
     fn compile_template(path: &str) -> Template {
-        Template(mustache::compile_path(path).unwrap())
+        Template(mustache::compile_path(path)
+                 .expect(&format!("unable to compile template at: {}", path)))
     }
 }
 
@@ -340,11 +363,11 @@ impl ConfigBuilder {
         }
 
         let store = store::Store::new(
-            &self.redis_url.unwrap(),
+            &self.redis_url.expect("no redis url configured"),
             self.redis_cache_ttl as usize,
             self.redis_session_ttl as usize,
             self.redis_cache_max_doc_size as u64,
-        ).unwrap();
+        ).expect("unable to instantiate new redis store");
 
         let mut providers = HashMap::new();
         for (domain, builder) in self.providers {
@@ -356,14 +379,14 @@ impl ConfigBuilder {
         Ok(Config {
             listen_ip: self.listen_ip,
             listen_port: self.listen_port,
-            public_url: self.public_url.unwrap(),
+            public_url: self.public_url.expect("no public url configured"),
             allowed_origins: self.allowed_origins,
             token_ttl: self.token_ttl,
             keys: keys,
             store: store,
             from_name: self.from_name,
-            from_address: self.from_address.unwrap(),
-            smtp_server: self.smtp_server.unwrap(),
+            from_address: self.from_address.expect("no smtp from address configured"),
+            smtp_server: self.smtp_server.expect("no smtp outserver address configured"),
             smtp_username: self.smtp_username,
             smtp_password: self.smtp_password,
             providers: providers,

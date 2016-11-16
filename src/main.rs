@@ -12,6 +12,7 @@ extern crate rustc_serialize;
 use portier_broker as broker;
 use docopt::Docopt;
 use iron::{Iron, Chain};
+use std::error::Error;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::path::Path;
@@ -48,19 +49,24 @@ struct Args {
 
 /// The `main()` method. Will loop forever to serve HTTP requests.
 fn main() {
-    env_logger::init().unwrap();
+    if let Err(err) = env_logger::init() {
+        panic!(format!("failed to initialize logger: {}", err.description()));
+    }
     let args: Args = Docopt::new(USAGE)
                          .and_then(|d| d.version(Some(VERSION.to_string())).decode())
                          .unwrap_or_else(|e| e.exit());
 
-    // Read the configuration from the provided file.
     let mut builder = broker::config::ConfigBuilder::new();
     if let Some(path) = args.arg_CONFIG {
-        builder.update_from_file(&path).unwrap();
+        builder.update_from_file(&path).unwrap_or_else(|err| {
+            panic!(format!("failed to read config file: {}", err.description()))
+        });
     }
     builder.update_from_common_env();
     builder.update_from_broker_env();
-    let app = Arc::new(builder.done().unwrap());
+    let app = Arc::new(builder.done().unwrap_or_else(|err| {
+        panic!(format!("failed to build configuration: {}", err.description()))
+    }));
 
     let router = router!{
         // Human-targeted endpoints
@@ -86,9 +92,9 @@ fn main() {
     chain.link_before(broker::middleware::LogRequest);
     chain.link_after(broker::middleware::SecurityHeaders);
 
-    let ipaddr = std::net::IpAddr::from_str(&app.listen_ip).unwrap();
+    let ipaddr = std::net::IpAddr::from_str(&app.listen_ip).expect("Unable to parse listen IP address");
     let socket = std::net::SocketAddr::new(ipaddr, app.listen_port);
     info!("listening on http://{}", socket);
 
-    Iron::new(chain).http(socket).unwrap();
+    Iron::new(chain).http(socket).expect("Unable to start http server");
 }

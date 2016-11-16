@@ -100,7 +100,7 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
 }
 
 pub fn canonicalize_google(email: String) -> String {
-    let at = email.find('@').unwrap();
+    let at = email.find('@').expect("no @ sign in email address");
     let (user, domain) = email.split_at(at);
     let domain = &domain[1..];
     let user = &user.replace(".", ""); // Ignore dots
@@ -137,7 +137,7 @@ pub fn canonicalized(email: &str) -> String {
 pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
               -> BrokerResult<(String, String)> {
 
-    let email_addr = EmailAddress::new(&stored["email"]).unwrap();
+    let email_addr = try!(EmailAddress::new(&stored["email"]));
     let origin = &stored["client_id"];
     let nonce = &stored["nonce"];
 

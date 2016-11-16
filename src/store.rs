@@ -16,17 +16,17 @@ pub struct Store {
 impl Store {
     pub fn new(url: &str, expire_sessions: usize, expire_cache: usize, max_response_size: u64)
                -> Result<Store, &'static str> {
-        let res = redis::Client::open(url);
-        if res.is_err() {
-            return Err("error opening store connection");
+
+        match redis::Client::open(url) {
+            Err(_) => Err("error opening store connection"),
+            Ok(client) => Ok(Store {
+                client: client,
+                cache: StoreCache,
+                expire_sessions: expire_sessions,
+                expire_cache: expire_cache,
+                max_response_size: max_response_size,
+            }),
         }
-        Ok(Store {
-            client: res.unwrap(),
-            cache: StoreCache,
-            expire_sessions: expire_sessions,
-            expire_cache: expire_cache,
-            max_response_size: max_response_size,
-        })
     }
 
     pub fn store_session(&self, session_id: &str, data: &[(&str, &str)])
