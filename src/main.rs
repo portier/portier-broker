@@ -84,7 +84,6 @@ fn main() {
 
     let mut chain = Chain::new(router);
     chain.link_before(broker::middleware::LogRequest);
-    chain.link_before(broker::middleware::EnforceOrigin::new(&app.public_url));
     chain.link_after(broker::middleware::SecurityHeaders);
 
     let ipaddr = std::net::IpAddr::from_str(&app.listen_ip).unwrap();
