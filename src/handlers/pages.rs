@@ -24,7 +24,7 @@ impl Handler for Version {
             Ok(sha) => sha,
             Err(_) => "unknown".to_string(),
         };
-        let body = format!("Poriter {} (git commit {})", version, sha);
+        let body = format!("Portier {} (git commit {})", version, sha);
 
         Ok(Response::with((status::Ok, Header(ContentType::plaintext()), body)))
     }
