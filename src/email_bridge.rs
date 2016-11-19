@@ -41,14 +41,14 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
 
     // Store data for this request in Redis, to reference when user uses
     // the generated link.
-    try!(app.store.store_session(&session, &[
+    app.store.store_session(&session, &[
         ("type", "email"),
         ("email", &email_addr.to_string()),
         ("client_id", client_id),
         ("nonce", nonce),
         ("code", &chars),
         ("redirect", &redirect_uri.to_string()),
-    ]));
+    ])?;
 
     // Generate the URL used to verify email address ownership.
     let href = format!("{}/confirm?session={}&code={}",
@@ -69,12 +69,12 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
         .subject(&format!("Finish logging in to {}", client_id))
         .build()
         .unwrap_or_else(|err| panic!("unhandled error building email: {}", err.description()));
-    let mut builder = try!(SmtpTransportBuilder::new(app.smtp_server.as_str()));
+    let mut builder = SmtpTransportBuilder::new(app.smtp_server.as_str())?;
     if let (&Some(ref username), &Some(ref password)) = (&app.smtp_username, &app.smtp_password) {
         builder = builder.credentials(username, password);
     }
     let mut mailer = builder.build();
-    try!(mailer.send(email));
+    mailer.send(email)?;
     mailer.close();
     Ok(session)
 

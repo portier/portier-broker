@@ -25,9 +25,9 @@ use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 /// ```
 macro_rules! try_get_json_field {
     ( $input:expr, $key:tt, $conv:ident, $descr:expr ) => {
-        try!($input.find($key).and_then(|v| v.$conv()).ok_or_else(|| {
+        $input.find($key).and_then(|v| v.$conv()).ok_or_else(|| {
             BrokerError::Provider(format!("{} missing from {}", $key, $descr))
-        }))
+        })?
     }
 }
 
@@ -49,13 +49,13 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
 
     // Store the nonce and the RP's `redirect_uri` in Redis for use in the
     // callback handler.
-    try!(app.store.store_session(&session, &[
+    app.store.store_session(&session, &[
         ("type", "oidc"),
         ("email", &email_addr.to_string()),
         ("client_id", client_id),
         ("nonce", nonce),
         ("redirect", &redirect_uri.to_string()),
-    ]));
+    ])?;
 
     let client = HttpClient::new();
 
@@ -63,17 +63,15 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
     // `authorization_endpoint` from it.
     let domain = &email_addr.domain.to_lowercase();
     let provider = &app.providers[domain];
-    let config_obj: Value = try!(
-        app.store.cache.fetch_json_url(
-            &app.store,
-            CacheKey::Discovery { domain: &domain },
-            &client,
-            &provider.discovery_url
-        ).map_err(|e| {
+    let config_obj: Value = app.store.cache
+        .fetch_json_url(&app.store,
+                        CacheKey::Discovery { domain: &domain },
+                        &client,
+                        &provider.discovery_url)
+        .map_err(|e| {
             BrokerError::Provider(format!("could not fetch {}'s discovery document: {}",
                                           domain, e.description()))
-        })
-    );
+        })?;
     let descr = format!("{}'s discovery document", domain);
     let authz_base = try_get_json_field!(config_obj, "authorization_endpoint", as_str, descr);
 
@@ -137,7 +135,7 @@ pub fn canonicalized(email: &str) -> String {
 pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
               -> BrokerResult<(String, String)> {
 
-    let email_addr = try!(EmailAddress::new(&stored["email"]));
+    let email_addr = EmailAddress::new(&stored["email"])?;
     let origin = &stored["client_id"];
     let nonce = &stored["nonce"];
 
@@ -149,17 +147,15 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
     // function, and/or cache them by provider host.
     let domain = &email_addr.domain.to_lowercase();
     let provider = &app.providers[domain];
-    let config_obj: Value = try!(
-        app.store.cache.fetch_json_url(
-            &app.store,
-            CacheKey::Discovery { domain: domain },
-            &client,
-            &provider.discovery_url
-        ).map_err(|e| {
+    let config_obj: Value = app.store.cache
+        .fetch_json_url(&app.store,
+                        CacheKey::Discovery { domain: domain },
+                        &client,
+                        &provider.discovery_url)
+        .map_err(|e| {
             BrokerError::Provider(format!("could not fetch {}'s discovery document: {}",
                                           domain, e.description()))
-        })
-    );
+        })?;
     let descr = format!("{}'s discovery document", domain);
     let token_url = try_get_json_field!(config_obj, "token_endpoint", as_str, descr);
     let jwks_url = try_get_json_field!(config_obj, "jwks_uri", as_str, descr);
@@ -184,39 +180,33 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
     let token_obj: Value = {
         let mut headers = Headers::new();
         headers.set(HyContentType::form_url_encoded());
-        try!(
-            client.post(token_url).headers(headers).body(&body).send()
-                .map_err(BrokerError::Http)
-                .and_then(|rsp| from_reader(rsp).map_err(|_| {
-                    BrokerError::Provider("failed to parse response as JSON".to_string())
-                }))
-                .map_err(|e| {
-                    BrokerError::Provider(format!("{} token request failed: {}",
-                                                  domain, e.description()))
-                })
-        )
+        client.post(token_url).headers(headers).body(&body).send()
+            .map_err(BrokerError::Http)
+            .and_then(|rsp| from_reader(rsp).map_err(|_| {
+                BrokerError::Provider("failed to parse response as JSON".to_string())
+            }))
+            .map_err(|e| {
+                BrokerError::Provider(format!("{} token request failed: {}",
+                                              domain, e.description()))
+            })?
     };
     let descr = format!("{}'s token response", domain);
     let id_token = try_get_json_field!(token_obj, "id_token", as_str, descr);
 
     // Grab the keys from the provider, then verify the signature.
     let jwt_payload = {
-        let keys_obj: Value = try!(
-            app.store.cache.fetch_json_url(
-                &app.store,
-                CacheKey::KeySet { domain: domain },
-                &client,
-                &jwks_url
-            ).map_err(|e| {
+        let keys_obj: Value = app.store.cache
+            .fetch_json_url(&app.store,
+                            CacheKey::KeySet { domain: domain },
+                            &client,
+                            &jwks_url)
+            .map_err(|e| {
                 BrokerError::Provider(format!("could not fetch {}'s keys: {}",
                                               domain, e.description()))
-            })
-        );
-        try!(
-            verify_jws(id_token, &keys_obj).map_err(|_| {
-                BrokerError::Provider(format!("could not verify the token received from {}", domain))
-            })
-        )
+            })?;
+        verify_jws(id_token, &keys_obj).map_err(|_| {
+            BrokerError::Provider(format!("could not verify the token received from {}", domain))
+        })?
     };
 
     // Verify the claims contained in the token.

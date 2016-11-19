@@ -230,12 +230,11 @@ impl ConfigBuilder {
     }
 
     pub fn update_from_file(&mut self, path: &str) -> Result<&mut ConfigBuilder, ConfigError> {
-        let mut file = try!(File::open(path));
+        let mut file = File::open(path)?;
         let mut file_contents = String::new();
-        try!(file.read_to_string(&mut file_contents));
-        let toml_config: TomlConfig = try!(
-            toml::decode_str(&file_contents).ok_or("unable to parse config file")
-        );
+        file.read_to_string(&mut file_contents)?;
+        let toml_config: TomlConfig =
+            toml::decode_str(&file_contents).ok_or("unable to parse config file")?;
 
         if let Some(table) = toml_config.server {
             if let Some(val) = table.listen_ip { self.listen_ip = val; }

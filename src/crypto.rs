@@ -56,16 +56,16 @@ pub struct NamedKey {
 impl NamedKey {
     /// Creates a NamedKey by reading a `file` path and generating an `id`.
     pub fn from_file(filename: &str) -> Result<NamedKey, CryptoError> {
-        let mut file = try!(File::open(filename));
+        let mut file = File::open(filename)?;
         let mut file_contents = String::new();
-        try!(file.read_to_string(&mut file_contents));
+        file.read_to_string(&mut file_contents)?;
 
         NamedKey::from_pem_str(&file_contents)
     }
 
     /// Creates a NamedKey from a PEM-encoded str.
     pub fn from_pem_str(pem: &str) -> Result<NamedKey, CryptoError> {
-        let pkey = try!(PKey::private_key_from_pem(&mut pem.as_bytes()));
+        let pkey = PKey::private_key_from_pem(&mut pem.as_bytes())?;
 
         NamedKey::from_pkey(pkey)
     }
@@ -148,9 +148,7 @@ pub fn session_id(email: &EmailAddress, client_id: &str) -> String {
 /// Searches the provided JWK Key Set Value for the key matching the given
 /// id. Returns a usable public key if exactly one key is found.
 pub fn jwk_key_set_find(set: &Value, kid: &str) -> Result<PKey, ()> {
-    let key_objs = try!(
-        set.find("keys").and_then(|v| v.as_array()).ok_or(())
-    );
+    let key_objs = set.find("keys").and_then(|v| v.as_array()).ok_or(())?;
     let matching = key_objs.iter()
         .filter(|key_obj| {
             key_obj.find("kid").and_then(|v| v.as_str()) == Some(kid) &&
@@ -164,17 +162,13 @@ pub fn jwk_key_set_find(set: &Value, kid: &str) -> Result<PKey, ()> {
     }
 
     // Then, use the data to build a public key object for verification.
-    let n = try!(
-        matching[0].find("n").and_then(|v| v.as_str()).ok_or(())
-            .and_then(|data| data.from_base64().map_err(|_| ()))
-            .and_then(|data| BigNum::new_from_slice(&data).map_err(|_| ()))
-    );
-    let e = try!(
-        matching[0].find("e").and_then(|v| v.as_str()).ok_or(())
-            .and_then(|data| data.from_base64().map_err(|_| ()))
-            .and_then(|data| BigNum::new_from_slice(&data).map_err(|_| ()))
-    );
-    let rsa = try!(RSA::from_public_components(n, e).map_err(|_| ()));
+    let n = matching[0].find("n").and_then(|v| v.as_str()).ok_or(())
+                .and_then(|data| data.from_base64().map_err(|_| ()))
+                .and_then(|data| BigNum::new_from_slice(&data).map_err(|_| ()))?;
+    let e = matching[0].find("e").and_then(|v| v.as_str()).ok_or(())
+                .and_then(|data| data.from_base64().map_err(|_| ()))
+                .and_then(|data| BigNum::new_from_slice(&data).map_err(|_| ()))?;
+    let rsa = RSA::from_public_components(n, e).map_err(|_| ())?;
     let mut pub_key = PKey::new();
     pub_key.set_rsa(&rsa);
     Ok(pub_key)
@@ -189,17 +183,11 @@ pub fn verify_jws(jws: &str, key_set: &Value) -> Result<Value, ()> {
     if parts.len() != 3 {
         return Err(());
     }
-    let decoded = try!(
-        parts.iter().map(|s| s.from_base64())
-            .collect::<Result<Vec<_>, _>>().map_err(|_| ())
-    );
-    let jwt_header: Value = try!(
-        from_slice(&decoded[0]).map_err(|_| ())
-    );
-    let kid = try!(
-        jwt_header.find("kid").and_then(|v| v.as_str()).ok_or(())
-    );
-    let pub_key = try!(jwk_key_set_find(key_set, kid));
+    let decoded = parts.iter().map(|s| s.from_base64())
+                    .collect::<Result<Vec<_>, _>>().map_err(|_| ())?;
+    let jwt_header: Value = from_slice(&decoded[0]).map_err(|_| ())?;
+    let kid = jwt_header.find("kid").and_then(|v| v.as_str()).ok_or(())?;
+    let pub_key = jwk_key_set_find(key_set, kid)?;
 
     // Verify the identity token's signature.
     let message_len = parts[0].len() + parts[1].len() + 1;
@@ -208,5 +196,5 @@ pub fn verify_jws(jws: &str, key_set: &Value) -> Result<Value, ()> {
         return Err(());
     }
 
-    Ok(try!(from_slice(&decoded[1]).map_err(|_| ())))
+    Ok(from_slice(&decoded[1]).map_err(|_| ())?)
 }

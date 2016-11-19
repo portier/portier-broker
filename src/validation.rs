@@ -67,7 +67,7 @@ impl From<url::ParseError> for ValidationError {
 
 /// Test that a URI is valid and conforms to our expetations.
 pub fn valid_uri(raw_uri: &str) -> Result<(), ValidationError> {
-    let uri = try!(Url::parse(raw_uri));
+    let uri = Url::parse(raw_uri)?;
 
     if !raw_uri.starts_with("http://") && !raw_uri.starts_with("https://") {
         return Err(ValidationError::BadScheme)
@@ -92,7 +92,7 @@ pub fn valid_uri(raw_uri: &str) -> Result<(), ValidationError> {
 
 /// Test that a URI is is valid and only has a scheme, host, and port.
 pub fn only_origin(raw_uri: &str) -> Result<(), ValidationError> {
-    let uri = try!(Url::parse(raw_uri));
+    let uri = Url::parse(raw_uri)?;
 
     if uri.origin().ascii_serialization() != raw_uri {
         return Err(ValidationError::NotBareOrigin)
@@ -103,8 +103,8 @@ pub fn only_origin(raw_uri: &str) -> Result<(), ValidationError> {
 
 /// Test that two URIs fall within the same origin.
 pub fn same_origin(raw_a: &str, raw_b: &str) -> Result<(), ValidationError> {
-    let a = try!(Url::parse(raw_a));
-    let b = try!(Url::parse(raw_b));
+    let a = Url::parse(raw_a)?;
+    let b = Url::parse(raw_b)?;
 
     if a.origin() != b.origin() {
         return Err(ValidationError::MismatchedOrigin)
