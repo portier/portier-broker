@@ -61,12 +61,12 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
 
     // Retrieve the provider's Discovery document and extract the
     // `authorization_endpoint` from it.
-    let domain = &email_addr.domain;
+    let domain = &email_addr.domain.to_lowercase();
     let provider = &app.providers[domain];
     let config_obj: Value = try!(
         app.store.cache.fetch_json_url(
             &app.store,
-            CacheKey::Discovery { domain: &email_addr.domain },
+            CacheKey::Discovery { domain: &domain },
             &client,
             &provider.discovery_url
         ).map_err(|e| {
@@ -147,7 +147,7 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
     // `token_endpoint` and `jwks_uri` values from it. TODO: save these
     // when requesting the Discovery document in the `oauth_request()`
     // function, and/or cache them by provider host.
-    let domain = &email_addr.domain;
+    let domain = &email_addr.domain.to_lowercase();
     let provider = &app.providers[domain];
     let config_obj: Value = try!(
         app.store.cache.fetch_json_url(
@@ -258,5 +258,13 @@ mod tests {
                    "example@gmail.com");
         assert_eq!(canonicalized("example.foo+bar@googlemail.com"),
                    "examplefoo@gmail.com");
+    }
+
+    #[test]
+    fn test_canonicalized_casing() {
+        assert_eq!(canonicalized("EXAMPLE.FOO+BAR@EXAMPLE.COM"),
+                   "example.foo+bar@example.com");
+        assert_eq!(canonicalized("EXAMPLE@GOOGLEMAIL.COM"),
+                   "example@gmail.com");
     }
 }
