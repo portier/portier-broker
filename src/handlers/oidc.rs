@@ -105,7 +105,7 @@ broker_handler!(Auth, |app, req| {
             .map_err(|_| BrokerError::Input("login_hint is not a valid email address".to_string()))
     );
     let nonce = try_get_param!(params, "nonce");
-    if app.providers.contains_key(&email_addr.domain) {
+    if app.providers.contains_key(&email_addr.domain.to_lowercase()) {
 
         // OIDC authentication. Redirect to the identity provider.
         let auth_url = try!(oidc_bridge::request(app, email_addr, client_id, nonce, &parsed_redirect_uri));
