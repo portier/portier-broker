@@ -104,6 +104,15 @@ discovery_url   BROKER_GMAIL_DISCOVERY "https://accounts.google.com/.well-known/
 issuer_domain   BROKER_GMAIL_ISSUER    "accounts.google.com"
 =============== ====================== ==============================================================
 
+**[limits] section:**
+
+=============== ======================== ================
+``config.toml`` Environment Variable     Default
+=============== ======================== ================
+auth            BROKER_LIMITS_AUTH       [] (empty array)
+auth_email      BROKER_LIMITS_AUTH_EMAIL [] (empty array)
+=============== ======================== ================
+
 The example configuration file, ``config.toml.dist``, includes reasonable default
 values for most settings, but you must explicitly set:
 
@@ -124,6 +133,13 @@ specify:
 * ``providers."gmail.com".secret``: Your Google OAuth API Secret Key
 
 You can create encryption keys with ``openssl genrsa 4096 > private.pem``
+
+Rate limits in the `limits` section are specified as an array of strings, where
+each strings is in the format: `"<name>:<max_count>:<timespan>:<granularity>"`.
+The `name` is a Redis subkey name for the counter. The end result is to allow
+`max_count` requests per `timespan` (in seconds) with a sliding window. To
+prevent flooding memory, requests are counted in smaller buckets of
+`granularity` (in seconds). The `timespan` must be a multiple of `granularity`.
 
 Contributing
 ------------
