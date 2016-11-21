@@ -14,15 +14,13 @@ use urlencoded::UrlEncodedQuery;
 /// identity provider, they will be redirected back to the callback handler.
 /// Verify the callback data and return the resulting token or error.
 broker_handler!(Callback, |app, req| {
-    let params = try!(
-        req.compute::<UrlEncodedQuery>()
-            .map_err(|_| BrokerError::Input("no query string in GET request".to_string()))
-    );
+    let params = req.compute::<UrlEncodedQuery>()
+                    .map_err(|_| BrokerError::Input("no query string in GET request".to_string()))?;
 
-    let stored = try!(app.store.get_session("oidc", &try_get_param!(params, "state")));
-    req.extensions.insert::<RedirectUri>(Url::parse(&stored["redirect"]).unwrap());
+    let stored = app.store.get_session("oidc", &try_get_param!(params, "state"))?;
+    req.extensions.insert::<RedirectUri>(Url::parse(&stored["redirect"]).expect("unable to parse stored redirect uri"));
 
     let code = try_get_param!(params, "code");
-    let (jwt, redirect_uri) = try!(oidc_bridge::verify(app, &stored, code));
+    let (jwt, redirect_uri) = oidc_bridge::verify(app, &stored, code)?;
     Ok(Response::with(return_to_relier(app, &redirect_uri, &[("id_token", &jwt)])))
 });

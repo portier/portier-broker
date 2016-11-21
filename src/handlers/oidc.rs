@@ -60,29 +60,27 @@ broker_handler!(KeySet, |app, _req| {
 /// domain matches one of the configured famous providers. Otherwise, calls the
 /// `email::request()` function to allow authentication through the email loop.
 broker_handler!(Auth, |app, req| {
-    let params = try!(
-        match req.method {
-            Method::Get => {
-                req.compute::<UrlEncodedQuery>()
-                    .map_err(|_| BrokerError::Input("no query string in GET request".to_string()))
-            },
-            Method::Post => {
-                req.compute::<UrlEncodedBody>()
-                    .map_err(|_| BrokerError::Input("no query string in POST data".to_string()))
-            },
-            _ => {
-                panic!("Unsupported method: {}", req.method)
-            }
+    let params = match req.method {
+        Method::Get => {
+            req.compute::<UrlEncodedQuery>()
+                .map_err(|_| BrokerError::Input("no query string in GET request".to_string()))
+        },
+        Method::Post => {
+            req.compute::<UrlEncodedBody>()
+                .map_err(|_| BrokerError::Input("no query string in POST data".to_string()))
+        },
+        _ => {
+            panic!("Unsupported method: {}", req.method)
         }
-    );
+    }?;
 
     let client_id = try_get_param!(params, "client_id");
     let redirect_uri = try_get_param!(params, "redirect_uri");
 
-    try!(valid_uri(redirect_uri));
-    try!(valid_uri(client_id));
-    try!(same_origin(client_id, redirect_uri));
-    try!(only_origin(client_id));
+    valid_uri(redirect_uri)?;
+    valid_uri(client_id)?;
+    same_origin(client_id, redirect_uri)?;
+    only_origin(client_id)?;
     if let Some(ref whitelist) = app.allowed_origins {
         if !whitelist.contains(&client_id.to_string()) {
             return Err(BrokerError::Input("the origin is not whitelisted".to_string()));
@@ -91,7 +89,7 @@ broker_handler!(Auth, |app, req| {
 
     // Per the OAuth2 spec, we may redirect to the RP once we have validated client_id and
     // redirect_uri. In our case, this means we make redirect_uri available to error handling.
-    let parsed_redirect_uri = Url::parse(redirect_uri).unwrap();
+    let parsed_redirect_uri = Url::parse(redirect_uri).expect("unable to parse redirect uri");
     req.extensions.insert::<RedirectUri>(parsed_redirect_uri.clone());
 
     if try_get_param!(params, "response_type") != "id_token" {
@@ -100,21 +98,19 @@ broker_handler!(Auth, |app, req| {
     if try_get_param!(params, "response_mode", "fragment") != "form_post" {
         return Err(BrokerError::Input("unsupported response_mode, only form_post is supported".to_string()))
     }
-    let email_addr = try!(
-        EmailAddress::new(try_get_param!(params, "login_hint"))
-            .map_err(|_| BrokerError::Input("login_hint is not a valid email address".to_string()))
-    );
+    let email_addr = EmailAddress::new(try_get_param!(params, "login_hint"))
+            .map_err(|_| BrokerError::Input("login_hint is not a valid email address".to_string()))?;
     let nonce = try_get_param!(params, "nonce");
     if app.providers.contains_key(&email_addr.domain.to_lowercase()) {
 
         // OIDC authentication. Redirect to the identity provider.
-        let auth_url = try!(oidc_bridge::request(app, email_addr, client_id, nonce, &parsed_redirect_uri));
+        let auth_url = oidc_bridge::request(app, email_addr, client_id, nonce, &parsed_redirect_uri)?;
         Ok(Response::with((status::SeeOther, modifiers::Header(Location(auth_url.to_string())))))
 
     } else {
 
         // Email loop authentication. Render a message and form.
-        let session_id = try!(email_bridge::request(app, email_addr, client_id, nonce, &parsed_redirect_uri));
+        let session_id = email_bridge::request(app, email_addr, client_id, nonce, &parsed_redirect_uri)?;
         Ok(Response::with((status::Ok,
                            modifiers::Header(ContentType::html()),
                            app.templates.confirm_email.render(&[

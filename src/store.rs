@@ -16,34 +16,34 @@ pub struct Store {
 impl Store {
     pub fn new(url: &str, expire_sessions: usize, expire_cache: usize, max_response_size: u64)
                -> Result<Store, &'static str> {
-        let res = redis::Client::open(url);
-        if res.is_err() {
-            return Err("error opening store connection");
+
+        match redis::Client::open(url) {
+            Err(_) => Err("error opening store connection"),
+            Ok(client) => Ok(Store {
+                client: client,
+                cache: StoreCache,
+                expire_sessions: expire_sessions,
+                expire_cache: expire_cache,
+                max_response_size: max_response_size,
+            }),
         }
-        Ok(Store {
-            client: res.unwrap(),
-            cache: StoreCache,
-            expire_sessions: expire_sessions,
-            expire_cache: expire_cache,
-            max_response_size: max_response_size,
-        })
     }
 
     pub fn store_session(&self, session_id: &str, data: &[(&str, &str)])
                          -> BrokerResult<()> {
         let key = Self::format_session_key(session_id);
-        try!(redis::pipe()
-                .atomic()
-                .hset_multiple(&key, data).ignore()
-                .expire(&key, self.expire_sessions).ignore()
-                .query(&self.client));
+        redis::pipe()
+            .atomic()
+            .hset_multiple(&key, data).ignore()
+            .expire(&key, self.expire_sessions).ignore()
+            .query(&self.client)?;
         Ok(())
     }
 
     pub fn get_session(&self, type_value: &str, session_id: &str)
                        -> BrokerResult<HashMap<String, String>> {
         let key = Self::format_session_key(session_id);
-        let stored: HashMap<String, String> = try!(self.client.hgetall(&key));
+        let stored: HashMap<String, String> = self.client.hgetall(&key)?;
         if stored.is_empty() {
             return Err(BrokerError::Input("session not found".to_string()));
         }

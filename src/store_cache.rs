@@ -44,11 +44,11 @@ impl StoreCache {
 
         // Try to retrieve the result from cache.
         let key_str = key.to_string();
-        let stored: Option<String> = try!(store.client.get(&key_str));
+        let stored: Option<String> = store.client.get(&key_str)?;
         stored.map_or_else(|| {
 
             // Cache miss, make a request.
-            let rsp = try!(session.get(url).send());
+            let rsp = session.get(url).send()?;
 
             // Grab the max-age directive from the Cache-Control header.
             let max_age = rsp.headers.get().map_or(0, |header: &HyCacheControl| {
@@ -63,14 +63,14 @@ impl StoreCache {
             // We read up to size+1, because we use the extra byte as a
             // sentinel to detect responses that exceed our maximum size.
             let mut data = String::new();
-            let bytes_read = try!(rsp.take(store.max_response_size + 1).read_to_string(&mut data));
+            let bytes_read = rsp.take(store.max_response_size + 1).read_to_string(&mut data)?;
             if bytes_read as u64 > store.max_response_size {
                 return Err(BrokerError::Custom("response exceeded the size limit".to_string()))
             }
 
             // Cache the response for at least `expire_cache`, but honor longer `max-age`.
             let seconds = max(store.expire_cache, max_age as usize);
-            try!(store.client.set_ex(&key_str, &data, seconds));
+            store.client.set_ex(&key_str, &data, seconds)?;
 
             Ok(data)
 

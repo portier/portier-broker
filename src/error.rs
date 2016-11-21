@@ -1,3 +1,4 @@
+use emailaddress;
 use std::fmt;
 use std::convert::From;
 use std::error::Error;
@@ -31,7 +32,10 @@ impl Error for BrokerError {
             BrokerError::Input(ref description) |
             BrokerError::Provider(ref description) |
             BrokerError::Custom(ref description) => description,
-            _ => self.cause().unwrap().description(),
+            BrokerError::Io(ref err) => err.description(),
+            BrokerError::Redis(ref err) => err.description(),
+            BrokerError::Http(ref err) => err.description(),
+            BrokerError::Mail(ref err) => err.description(),
         }
     }
 
@@ -63,6 +67,12 @@ impl From<BrokerError> for String {
 impl From<ValidationError> for BrokerError {
     fn from(err: ValidationError) -> BrokerError {
         BrokerError::Input(err.description().to_string())
+    }
+}
+
+impl From<emailaddress::AddrError> for BrokerError {
+    fn from(err: emailaddress::AddrError) -> BrokerError {
+        BrokerError::Custom(format!("unable to parse email address: {}", err.description()).to_string())
     }
 }
 

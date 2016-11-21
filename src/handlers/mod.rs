@@ -53,11 +53,10 @@ macro_rules! broker_handler {
 /// ```
 macro_rules! try_get_param {
     ( $input:expr , $param:tt ) => {
-        try!($input.get($param)
-                   .and_then(|list| list.into_iter().nth(0))
-                   .map(|s| s.as_str())
-                   .ok_or_else(|| BrokerError::Input(concat!("missing request parameter ", $param).to_string()))
-        )
+        $input.get($param)
+               .and_then(|list| list.into_iter().nth(0))
+               .map(|s| s.as_str())
+               .ok_or_else(|| BrokerError::Input(concat!("missing request parameter ", $param).to_string()))?
     };
     ( $input:expr , $param:tt, $default:tt ) => {
         $input.get($param)
@@ -166,7 +165,7 @@ fn handle_error(app: &Config, req: &mut Request, err: BrokerError) -> IronResult
 /// Serializes the argument value to JSON and returns a HTTP 200 response
 /// code with the serialized JSON as the body.
 fn json_response(obj: &Value) -> BrokerResult<Response> {
-    let content = serde_json::to_string(&obj).unwrap();
+    let content = serde_json::to_string(&obj).expect("unable to coerce JSON Value into string");
     Ok(Response::with((status::Ok,
                        modifiers::Header(ContentType::json()),
                        content)))

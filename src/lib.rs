@@ -45,5 +45,6 @@ fn create_jwt(app: &Config, email: &str, origin: &str, nonce: &str) -> String {
         .insert("sub", email)
         .insert("nonce", nonce)
         .build();
-    app.keys.last().unwrap().sign_jws(payload)
+    let key = app.keys.last().expect("unable to locate signing key");
+    key.sign_jws(payload)
 }
