@@ -13,23 +13,15 @@ pub struct Ratelimit {
 }
 
 
-/// Represents a Redis key.
-pub enum RatelimitKey<'a> {
-    Email { email: &'a str },
+/// Increment and check a ratelimit for a specific email address.
+pub fn addr_limiter(store: &Store, addr: &str, limit: &Ratelimit) -> BrokerResult<bool> {
+    let key = format!("ratelimit:addr:{}", addr.to_lowercase());
+    return incr_and_test_limits(&store, &key, &limit);
 }
 
-impl<'a> RatelimitKey<'a> {
-    fn to_string(&self) -> String {
-        match *self {
-            RatelimitKey::Email { email } => {
-                format!("ratelimit:email:{}", email)
-            },
-        }
-    }
-}
 
 /// Increment the given key, and test if the counter is within limits.
-pub fn incr_and_test_limits(store: &Store, key: RatelimitKey, ratelimit: &Ratelimit) -> BrokerResult<bool> {
+fn incr_and_test_limits(store: &Store, key: &str, ratelimit: &Ratelimit) -> BrokerResult<bool> {
     let script = Script::new(r"
         local count = redis.call('incr', KEYS[1])
         if count == 1 then
@@ -38,10 +30,7 @@ pub fn incr_and_test_limits(store: &Store, key: RatelimitKey, ratelimit: &Rateli
         return count
     ");
 
-    let count: usize = script
-        .key(key.to_string())
-        .arg(ratelimit.duration)
-        .invoke(&store.client)?;
+    let count: usize = script.key(key).arg(ratelimit.duration).invoke(&store.client)?;
 
     Ok(count <= ratelimit.count)
 }

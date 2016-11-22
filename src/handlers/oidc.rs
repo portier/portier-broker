@@ -11,7 +11,7 @@ use oidc_bridge;
 use serde_json::builder::{ArrayBuilder, ObjectBuilder};
 use std::sync::Arc;
 use super::{RedirectUri, handle_error, json_response};
-use super::super::store_limits::{RatelimitKey, incr_and_test_limits};
+use super::super::store_limits::addr_limiter;
 use urlencoded::{UrlEncodedBody, UrlEncodedQuery};
 use validation::{valid_uri, only_origin, same_origin};
 
@@ -116,8 +116,7 @@ broker_handler!(Auth, |app, req| {
 
     } else {
 
-        if !incr_and_test_limits(&app.store, RatelimitKey::Email { email: &email_addr_norm_str },
-                                 &app.smtp_user_throttle)? {
+        if !addr_limiter(&app.store, &email_addr_norm_str, &app.smtp_user_throttle)? {
             return Ok(Response::with(status::TooManyRequests));
         }
 
