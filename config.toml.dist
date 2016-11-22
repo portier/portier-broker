@@ -40,6 +40,8 @@ server =
 username = 
 # Outgoing mailserver password - Default: (none)
 password = 
+# Ratelimit for a single email address - Default: "5/min" (Units: sec, min)
+user_throttle = "5/min"
 
 
 [providers."gmail.com"]
@@ -51,10 +53,3 @@ secret =
 discovery_url = "https://accounts.google.com/.well-known/openid-configuration"
 # Google OpenID Connect id_token issuer domain - Default: "accounts.google.com"
 issuer_domain = "accounts.google.com"
-
-
-[limits]
-# Limit the number of session of any kind.
-auth = ["per-second:3:1:1", "per-minute:20:60:5"]
-# Limit the number of email loop authentications.
-auth_email = ["per-second:1:1:1", "per-minute:10:60:5"]

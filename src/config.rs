@@ -8,10 +8,9 @@ use std::fmt::{self, Display};
 use std::error::Error;
 use std::fs::File;
 use std::io::Read;
-use std::str::FromStr;
 
 use super::{crypto, store, mustache};
-use super::store_limits::LimitConfig;
+use super::store_limits::Ratelimit;
 
 include!(concat!(env!("OUT_DIR"), "/serde_types.rs"));
 
@@ -138,10 +137,9 @@ pub struct Config {
     pub smtp_server: String,
     pub smtp_username: Option<String>,
     pub smtp_password: Option<String>,
+    pub smtp_user_throttle: Ratelimit,
     pub providers: HashMap<String, Provider>,
     pub templates: Templates,
-    pub limits_auth: Vec<LimitConfig>,
-    pub limits_auth_email: Vec<LimitConfig>,
 }
 
 
@@ -163,9 +161,8 @@ pub struct ConfigBuilder {
     pub smtp_server: Option<String>,
     pub smtp_username: Option<String>,
     pub smtp_password: Option<String>,
+    pub smtp_user_throttle: String,
     pub providers: HashMap<String, ProviderBuilder>,
-    pub limits_auth: Vec<LimitConfig>,
-    pub limits_auth_email: Vec<LimitConfig>,
 }
 
 
@@ -232,9 +229,8 @@ impl ConfigBuilder {
             smtp_username: None,
             smtp_password: None,
             smtp_server: None,
+            smtp_user_throttle: "5/min".to_string(),
             providers: HashMap::new(),
-            limits_auth: Vec::new(),
-            limits_auth_email: Vec::new(),
         }
     }
 
@@ -273,6 +269,7 @@ impl ConfigBuilder {
             self.smtp_username = table.username.or(self.smtp_username.clone());
             self.smtp_password = table.password.or(self.smtp_password.clone());
             if let Some(val) = table.from_name { self.from_name = val; }
+            if let Some(val) = table.user_throttle { self.smtp_user_throttle = val; }
         }
 
         if let Some(table) = toml_config.providers {
@@ -288,11 +285,6 @@ impl ConfigBuilder {
                 if values.discovery_url.is_some() { provider.discovery_url = values.discovery_url; }
                 if values.issuer_domain.is_some() { provider.issuer_domain = values.issuer_domain; }
             }
-        }
-
-        if let Some(table) = toml_config.limits {
-            if let Some(val) = table.auth { self.limits_auth = val; }
-            if let Some(val) = table.auth_email { self.limits_auth_email = val; }
         }
 
         Ok(self)
@@ -319,8 +311,8 @@ impl ConfigBuilder {
         self
     }
 
-    pub fn update_from_broker_env(&mut self) -> Result<&mut ConfigBuilder, ConfigError> {
-        let env_config = EnvConfig::from_env()?;
+    pub fn update_from_broker_env(&mut self) -> &mut ConfigBuilder {
+        let env_config = EnvConfig::from_env();
 
         if let Some(val) = env_config.broker_ip { self.listen_ip = val }
         if let Some(val) = env_config.broker_port { self.listen_port = val; }
@@ -341,6 +333,7 @@ impl ConfigBuilder {
         if let Some(val) = env_config.broker_smtp_server { self.smtp_server = Some(val); }
         if let Some(val) = env_config.broker_smtp_username { self.smtp_username = Some(val); }
         if let Some(val) = env_config.broker_smtp_password { self.smtp_password = Some(val); }
+        if let Some(val) = env_config.broker_smtp_user_throttle { self.smtp_user_throttle = val; }
 
         // New scope to avoid mutably borrowing `self` twice
         {
@@ -353,10 +346,7 @@ impl ConfigBuilder {
             if let Some(val) = env_config.broker_gmail_issuer { gmail_provider.issuer_domain = Some(val); }
         }
 
-        if let Some(val) = env_config.broker_limits_auth { self.limits_auth = val; }
-        if let Some(val) = env_config.broker_limits_auth_email { self.limits_auth_email = val; }
-
-        Ok(self)
+        self
     }
 
     pub fn done(self) -> Result<Config, ConfigError> {
@@ -385,6 +375,18 @@ impl ConfigBuilder {
             self.redis_cache_max_doc_size as u64,
         ).expect("unable to instantiate new redis store");
 
+        let idx = self.smtp_user_throttle.find('/')
+            .expect("unable to parse user_throttle format");
+        let (count, unit) = self.smtp_user_throttle.split_at(idx);
+        let ratelimit = Ratelimit {
+            count: count.parse().expect("unable to parse throttle count"),
+            duration: match unit {
+                "/sec" | "/second" => 1,
+                "/min" | "/minute" => 60,
+                _ => return Err(From::from("unrecognized throttle duration")),
+            }
+        };
+
         let mut providers = HashMap::new();
         for (domain, builder) in self.providers {
             if let Some(provider) = builder.done() {
@@ -405,10 +407,9 @@ impl ConfigBuilder {
             smtp_server: self.smtp_server.expect("no smtp outserver address configured"),
             smtp_username: self.smtp_username,
             smtp_password: self.smtp_password,
+            smtp_user_throttle: ratelimit,
             providers: providers,
             templates: Templates::default(),
-            limits_auth: self.limits_auth,
-            limits_auth_email: self.limits_auth_email,
         })
     }
 }
@@ -418,8 +419,8 @@ impl EnvConfig {
     /// Manually deserialize from environment variables
     ///
     /// Redundant once [Envy](https://crates.io/crates/envy) supports Serde 0.8
-    pub fn from_env() -> Result<EnvConfig, String> {
-        Ok(EnvConfig {
+    pub fn from_env() -> EnvConfig {
+        EnvConfig {
             broker_ip: env::var("BROKER_IP").ok(),
             broker_port: env::var("BROKER_PORT").ok().and_then(|x| x.parse().ok()),
             broker_public_url: env::var("BROKER_PUBLIC_URL").ok(),
@@ -439,20 +440,12 @@ impl EnvConfig {
             broker_smtp_server: env::var("BROKER_SMTP_SERVER").ok(),
             broker_smtp_username: env::var("BROKER_SMTP_USERNAME").ok(),
             broker_smtp_password: env::var("BROKER_SMTP_PASSWORD").ok(),
+            broker_smtp_user_throttle: env::var("BROKER_SMTP_USER_THROTTLE").ok(),
 
             broker_gmail_client: env::var("BROKER_GMAIL_CLIENT").ok(),
             broker_gmail_secret: env::var("BROKER_GMAIL_SECRET").ok(),
             broker_gmail_discovery: env::var("BROKER_GMAIL_DISCOVERY").ok(),
             broker_gmail_issuer: env::var("BROKER_GMAIL_ISSUER").ok(),
-
-            broker_limits_auth: Self::parse_limits("BROKER_LIMITS_AUTH_EMAIL")?,
-            broker_limits_auth_email: Self::parse_limits("BROKER_LIMITS_AUTH_EMAIL")?,
-        })
-    }
-
-    fn parse_limits(var_name: &str) -> Result<Option<Vec<LimitConfig>>, String> {
-        if let Ok(x) = env::var(var_name) {
-            Ok(Some(x.split(',').map(|x| LimitConfig::from_str(x)).collect::<Result<_, _>>()?))
-        } else { Ok(None) }
+        }
     }
 }

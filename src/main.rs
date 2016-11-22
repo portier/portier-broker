@@ -63,9 +63,7 @@ fn main() {
         });
     }
     builder.update_from_common_env();
-    builder.update_from_broker_env().unwrap_or_else(|err| {
-        panic!(format!("failed to parse environment variables: {}", err.description()))
-    });
+    builder.update_from_broker_env();
     let app = Arc::new(builder.done().unwrap_or_else(|err| {
         panic!(format!("failed to build configuration: {}", err.description()))
     }));

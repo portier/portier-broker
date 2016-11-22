@@ -11,7 +11,6 @@ struct TomlConfig {
     redis: Option<TomlRedisTable>,
     smtp: Option<TomlSmtpTable>,
     providers: Option<HashMap<String, TomlProviderTable>>,
-    limits: Option<TomlLimitsTable>,
 }
 
 #[derive(Clone,Debug,Deserialize)]
@@ -44,6 +43,7 @@ struct TomlSmtpTable {
     server: Option<String>,
     username: Option<String>,
     password: Option<String>,
+    user_throttle: Option<String>,
 }
 
 #[derive(Clone,Debug,Deserialize)]
@@ -52,12 +52,6 @@ struct TomlProviderTable {
     secret: Option<String>,
     discovery_url: Option<String>,
     issuer_domain: Option<String>,
-}
-
-#[derive(Clone,Debug,Deserialize)]
-struct TomlLimitsTable {
-    auth: Option<Vec<LimitConfig>>,
-    auth_email: Option<Vec<LimitConfig>>,
 }
 
 
@@ -83,10 +77,9 @@ struct EnvConfig {
     broker_smtp_server: Option<String>,
     broker_smtp_username: Option<String>,
     broker_smtp_password: Option<String>,
+    broker_smtp_user_throttle: Option<String>,
     broker_gmail_client: Option<String>,
     broker_gmail_secret: Option<String>,
     broker_gmail_discovery: Option<String>,
     broker_gmail_issuer: Option<String>,
-    broker_limits_auth: Option<Vec<LimitConfig>>,
-    broker_limits_auth_email: Option<Vec<LimitConfig>>,
 }

@@ -11,7 +11,7 @@ use oidc_bridge;
 use serde_json::builder::{ArrayBuilder, ObjectBuilder};
 use std::sync::Arc;
 use super::{RedirectUri, handle_error, json_response};
-use super::super::store_limits::{LimitKey, incr_and_test_limits};
+use super::super::store_limits::{RatelimitKey, incr_and_test_limits};
 use urlencoded::{UrlEncodedBody, UrlEncodedQuery};
 use validation::{valid_uri, only_origin, same_origin};
 
@@ -108,11 +108,6 @@ broker_handler!(Auth, |app, req| {
     };
     let email_addr_norm_str = email_addr_norm.to_string();
 
-    if !incr_and_test_limits(&app.store, LimitKey::Auth { email: &email_addr_norm_str },
-                             &app.limits_auth)? {
-        return Ok(Response::with(status::TooManyRequests));
-    }
-
     if app.providers.contains_key(&email_addr_norm.domain) {
 
         // OIDC authentication. Redirect to the identity provider.
@@ -121,8 +116,8 @@ broker_handler!(Auth, |app, req| {
 
     } else {
 
-        if !incr_and_test_limits(&app.store, LimitKey::AuthEmail { email: &email_addr_norm_str },
-                                 &app.limits_auth_email)? {
+        if !incr_and_test_limits(&app.store, RatelimitKey::Email { email: &email_addr_norm_str },
+                                 &app.smtp_user_throttle)? {
             return Ok(Response::with(status::TooManyRequests));
         }
 

@@ -83,15 +83,16 @@ cache_max_doc_size BROKER_CACHE_MAX_DOC_SIZE 8096 (8 KiB)
 
 **[smtp] section:**
 
-=============== ==================== ===========
-``config.toml`` Environment Variable Default
-=============== ==================== ===========
-from_name       BROKER_FROM_NAME     "Portier"
-from_address    BROKER_FROM_ADDRESS  (none)
-server          BROKER_SMTP_SERVER   (none)
-username        BROKER_SMTP_USERNAME (none)
-password        BROKER_SMTP_PASSWORD (none)
-=============== ==================== ===========
+=============== ========================= =========
+``config.toml`` Environment Variable      Default
+=============== ========================= =========
+from_name       BROKER_FROM_NAME          "Portier"
+from_address    BROKER_FROM_ADDRESS       (none)
+server          BROKER_SMTP_SERVER        (none)
+username        BROKER_SMTP_USERNAME      (none)
+password        BROKER_SMTP_PASSWORD      (none)
+user_throttle   BROKER_SMTP_USER_THROTTLE "5/min"
+=============== ========================= =========
 
 **[providers."gmail.com"] section:**
 
@@ -103,15 +104,6 @@ secret          BROKER_GMAIL_SECRET    (none)
 discovery_url   BROKER_GMAIL_DISCOVERY "https://accounts.google.com/.well-known/openid-configuration"
 issuer_domain   BROKER_GMAIL_ISSUER    "accounts.google.com"
 =============== ====================== ==============================================================
-
-**[limits] section:**
-
-=============== ======================== ================
-``config.toml`` Environment Variable     Default
-=============== ======================== ================
-auth            BROKER_LIMITS_AUTH       [] (empty array)
-auth_email      BROKER_LIMITS_AUTH_EMAIL [] (empty array)
-=============== ======================== ================
 
 The example configuration file, ``config.toml.dist``, includes reasonable default
 values for most settings, but you must explicitly set:
@@ -133,13 +125,6 @@ specify:
 * ``providers."gmail.com".secret``: Your Google OAuth API Secret Key
 
 You can create encryption keys with ``openssl genrsa 4096 > private.pem``
-
-Rate limits in the `limits` section are specified as an array of strings, where
-each strings is in the format: `"<name>:<max_count>:<timespan>:<granularity>"`.
-The `name` is a Redis subkey name for the counter. The end result is to allow
-`max_count` requests per `timespan` (in seconds) with a sliding window. To
-prevent flooding memory, requests are counted in smaller buckets of
-`granularity` (in seconds). The `timespan` must be a multiple of `granularity`.
 
 Contributing
 ------------
