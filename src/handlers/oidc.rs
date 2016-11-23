@@ -11,6 +11,7 @@ use oidc_bridge;
 use serde_json::builder::{ArrayBuilder, ObjectBuilder};
 use std::sync::Arc;
 use super::{RedirectUri, handle_error, json_response};
+use super::super::store_limits::addr_limiter;
 use urlencoded::{UrlEncodedBody, UrlEncodedQuery};
 use validation::{valid_uri, only_origin, same_origin};
 
@@ -92,15 +93,27 @@ broker_handler!(Auth, |app, req| {
     let parsed_redirect_uri = Url::parse(redirect_uri).expect("unable to parse redirect uri");
     req.extensions.insert::<RedirectUri>(parsed_redirect_uri.clone());
 
+    // Check for all other necessary parameters
     if try_get_param!(params, "response_type") != "id_token" {
         return Err(BrokerError::Input("unsupported response_type, only id_token is supported".to_string()));
     }
     if try_get_param!(params, "response_mode", "fragment") != "form_post" {
         return Err(BrokerError::Input("unsupported response_mode, only form_post is supported".to_string()))
     }
-    let email_addr = EmailAddress::new(try_get_param!(params, "login_hint"))
-            .map_err(|_| BrokerError::Input("login_hint is not a valid email address".to_string()))?;
     let nonce = try_get_param!(params, "nonce");
+    let login_hint = try_get_param!(params, "login_hint");
+
+    let email_addr = EmailAddress::new(login_hint)
+        .map_err(|_| BrokerError::Input("login_hint is not a valid email address".to_string()))?;
+
+    // Enforce ratelimit based on the login_hint
+    if !addr_limiter(&app.store, &login_hint, &app.limit_per_email)? {
+        return Ok(Response::with((
+                    status::TooManyRequests,
+                    modifiers::Header(ContentType::plaintext()),
+                    "Rate limit exceeded. Please try again later.")));
+    }
+
     if app.providers.contains_key(&email_addr.domain.to_lowercase()) {
 
         // OIDC authentication. Redirect to the identity provider.

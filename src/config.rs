@@ -10,6 +10,7 @@ use std::fs::File;
 use std::io::Read;
 
 use super::{crypto, store, mustache};
+use super::store_limits::Ratelimit;
 
 include!(concat!(env!("OUT_DIR"), "/serde_types.rs"));
 
@@ -52,6 +53,7 @@ macro_rules! from_error {
     }
 }
 
+from_error!(String, Custom);
 from_error!(std::io::Error, Io);
 from_error!(&'static str, Store);
 
@@ -135,6 +137,7 @@ pub struct Config {
     pub smtp_server: String,
     pub smtp_username: Option<String>,
     pub smtp_password: Option<String>,
+    pub limit_per_email: Ratelimit,
     pub providers: HashMap<String, Provider>,
     pub templates: Templates,
 }
@@ -158,6 +161,7 @@ pub struct ConfigBuilder {
     pub smtp_server: Option<String>,
     pub smtp_username: Option<String>,
     pub smtp_password: Option<String>,
+    pub limit_per_email: String,
     pub providers: HashMap<String, ProviderBuilder>,
 }
 
@@ -225,6 +229,7 @@ impl ConfigBuilder {
             smtp_username: None,
             smtp_password: None,
             smtp_server: None,
+            limit_per_email: "5/min".to_string(),
             providers: HashMap::new(),
         }
     }
@@ -264,6 +269,10 @@ impl ConfigBuilder {
             self.smtp_username = table.username.or(self.smtp_username.clone());
             self.smtp_password = table.password.or(self.smtp_password.clone());
             if let Some(val) = table.from_name { self.from_name = val; }
+        }
+
+        if let Some(table) = toml_config.limit {
+            if let Some(val) = table.per_email { self.limit_per_email = val; }
         }
 
         if let Some(table) = toml_config.providers {
@@ -328,6 +337,8 @@ impl ConfigBuilder {
         if let Some(val) = env_config.broker_smtp_username { self.smtp_username = Some(val); }
         if let Some(val) = env_config.broker_smtp_password { self.smtp_password = Some(val); }
 
+        if let Some(val) = env_config.broker_limit_per_email { self.limit_per_email = val; }
+
         // New scope to avoid mutably borrowing `self` twice
         {
             let mut gmail_provider = self.providers.entry("gmail.com".to_string())
@@ -368,6 +379,17 @@ impl ConfigBuilder {
             self.redis_cache_max_doc_size as u64,
         ).expect("unable to instantiate new redis store");
 
+        let idx = self.limit_per_email.find('/')
+            .expect("unable to parse limit.per_email format");
+        let (count, unit) = self.limit_per_email.split_at(idx);
+        let ratelimit = Ratelimit {
+            count: count.parse().expect("unable to parse limit count"),
+            duration: match unit {
+                "/min" | "/minute" => 60,
+                _ => return Err(From::from("unrecognized limit duration")),
+            }
+        };
+
         let mut providers = HashMap::new();
         for (domain, builder) in self.providers {
             if let Some(provider) = builder.done() {
@@ -388,6 +410,7 @@ impl ConfigBuilder {
             smtp_server: self.smtp_server.expect("no smtp outserver address configured"),
             smtp_username: self.smtp_username,
             smtp_password: self.smtp_password,
+            limit_per_email: ratelimit,
             providers: providers,
             templates: Templates::default(),
         })
@@ -420,6 +443,8 @@ impl EnvConfig {
             broker_smtp_server: env::var("BROKER_SMTP_SERVER").ok(),
             broker_smtp_username: env::var("BROKER_SMTP_USERNAME").ok(),
             broker_smtp_password: env::var("BROKER_SMTP_PASSWORD").ok(),
+
+            broker_limit_per_email: env::var("BROKER_LIMIT_PER_EMAIL").ok(),
 
             broker_gmail_client: env::var("BROKER_GMAIL_CLIENT").ok(),
             broker_gmail_secret: env::var("BROKER_GMAIL_SECRET").ok(),

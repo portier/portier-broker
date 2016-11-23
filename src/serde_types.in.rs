@@ -10,6 +10,7 @@ struct TomlConfig {
     crypto: Option<TomlCryptoTable>,
     redis: Option<TomlRedisTable>,
     smtp: Option<TomlSmtpTable>,
+    limit: Option<TomlLimitTable>,
     providers: Option<HashMap<String, TomlProviderTable>>,
 }
 
@@ -46,6 +47,11 @@ struct TomlSmtpTable {
 }
 
 #[derive(Clone,Debug,Deserialize)]
+struct TomlLimitTable {
+    per_email: Option<String>,
+}
+
+#[derive(Clone,Debug,Deserialize)]
 struct TomlProviderTable {
     client_id: Option<String>,
     secret: Option<String>,
@@ -76,6 +82,7 @@ struct EnvConfig {
     broker_smtp_server: Option<String>,
     broker_smtp_username: Option<String>,
     broker_smtp_password: Option<String>,
+    broker_limit_per_email: Option<String>,
     broker_gmail_client: Option<String>,
     broker_gmail_secret: Option<String>,
     broker_gmail_discovery: Option<String>,
