@@ -40,6 +40,8 @@ server =
 username = 
 # Outgoing mailserver password - Default: (none)
 password = 
+# Ratelimit for a single email address - Default: "5/min" (Units: sec, min)
+user_throttle = "5/min"
 
 
 [providers."gmail.com"]

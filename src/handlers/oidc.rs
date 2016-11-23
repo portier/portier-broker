@@ -11,6 +11,7 @@ use oidc_bridge;
 use serde_json::builder::{ArrayBuilder, ObjectBuilder};
 use std::sync::Arc;
 use super::{RedirectUri, handle_error, json_response};
+use super::super::store_limits::addr_limiter;
 use urlencoded::{UrlEncodedBody, UrlEncodedQuery};
 use validation::{valid_uri, only_origin, same_origin};
 
@@ -98,16 +99,26 @@ broker_handler!(Auth, |app, req| {
     if try_get_param!(params, "response_mode", "fragment") != "form_post" {
         return Err(BrokerError::Input("unsupported response_mode, only form_post is supported".to_string()))
     }
+    let nonce = try_get_param!(params, "nonce");
     let email_addr = EmailAddress::new(try_get_param!(params, "login_hint"))
             .map_err(|_| BrokerError::Input("login_hint is not a valid email address".to_string()))?;
-    let nonce = try_get_param!(params, "nonce");
-    if app.providers.contains_key(&email_addr.domain.to_lowercase()) {
+    let email_addr_norm = EmailAddress {
+        local: email_addr.local.clone(),
+        domain: email_addr.domain.to_lowercase()
+    };
+    let email_addr_norm_str = email_addr_norm.to_string();
+
+    if app.providers.contains_key(&email_addr_norm.domain) {
 
         // OIDC authentication. Redirect to the identity provider.
         let auth_url = oidc_bridge::request(app, email_addr, client_id, nonce, &parsed_redirect_uri)?;
         Ok(Response::with((status::SeeOther, modifiers::Header(Location(auth_url.to_string())))))
 
     } else {
+
+        if !addr_limiter(&app.store, &email_addr_norm_str, &app.smtp_user_throttle)? {
+            return Ok(Response::with(status::TooManyRequests));
+        }
 
         // Email loop authentication. Render a message and form.
         let session_id = email_bridge::request(app, email_addr, client_id, nonce, &parsed_redirect_uri)?;

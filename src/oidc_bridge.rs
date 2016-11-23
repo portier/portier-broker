@@ -10,7 +10,7 @@ use super::hyper::header::ContentType as HyContentType;
 use super::hyper::header::Headers;
 use super::{Config, create_jwt};
 use super::crypto::{session_id, verify_jws};
-use super::store_cache::CacheKey;
+use super::store_cache::{CacheKey, fetch_json_url};
 use time::now_utc;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 
@@ -63,11 +63,8 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
     // `authorization_endpoint` from it.
     let domain = &email_addr.domain.to_lowercase();
     let provider = &app.providers[domain];
-    let config_obj: Value = app.store.cache
-        .fetch_json_url(&app.store,
-                        CacheKey::Discovery { domain: &domain },
-                        &client,
-                        &provider.discovery_url)
+    let config_obj: Value = fetch_json_url(&app.store, CacheKey::Discovery { domain: &domain },
+                                           &client, &provider.discovery_url)
         .map_err(|e| {
             BrokerError::Provider(format!("could not fetch {}'s discovery document: {}",
                                           domain, e.description()))
@@ -147,11 +144,8 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
     // function, and/or cache them by provider host.
     let domain = &email_addr.domain.to_lowercase();
     let provider = &app.providers[domain];
-    let config_obj: Value = app.store.cache
-        .fetch_json_url(&app.store,
-                        CacheKey::Discovery { domain: domain },
-                        &client,
-                        &provider.discovery_url)
+    let config_obj: Value = fetch_json_url(&app.store, CacheKey::Discovery { domain: domain },
+                                           &client, &provider.discovery_url)
         .map_err(|e| {
             BrokerError::Provider(format!("could not fetch {}'s discovery document: {}",
                                           domain, e.description()))
@@ -195,11 +189,8 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
 
     // Grab the keys from the provider, then verify the signature.
     let jwt_payload = {
-        let keys_obj: Value = app.store.cache
-            .fetch_json_url(&app.store,
-                            CacheKey::KeySet { domain: domain },
-                            &client,
-                            &jwks_url)
+        let keys_obj: Value = fetch_json_url(&app.store, CacheKey::KeySet { domain: domain },
+                                             &client, &jwks_url)
             .map_err(|e| {
                 BrokerError::Provider(format!("could not fetch {}'s keys: {}",
                                               domain, e.description()))

@@ -43,6 +43,7 @@ struct TomlSmtpTable {
     server: Option<String>,
     username: Option<String>,
     password: Option<String>,
+    user_throttle: Option<String>,
 }
 
 #[derive(Clone,Debug,Deserialize)]
@@ -76,6 +77,7 @@ struct EnvConfig {
     broker_smtp_server: Option<String>,
     broker_smtp_username: Option<String>,
     broker_smtp_password: Option<String>,
+    broker_smtp_user_throttle: Option<String>,
     broker_gmail_client: Option<String>,
     broker_gmail_secret: Option<String>,
     broker_gmail_discovery: Option<String>,

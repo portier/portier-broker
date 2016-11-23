@@ -83,15 +83,16 @@ cache_max_doc_size BROKER_CACHE_MAX_DOC_SIZE 8096 (8 KiB)
 
 **[smtp] section:**
 
-=============== ==================== ===========
-``config.toml`` Environment Variable Default
-=============== ==================== ===========
-from_name       BROKER_FROM_NAME     "Portier"
-from_address    BROKER_FROM_ADDRESS  (none)
-server          BROKER_SMTP_SERVER   (none)
-username        BROKER_SMTP_USERNAME (none)
-password        BROKER_SMTP_PASSWORD (none)
-=============== ==================== ===========
+=============== ========================= =========
+``config.toml`` Environment Variable      Default
+=============== ========================= =========
+from_name       BROKER_FROM_NAME          "Portier"
+from_address    BROKER_FROM_ADDRESS       (none)
+server          BROKER_SMTP_SERVER        (none)
+username        BROKER_SMTP_USERNAME      (none)
+password        BROKER_SMTP_PASSWORD      (none)
+user_throttle   BROKER_SMTP_USER_THROTTLE "5/min"
+=============== ========================= =========
 
 **[providers."gmail.com"] section:**
 
