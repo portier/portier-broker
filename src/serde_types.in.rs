@@ -11,6 +11,7 @@ struct TomlConfig {
     redis: Option<TomlRedisTable>,
     smtp: Option<TomlSmtpTable>,
     providers: Option<HashMap<String, TomlProviderTable>>,
+    limits: Option<TomlLimitsTable>,
 }
 
 #[derive(Clone,Debug,Deserialize)]
@@ -53,6 +54,12 @@ struct TomlProviderTable {
     issuer_domain: Option<String>,
 }
 
+#[derive(Clone,Debug,Deserialize)]
+struct TomlLimitsTable {
+    auth: Option<Vec<LimitConfig>>,
+    auth_email: Option<Vec<LimitConfig>>,
+}
+
 
 /// Intermediate structure for deserializing environment variables
 ///
@@ -80,4 +87,6 @@ struct EnvConfig {
     broker_gmail_secret: Option<String>,
     broker_gmail_discovery: Option<String>,
     broker_gmail_issuer: Option<String>,
+    broker_limits_auth: Option<Vec<LimitConfig>>,
+    broker_limits_auth_email: Option<Vec<LimitConfig>>,
 }

@@ -8,8 +8,10 @@ use std::fmt::{self, Display};
 use std::error::Error;
 use std::fs::File;
 use std::io::Read;
+use std::str::FromStr;
 
 use super::{crypto, store, mustache};
+use super::store_limits::LimitConfig;
 
 include!(concat!(env!("OUT_DIR"), "/serde_types.rs"));
 
@@ -52,6 +54,7 @@ macro_rules! from_error {
     }
 }
 
+from_error!(String, Custom);
 from_error!(std::io::Error, Io);
 from_error!(&'static str, Store);
 
@@ -137,6 +140,8 @@ pub struct Config {
     pub smtp_password: Option<String>,
     pub providers: HashMap<String, Provider>,
     pub templates: Templates,
+    pub limits_auth: Vec<LimitConfig>,
+    pub limits_auth_email: Vec<LimitConfig>,
 }
 
 
@@ -159,6 +164,8 @@ pub struct ConfigBuilder {
     pub smtp_username: Option<String>,
     pub smtp_password: Option<String>,
     pub providers: HashMap<String, ProviderBuilder>,
+    pub limits_auth: Vec<LimitConfig>,
+    pub limits_auth_email: Vec<LimitConfig>,
 }
 
 
@@ -226,6 +233,8 @@ impl ConfigBuilder {
             smtp_password: None,
             smtp_server: None,
             providers: HashMap::new(),
+            limits_auth: Vec::new(),
+            limits_auth_email: Vec::new(),
         }
     }
 
@@ -281,6 +290,11 @@ impl ConfigBuilder {
             }
         }
 
+        if let Some(table) = toml_config.limits {
+            if let Some(val) = table.auth { self.limits_auth = val; }
+            if let Some(val) = table.auth_email { self.limits_auth_email = val; }
+        }
+
         Ok(self)
     }
 
@@ -305,8 +319,8 @@ impl ConfigBuilder {
         self
     }
 
-    pub fn update_from_broker_env(&mut self) -> &mut ConfigBuilder {
-        let env_config = EnvConfig::from_env();
+    pub fn update_from_broker_env(&mut self) -> Result<&mut ConfigBuilder, ConfigError> {
+        let env_config = EnvConfig::from_env()?;
 
         if let Some(val) = env_config.broker_ip { self.listen_ip = val }
         if let Some(val) = env_config.broker_port { self.listen_port = val; }
@@ -339,7 +353,10 @@ impl ConfigBuilder {
             if let Some(val) = env_config.broker_gmail_issuer { gmail_provider.issuer_domain = Some(val); }
         }
 
-        self
+        if let Some(val) = env_config.broker_limits_auth { self.limits_auth = val; }
+        if let Some(val) = env_config.broker_limits_auth_email { self.limits_auth_email = val; }
+
+        Ok(self)
     }
 
     pub fn done(self) -> Result<Config, ConfigError> {
@@ -390,6 +407,8 @@ impl ConfigBuilder {
             smtp_password: self.smtp_password,
             providers: providers,
             templates: Templates::default(),
+            limits_auth: self.limits_auth,
+            limits_auth_email: self.limits_auth_email,
         })
     }
 }
@@ -399,8 +418,8 @@ impl EnvConfig {
     /// Manually deserialize from environment variables
     ///
     /// Redundant once [Envy](https://crates.io/crates/envy) supports Serde 0.8
-    pub fn from_env() -> EnvConfig {
-        EnvConfig {
+    pub fn from_env() -> Result<EnvConfig, String> {
+        Ok(EnvConfig {
             broker_ip: env::var("BROKER_IP").ok(),
             broker_port: env::var("BROKER_PORT").ok().and_then(|x| x.parse().ok()),
             broker_public_url: env::var("BROKER_PUBLIC_URL").ok(),
@@ -425,6 +444,15 @@ impl EnvConfig {
             broker_gmail_secret: env::var("BROKER_GMAIL_SECRET").ok(),
             broker_gmail_discovery: env::var("BROKER_GMAIL_DISCOVERY").ok(),
             broker_gmail_issuer: env::var("BROKER_GMAIL_ISSUER").ok(),
-        }
+
+            broker_limits_auth: Self::parse_limits("BROKER_LIMITS_AUTH_EMAIL")?,
+            broker_limits_auth_email: Self::parse_limits("BROKER_LIMITS_AUTH_EMAIL")?,
+        })
+    }
+
+    fn parse_limits(var_name: &str) -> Result<Option<Vec<LimitConfig>>, String> {
+        if let Ok(x) = env::var(var_name) {
+            Ok(Some(x.split(',').map(|x| LimitConfig::from_str(x)).collect::<Result<_, _>>()?))
+        } else { Ok(None) }
     }
 }
