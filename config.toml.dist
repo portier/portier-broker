@@ -42,6 +42,12 @@ username =
 password = 
 
 
+[limit]
+# Authentication ratelimit for a single email address - Default: "5/min"
+# Currently only supports "/min" unit.
+per_email = "5/min"
+
+
 [providers."gmail.com"]
 # Google OAuth API Client ID - Default: (none)
 client_id = 
