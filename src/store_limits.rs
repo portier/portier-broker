@@ -16,7 +16,7 @@ pub struct Ratelimit {
 /// Increment and check a ratelimit for a specific email address.
 pub fn addr_limiter(store: &Store, addr: &str, limit: &Ratelimit) -> BrokerResult<bool> {
     let key = format!("ratelimit:addr:{}", addr.to_lowercase());
-    return incr_and_test_limits(&store, &key, &limit);
+    incr_and_test_limits(store, &key, limit)
 }
 
 

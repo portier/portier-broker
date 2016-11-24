@@ -1,11 +1,47 @@
-language: rust
 sudo: false
-rust:
-    - stable
-    - beta
-    - nightly
+
+language: rust
+
+script:
+    - cargo build --verbose
+    - cargo test --verbose
+    - |
+        if [ $TRAVIS_RUST_VERSION == "nightly" ]; then
+            cargo install clippy && cargo clippy -- -Dclippy
+        fi
+
 matrix:
-    allow_failures:
+    fast_finish: true
+    # I'd love to just use travis-cargo for all this, but it's broken:
+    # https://github.com/huonw/travis-cargo/pull/58
+    include:
         - rust: nightly
+        - rust: beta
+        - rust: stable
+          env: RUSTFLAGS="-C link-dead-code"
+          addons:
+              apt:
+                  packages:
+                      - libcurl4-openssl-dev
+                      - libelf-dev
+                      - libdw-dev
+                      - binutils-dev
+          after_success:
+             - |
+                 # Fetch and build kcov
+                 wget "https://github.com/SimonKagstrom/kcov/archive/master.zip"
+                 unzip master.zip
+                 mkdir kcov-master/build
+                 pushd kcov-master/build
+                 cmake ..
+                 make
+                 popd
 
+                 # Run each binary under kcov
+                 for binary in target/debug/portier_broker-*; do
+                     echo "Generating coverage for $binary"
+                     ./kcov-master/build/src/kcov --verify --exclude-pattern=/.cargo,target/debug target/kcov/ $binary
+                 done
 
+                 echo "Merging and uploading coverage"
+                 ./kcov-master/build/src/kcov --merge --coveralls-id="$TRAVIS_JOB_ID" target/kcov-merged target/kcov/portier_broker-*

@@ -63,7 +63,7 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
     // `authorization_endpoint` from it.
     let domain = &email_addr.domain.to_lowercase();
     let provider = &app.providers[domain];
-    let config_obj: Value = fetch_json_url(&app.store, CacheKey::Discovery { domain: &domain },
+    let config_obj: Value = fetch_json_url(&app.store, CacheKey::Discovery { domain: domain },
                                            &client, &provider.discovery_url)
         .map_err(|e| {
             BrokerError::Provider(format!("could not fetch {}'s discovery document: {}",
@@ -190,7 +190,7 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
     // Grab the keys from the provider, then verify the signature.
     let jwt_payload = {
         let keys_obj: Value = fetch_json_url(&app.store, CacheKey::KeySet { domain: domain },
-                                             &client, &jwks_url)
+                                             &client, jwks_url)
             .map_err(|e| {
                 BrokerError::Provider(format!("could not fetch {}'s keys: {}",
                                               domain, e.description()))
