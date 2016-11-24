@@ -2,20 +2,21 @@ sudo: false
 
 language: rust
 
-rust:
-    - stable
-    - beta
-    - nightly
+script:
+    - cargo build --verbose
+    - cargo test --verbose
+    - |
+        if [ $TRAVIS_RUST_VERSION == "nightly" ]; then
+            cargo install clippy && cargo clippy -- -Dclippy
+        fi
 
 matrix:
     fast_finish: true
-    allow_failures:
-        - rust: nightly
     # I'd love to just use travis-cargo for all this, but it's broken:
     # https://github.com/huonw/travis-cargo/pull/58
-    exclude:
-        - rust: stable
     include:
+        - rust: nightly
+        - rust: beta
         - rust: stable
           env: RUSTFLAGS="-C link-dead-code"
           addons:
