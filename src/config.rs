@@ -10,6 +10,8 @@ use std::fs::File;
 use std::io::Read;
 
 use super::{crypto, store, mustache};
+use super::gettext::Catalog;
+use super::hyper::LanguageTag;
 use super::store_limits::Ratelimit;
 
 include!(concat!(env!("OUT_DIR"), "/serde_types.rs"));
@@ -116,6 +118,30 @@ impl Default for Templates {
 }
 
 
+// Contains all gettext catalogs we use in compiled form.
+pub struct I18n {
+    pub catalogs: Vec<(LanguageTag, Catalog)>,
+}
+
+
+const SUPPORTED_LANGUAGES: &'static [&'static str] = &["en", "de", "nl"];
+
+impl Default for I18n {
+    fn default() -> I18n {
+        I18n {
+            catalogs: SUPPORTED_LANGUAGES.iter().map(|lang| {
+                let tag = lang.parse().expect("could not parse language tag");
+                let file = File::open(format!("lang/{}.mo", lang))
+                    .expect("could not open catalog file");
+                let catalog = Catalog::parse(file)
+                    .expect("could not parse catalog file");
+                (tag, catalog)
+            }).collect(),
+        }
+    }
+}
+
+
 pub struct Provider {
     pub client_id: String,
     pub secret: String,
@@ -140,6 +166,7 @@ pub struct Config {
     pub limit_per_email: Ratelimit,
     pub providers: HashMap<String, Provider>,
     pub templates: Templates,
+    pub i18n: I18n,
 }
 
 
@@ -413,6 +440,7 @@ impl ConfigBuilder {
             limit_per_email: ratelimit,
             providers: providers,
             templates: Templates::default(),
+            i18n: I18n::default(),
         })
     }
 }

@@ -13,6 +13,7 @@ license = "MIT/Apache-2.0"
 name = "portier-broker"
 
 [build-dependencies]
+glob = "0.2.11"
 serde_codegen = "0.8.0"
 
 [dependencies]
@@ -36,3 +37,4 @@ time = "0.1.35"
 toml = { version = "0.2.1", default-features = false, features = ["serde"]}
 url = "1.2.4"
 urlencoded = "0.4.1"
+gettext = "0.2.0"
