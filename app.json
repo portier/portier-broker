@@ -26,8 +26,8 @@
       "value": "Portier"
     },
     "BROKER_ALLOWED_ORIGINS": {
-      "description": "The domains allowed to use this broker for authentication. You can specify a single domain or list multiple domains and separate them with commas. Note there are no trailing slashes.",
-      "value": "https://example.com,https://example.org"
+      "description": "The origins allowed to use this broker for authentication. You can specify a single origin or list multiple origins and separate them with commas.",
+      "value": "https://example.com,https://example.org:8080"
     },
     "BROKER_GMAIL_CLIENT": {
       "description": "Your Google OAuth API Client ID (enables in-browser Google Authentication for Gmail users, if desired)",

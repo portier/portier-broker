@@ -311,14 +311,11 @@ impl ConfigBuilder {
             }
         }
 
-        let smtp_username = env::var("SENDGRID_USERNAME");
-        let smtp_password = env::var("SENDGRID_PASSWORD");
-        if smtp_username.is_ok() && smtp_password.is_ok() {
-            println!("SMTP through SendGrid");
-            let smtp_server = "smtp.sendgrid.net:587".to_string();
-            self.smtp_username = Some(smtp_username.unwrap());
-            self.smtp_password = Some(smtp_password.unwrap());
-            self.smtp_server   = Some(smtp_server);
+        let sendgrid_creds = (env::var("SENDGRID_USERNAME"), env::var("SENDGRID_PASSWORD"));
+        if let (Ok(smtp_username), Ok(smtp_password)) = sendgrid_creds {
+            self.smtp_username = Some(smtp_username);
+            self.smtp_password = Some(smtp_password);
+            self.smtp_server   = Some("smtp.sendgrid.net:587".to_string());
         }
 
         self
