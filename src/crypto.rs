@@ -14,6 +14,8 @@ use serde_json::de::from_slice;
 use serde_json::value::Value;
 use super::serde_json;
 use std;
+use std::error::Error;
+use std::fmt::{self, Display};
 use std::fs::File;
 use std::io::{Read, Write};
 
@@ -21,28 +23,40 @@ use std::io::{Read, Write};
 /// Union of all possible error types seen while parsing.
 #[derive(Debug)]
 pub enum CryptoError {
-    Custom(&'static str),
+    Custom(String),
     Io(std::io::Error),
-    Ssl(openssl::ssl::error::SslError),
 }
 
-impl From<&'static str> for CryptoError {
-    fn from(err: &'static str) -> CryptoError {
-        CryptoError::Custom(err)
+impl Error for CryptoError {
+    fn description(&self) -> &str {
+        match *self {
+            CryptoError::Custom(ref string) => string,
+            CryptoError::Io(ref err) => err.description(),
+        }
     }
 }
 
-impl From<std::io::Error> for CryptoError {
-    fn from(err: std::io::Error) -> CryptoError {
-        CryptoError::Io(err)
+impl Display for CryptoError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self{
+            CryptoError::Custom(ref string) => string.fmt(f),
+            CryptoError::Io(ref err) => write!(f, "IO error: {}", err),
+        }
     }
 }
 
-impl From<openssl::ssl::error::SslError> for CryptoError {
-    fn from(err: openssl::ssl::error::SslError) -> CryptoError {
-        CryptoError::Ssl(err)
+macro_rules! from_error {
+    ( $orig:ty, $enum_type:ident ) => {
+        impl From<$orig> for CryptoError {
+            fn from(err: $orig) -> CryptoError {
+                CryptoError::$enum_type(err)
+            }
+        }
     }
 }
+
+from_error!(String, Custom);
+from_error!(std::io::Error, Io);
 
 
 /// A named key pair, for use in JWS signing.
@@ -57,21 +71,25 @@ impl NamedKey {
     /// Creates a NamedKey by reading a `file` path and generating an `id`.
     pub fn from_file(filename: &str) -> Result<NamedKey, CryptoError> {
         let mut file = File::open(filename)?;
-        let mut file_contents = String::new();
-        file.read_to_string(&mut file_contents)?;
+        let mut pem = String::new();
+        file.read_to_string(&mut pem)?;
 
-        NamedKey::from_pem_str(&file_contents)
+        let pkey = PKey::private_key_from_pem(&mut pem.as_bytes())
+            .map_err(|err| format!("failed to parse key '{}': {}", filename, err))?;
+
+        NamedKey::from_pkey(pkey)
     }
 
     /// Creates a NamedKey from a PEM-encoded str.
     pub fn from_pem_str(pem: &str) -> Result<NamedKey, CryptoError> {
-        let pkey = PKey::private_key_from_pem(&mut pem.as_bytes())?;
+        let pkey = PKey::private_key_from_pem(&mut pem.as_bytes())
+            .map_err(|err| format!("failed to parse key: {}", err))?;
 
         NamedKey::from_pkey(pkey)
     }
 
     /// Creates a NamedKey from a PKey
-    pub fn from_pkey(pkey: PKey) -> Result<NamedKey,CryptoError> {
+    pub fn from_pkey(pkey: PKey) -> Result<NamedKey, CryptoError> {
         let e = pkey.get_rsa().e().expect("unable to retrieve key's e value");
         let n = pkey.get_rsa().n().expect("unable to retrieve key's n value");
 

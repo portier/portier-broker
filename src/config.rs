@@ -21,6 +21,7 @@ pub enum ConfigError {
     Custom(String),
     Io(std::io::Error),
     Store(&'static str),
+    Crypto(crypto::CryptoError),
 }
 
 impl Error for ConfigError {
@@ -29,6 +30,7 @@ impl Error for ConfigError {
             ConfigError::Io(ref err) => err.description(),
             ConfigError::Custom(ref string) => string,
             ConfigError::Store(static_str) => static_str,
+            ConfigError::Crypto(ref err) => err.description(),
         }
     }
 }
@@ -39,6 +41,7 @@ impl Display for ConfigError {
             ConfigError::Io(ref err) => write!(f, "IO error: {}", err),
             ConfigError::Custom(ref string) => write!(f, "Configuration error: {}", string),
             ConfigError::Store(static_str) => write!(f, "Store error: {}", static_str),
+            ConfigError::Crypto(ref err) => err.fmt(f),
         }
     }
 }
@@ -56,6 +59,7 @@ macro_rules! from_error {
 from_error!(String, Custom);
 from_error!(std::io::Error, Io);
 from_error!(&'static str, Store);
+from_error!(crypto::CryptoError, Crypto);
 
 
 // Newtype so we can implement helpers for templates.
@@ -362,14 +366,12 @@ impl ConfigBuilder {
         }
 
         // Child structs
-        let mut keys: Vec<crypto::NamedKey> = self.keyfiles.iter().filter_map(|path| {
-            crypto::NamedKey::from_file(path).ok()
-        }).collect();
+        let mut keys: Vec<crypto::NamedKey> = self.keyfiles.iter().map(|path| {
+            crypto::NamedKey::from_file(path)
+        }).collect::<Result<_, _>>()?;
 
         if let Some(keytext) = self.keytext {
-            if let Ok(pkey) = crypto::NamedKey::from_pem_str(&keytext) {
-                keys.push(pkey)
-            }
+            keys.push(crypto::NamedKey::from_pem_str(&keytext)?);
         }
 
         let store = store::Store::new(
