@@ -12,7 +12,7 @@ use std::io::Read;
 use super::{crypto, store, mustache};
 use super::store_limits::Ratelimit;
 
-include!(concat!(env!("OUT_DIR"), "/serde_types.rs"));
+include!(concat!(env!("OUT_DIR"), "/config_serde.rs"));
 
 
 /// Union of all possible error types seen while parsing.
