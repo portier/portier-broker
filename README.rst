@@ -131,7 +131,22 @@ specify:
 * ``providers."gmail.com".client_id``: Your Google OAuth API Client ID
 * ``providers."gmail.com".secret``: Your Google OAuth API Secret Key
 
-You can create encryption keys with ``openssl genrsa 4096 > private.pem``
+You can create encryption keys with ``openssl genrsa 4096 > private.pem``. In
+addition, the PEM file may also contain a metadata block as follows:
+
+.. code-block:: text
+
+   -----BEGIN RSA PRIVATE KEY-----
+   [ ... ]
+   -----END RSA PRIVATE KEY-----
+
+   -----BEGIN PORTIER METADATA-----
+   # Always make sure the private key is the first block in the file,
+   # or OpenSSL will unfortunately fail to parse it.
+
+   # Don't use this key before this time. The time is in ISO 8601 format.
+   valid_from = "1996-12-19T16:39:57-08:00"
+   -----END PORTIER METADATA-----
 
 Contributing
 ------------

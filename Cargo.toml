@@ -16,6 +16,7 @@ name = "portier-broker"
 serde_codegen = "0.8.0"
 
 [dependencies]
+chrono = { version = "0.2.25", features = ["serde"] }
 docopt = "0.6.81"
 emailaddress = "0.3.1"
 env_logger = "0.3.4"

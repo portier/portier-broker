@@ -9,10 +9,16 @@ use std::env;
 use std::path::Path;
 
 pub fn main() {
+    let src_dir = Path::new("src");
     let out_dir = env::var_os("OUT_DIR").expect("build.rs $OUT_DIR not specified");
 
-    let src = Path::new("src/config_serde.in.rs");
-    let dst = Path::new(&out_dir).join("config_serde.rs");
+    for basename in &["config", "crypto"] {
+        let src_filename = format!("{}_serde.in.rs", basename);
+        let out_filename = format!("{}_serde.rs", basename);
 
-    serde_codegen::expand(&src, &dst).expect("serde codegen failed");
+        let src = Path::new(&src_dir).join(&src_filename);
+        let out = Path::new(&out_dir).join(&out_filename);
+
+        serde_codegen::expand(&src, &out).expect("serde codegen failed");
+    }
 }
