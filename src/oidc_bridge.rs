@@ -8,8 +8,7 @@ use super::error::{BrokerError, BrokerResult};
 use super::hyper::client::Client as HttpClient;
 use super::hyper::header::ContentType as HyContentType;
 use super::hyper::header::Headers;
-use super::{Config, create_jwt};
-use super::crypto::{session_id, verify_jws};
+use super::{Config, create_jwt, crypto};
 use super::store_cache::{CacheKey, fetch_json_url};
 use time::now_utc;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
@@ -45,7 +44,7 @@ macro_rules! try_get_json_field {
 pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &Url)
                -> BrokerResult<Url> {
 
-    let session = session_id(&email_addr, client_id);
+    let session = crypto::session_id(&email_addr, client_id);
 
     // Store the nonce and the RP's `redirect_uri` in Redis for use in the
     // callback handler.
@@ -195,7 +194,7 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
                 BrokerError::Provider(format!("could not fetch {}'s keys: {}",
                                               domain, e.description()))
             })?;
-        verify_jws(id_token, &keys_obj).map_err(|_| {
+        crypto::verify_jws(id_token, &keys_obj).map_err(|_| {
             BrokerError::Provider(format!("could not verify the token received from {}", domain))
         })?
     };
