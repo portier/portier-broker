@@ -8,14 +8,19 @@ script:
     - |
         if [ $TRAVIS_RUST_VERSION == "nightly" ]; then
             cargo install clippy && cargo clippy -- -Dclippy
+        elif [ $TRAVIS_RUST_VERSION == "nightly-2016-11-25" ]; then
+            cargo install --vers 0.0.103 clippy && cargo clippy -- -Dclippy
         fi
 
 matrix:
     fast_finish: true
+    allow_failures:
+        - rust: nightly
     # I'd love to just use travis-cargo for all this, but it's broken:
     # https://github.com/huonw/travis-cargo/pull/58
     include:
         - rust: nightly
+        - rust: nightly-2016-11-25
         - rust: beta
         - rust: stable
           env: RUSTFLAGS="-C link-dead-code"
