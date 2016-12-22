@@ -215,7 +215,8 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
 
     // If everything is okay, build a new identity token and send it
     // to the relying party.
-    let id_token = create_jwt(app, &email_addr.to_string(), origin, nonce);
+    let id_token = create_jwt(app, &email_addr.to_string(), origin, nonce)
+        .map_err(BrokerError::Custom)?;
     let redirect = &stored["redirect"];
     Ok((id_token, redirect.to_string()))
 

@@ -16,6 +16,7 @@ use std::error::Error;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::path::Path;
+use std::process::exit;
 
 
 /// Defines the program's version, as set by Cargo at compile time.
@@ -50,7 +51,8 @@ struct Args {
 /// The `main()` method. Will loop forever to serve HTTP requests.
 fn main() {
     if let Err(err) = env_logger::init() {
-        panic!(format!("failed to initialize logger: {}", err.description()));
+        println!("Failed to initialize logger: {}", err.description());
+        exit(1);
     }
     let args: Args = Docopt::new(USAGE)
                          .and_then(|d| d.version(Some(VERSION.to_string())).decode())
@@ -58,15 +60,20 @@ fn main() {
 
     let mut builder = broker::config::ConfigBuilder::new();
     if let Some(path) = args.arg_CONFIG {
-        builder.update_from_file(&path).unwrap_or_else(|err| {
-            panic!(format!("failed to read config file: {}", err.description()))
-        });
+        if let Err(err) = builder.update_from_file(&path) {
+            println!("Failed to read config file: {}", err);
+            exit(2);
+        }
     }
     builder.update_from_common_env();
     builder.update_from_broker_env();
-    let app = Arc::new(builder.done().unwrap_or_else(|err| {
-        panic!(format!("failed to build configuration: {}", err.description()))
-    }));
+    let app = Arc::new(match builder.done() {
+        Ok(cfg) => cfg,
+        Err(err) => {
+            println!("Failed to build configuration: {}", err);
+            exit(2);
+        },
+    });
 
     let router = router!{
         // Human-targeted endpoints

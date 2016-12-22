@@ -1,3 +1,4 @@
+extern crate chrono;
 extern crate emailaddress;
 #[macro_use]
 extern crate log;
@@ -13,8 +14,8 @@ extern crate time;
 extern crate url;
 extern crate urlencoded;
 
+use chrono::{UTC};
 use serde_json::builder::ObjectBuilder;
-use time::now_utc;
 
 pub mod error;
 pub mod config;
@@ -32,20 +33,25 @@ pub mod validation;
 
 /// Helper method to create a JWT for a given email address and origin.
 ///
-/// Builds the JSON payload, then signs it using the last key provided in
-/// the configuration object.
-fn create_jwt(app: &Config, email: &str, origin: &str, nonce: &str) -> String {
-    let now = now_utc().to_timespec().sec;
+/// Builds the JSON payload, then signs it using the last valid key provided
+/// in the configuration object.
+fn create_jwt(app: &Config, email: &str, origin: &str, nonce: &str)
+              -> Result<String, String> {
+    let now = UTC::now();
+    let timestamp = now.timestamp();
+
     let payload = &ObjectBuilder::new()
         .insert("aud", origin)
         .insert("email", email)
         .insert("email_verified", email)
-        .insert("exp", now + app.token_ttl as i64)
-        .insert("iat", now)
+        .insert("exp", timestamp + app.token_ttl as i64)
+        .insert("iat", timestamp)
         .insert("iss", &app.public_url)
         .insert("sub", email)
         .insert("nonce", nonce)
         .build();
-    let key = app.keys.last().expect("unable to locate signing key");
-    key.sign_jws(payload)
+
+    let key = app.keys.iter().rev().find(|key| key.is_valid_at(&now))
+        .ok_or("no valid key found")?;
+    Ok(key.sign_jws(payload))
 }

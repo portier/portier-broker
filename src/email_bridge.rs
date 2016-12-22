@@ -95,7 +95,8 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
     let email = &stored["email"];
     let client_id = &stored["client_id"];
     let nonce = &stored["nonce"];
-    let id_token = create_jwt(app, email, client_id, nonce);
+    let id_token = create_jwt(app, email, client_id, nonce)
+        .map_err(BrokerError::Custom)?;
     let redirect = &stored["redirect"];
     Ok((id_token, redirect.to_string()))
 
