@@ -75,7 +75,7 @@ impl Template {
 
     pub fn render_data(&self, data: &mustache::Data) -> String {
         let mut out: Vec<u8> = Vec::new();
-        self.0.render_data(&mut out, data);
+        self.0.render_data(&mut out, data).expect("unable to render template");
         String::from_utf8(out).expect("unable to render template as string")
     }
 }
