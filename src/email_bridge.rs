@@ -1,7 +1,8 @@
-extern crate rand;
+extern crate ring;
 
 use emailaddress::EmailAddress;
 use iron::Url;
+use self::ring::rand;
 use super::error::{BrokerError, BrokerResult};
 use super::lettre::email::EmailBuilder;
 use super::lettre::transport::EmailTransport;
@@ -33,9 +34,12 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
     let session = crypto::session_id(&email_addr, client_id);
 
     // Generate a 12-character one-time pad.
-    let chars = String::from_utf8((0..12).map(|_| {
-        CODE_CHARS[rand::random::<usize>() % CODE_CHARS.len()]
-    }).collect()).unwrap();
+    let mut rand_bytes: [u8; 12] = [0; 12];
+    rand::SystemRandom::new().fill(&mut rand_bytes)
+        .expect("unable to generate random bytes");
+    let chars = String::from_utf8(rand_bytes.iter().map(|x| {
+        CODE_CHARS[*x as usize % CODE_CHARS.len()]
+    }).collect()).expect("unable to create one-time pad");
     // For display, we split it in two groups of 6.
     let chars_fmt = [&chars[0..6], &chars[6..12]].join(" ");
 
@@ -68,14 +72,14 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
     let email = EmailBuilder::new()
         .to(email_addr.to_string().as_str())
         .from((&*app.from_address, &*app.from_name))
-        .alternative(&app.templates.email_html.render(params),
-                     &app.templates.email_text.render(params))
-        .subject(&[catalog.gettext("Finish logging in to"), client_id].join(" "))
+        .alternative(app.templates.email_html.render(params),
+                     app.templates.email_text.render(params))
+        .subject([catalog.gettext("Finish logging in to"), client_id].join(" "))
         .build()
         .unwrap_or_else(|err| panic!("unhandled error building email: {}", err.description()));
     let mut builder = SmtpTransportBuilder::new(app.smtp_server.as_str())?;
     if let (&Some(ref username), &Some(ref password)) = (&app.smtp_username, &app.smtp_password) {
-        builder = builder.credentials(username, password);
+        builder = builder.credentials(username.to_string(), password.to_string());
     }
     let mut mailer = builder.build();
     mailer.send(email)?;
