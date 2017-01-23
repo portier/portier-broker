@@ -32,7 +32,7 @@ router = "0.4.0"
 rustc-serialize = "0.3.22"
 serde = "0.8.21"
 serde_json = "0.8.4"
-staticfile = "0.3.1"
+staticfile = { version = "0.3.1", features = ["cache"] }
 time = "0.1.35"
 toml = { version = "0.2.1", default-features = false, features = ["serde"]}
 url = "1.2.4"

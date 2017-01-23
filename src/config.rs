@@ -155,6 +155,9 @@ pub struct Config {
     pub listen_port: u16,
     pub public_url: String,
     pub allowed_origins: Option<Vec<String>>,
+    pub static_ttl: u32,
+    pub discovery_ttl: u32,
+    pub keys_ttl: u32,
     pub token_ttl: u16,
     pub keys: Vec<crypto::NamedKey>,
     pub store: store::Store,
@@ -176,6 +179,9 @@ pub struct ConfigBuilder {
     pub listen_port: u16,
     pub public_url: Option<String>,
     pub allowed_origins: Option<Vec<String>>,
+    pub static_ttl: u32,
+    pub discovery_ttl: u32,
+    pub keys_ttl: u32,
     pub token_ttl: u16,
     pub keyfiles: Vec<String>,
     pub keytext: Option<String>,
@@ -244,6 +250,9 @@ impl ConfigBuilder {
             listen_port: 3333,
             public_url: None,
             allowed_origins: None,
+            static_ttl: 604800,
+            discovery_ttl: 604800,
+            keys_ttl: 86400,
             token_ttl: 600,
             keyfiles: Vec::new(),
             keytext: None,
@@ -273,6 +282,12 @@ impl ConfigBuilder {
             if let Some(val) = table.listen_port { self.listen_port = val; }
             self.public_url = table.public_url.or_else(|| self.public_url.clone());
             if let Some(val) = table.allowed_origins { self.allowed_origins = Some(val) };
+        }
+
+        if let Some(table) = toml_config.headers {
+            if let Some(val) = table.static_ttl { self.static_ttl = val; }
+            if let Some(val) = table.discovery_ttl { self.discovery_ttl = val; }
+            if let Some(val) = table.keys_ttl { self.keys_ttl = val; }
         }
 
         if let Some(table) = toml_config.crypto {
@@ -348,6 +363,10 @@ impl ConfigBuilder {
         if let Some(val) = env_config.broker_port { self.listen_port = val; }
         if let Some(val) = env_config.broker_public_url { self.public_url = Some(val); }
         if let Some(val) = env_config.broker_allowed_origins { self.allowed_origins = Some(val); }
+
+        if let Some(val) = env_config.broker_static_ttl { self.static_ttl = val; }
+        if let Some(val) = env_config.broker_discovery_ttl { self.discovery_ttl = val; }
+        if let Some(val) = env_config.broker_keys_ttl { self.keys_ttl = val; }
 
         if let Some(val) = env_config.broker_token_ttl { self.token_ttl = val; }
         if let Some(val) = env_config.broker_keyfiles { self.keyfiles = val; }
@@ -429,6 +448,9 @@ impl ConfigBuilder {
             listen_port: self.listen_port,
             public_url: self.public_url.expect("no public url configured"),
             allowed_origins: self.allowed_origins,
+            static_ttl: self.static_ttl,
+            discovery_ttl: self.discovery_ttl,
+            keys_ttl: self.keys_ttl,
             token_ttl: self.token_ttl,
             keys: keys,
             store: store,
@@ -456,6 +478,10 @@ impl EnvConfig {
             broker_port: env::var("BROKER_PORT").ok().and_then(|x| x.parse().ok()),
             broker_public_url: env::var("BROKER_PUBLIC_URL").ok(),
             broker_allowed_origins: env::var("BROKER_ALLOWED_ORIGINS").ok().map(|x| x.split(',').map(|x| x.to_string()).collect()),
+
+            broker_static_ttl: env::var("BROKER_STATIC_TTL").ok().and_then(|x| x.parse().ok()),
+            broker_discovery_ttl: env::var("BROKER_DISCOVERY_TTL").ok().and_then(|x| x.parse().ok()),
+            broker_keys_ttl: env::var("BROKER_KEYS_TTL").ok().and_then(|x| x.parse().ok()),
 
             broker_token_ttl: env::var("BROKER_TOKEN_TTL").ok().and_then(|x| x.parse().ok()),
             broker_keyfiles: env::var("BROKER_KEYFILES").ok().map(|x| x.split(',').map(|x| x.to_string()).collect()),

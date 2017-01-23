@@ -20,7 +20,7 @@ use validation::{valid_uri, only_origin, same_origin};
 /// Most of this is hard-coded for now, although the URLs are constructed by
 /// using the base URL as configured in the `public_url` configuration value.
 broker_handler!(Discovery, |app, _req| {
-    json_response(&ObjectBuilder::new()
+    let obj = ObjectBuilder::new()
         .insert("issuer", &app.public_url)
         .insert("authorization_endpoint",
                 format!("{}/auth", app.public_url))
@@ -33,7 +33,8 @@ broker_handler!(Discovery, |app, _req| {
         .insert("grant_types_supported", vec!["implicit"])
         .insert("subject_types_supported", vec!["public"])
         .insert("id_token_signing_alg_values_supported", vec!["RS256"])
-        .build())
+        .build();
+    json_response(&obj, app.discovery_ttl)
 });
 
 
@@ -48,9 +49,10 @@ broker_handler!(KeySet, |app, _req| {
     for key in &app.keys {
         keys = keys.push(key.public_jwk())
     }
-    json_response(&ObjectBuilder::new()
-                      .insert("keys", keys.build())
-                      .build())
+    let obj = ObjectBuilder::new()
+        .insert("keys", keys.build())
+        .build();
+    json_response(&obj, app.keys_ttl)
 });
 
 

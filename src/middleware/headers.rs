@@ -1,4 +1,4 @@
-use hyper::header::StrictTransportSecurity;
+use hyper::header::{StrictTransportSecurity, CacheControl, CacheDirective};
 use iron::middleware::AfterMiddleware;
 use iron::modifiers;
 use iron::{IronError, IronResult, Request, Response, Set};
@@ -9,10 +9,10 @@ header! { (XContentTypeOptions, "X-Content-Type-Options") => [String] }
 header! { (XXSSProtection, "X-XSS-Protection") => [String] }
 header! { (XFrameOptions, "X-Frame-Options") => [String] }
 
-/// Middleware that enforces common security headers on all outgoing responses.
-pub struct SecurityHeaders;
+/// Middleware that enforces common headers on all outgoing responses.
+pub struct CommonHeaders;
 
-impl AfterMiddleware for SecurityHeaders {
+impl AfterMiddleware for CommonHeaders {
     fn after(&self, _: &mut Request, mut res: Response) -> IronResult<Response> {
         set_headers(&mut res);
         Ok(res)
@@ -24,10 +24,10 @@ impl AfterMiddleware for SecurityHeaders {
     }
 }
 
-/// Mutate an `iron::Response` to set common security headers.
+/// Mutate an `iron::Response` to set common headers.
 fn set_headers(res: &mut Response) {
     // Specify a tight content security policy. We need to be able to POST
-    // redirect anywhere, and run our own inline scripts.
+    // redirect anywhere, and run our own scripts.
     let csp = vec![
         "sandbox allow-scripts allow-forms",
         "default-src 'none'",
@@ -42,6 +42,14 @@ fn set_headers(res: &mut Response) {
                  modifiers::Header(XContentTypeOptions("nosniff".to_string())),
                  modifiers::Header(XXSSProtection("1; mode=block".to_string())),
                  modifiers::Header(XFrameOptions("DENY".to_string()))));
+
+    // Default to disable caching completely.
+    if !res.headers.has::<CacheControl>() {
+        res.set_mut(modifiers::Header(CacheControl(vec![
+            CacheDirective::NoCache,
+            CacheDirective::NoStore,
+        ])));
+    }
 }
 
 #[cfg(test)]
@@ -60,5 +68,6 @@ mod tests {
         assert!(res.headers.get_raw("X-Content-Type-Options").is_some());
         assert!(res.headers.get_raw("X-XSS-Protection").is_some());
         assert!(res.headers.get_raw("X-Frame-Options").is_some());
+        assert!(res.headers.get_raw("Cache-Control").is_some());
     }
 }
