@@ -23,12 +23,14 @@ trap "docker rm -f ${container}" exit
 
 docker cp "${TARGET_DIR}/portier-broker" "${container}:/tmp/portier-broker"
 docker cp "tmpl" "${container}:/tmp/tmpl"
+docker cp "lang" "${container}:/tmp/lang"
 docker cp "res" "${container}:/tmp/res"
 docker start -ai "${container}" << END_CONTAINER_SCRIPT
 
 mkdir /tmp/build
 cd /tmp/build
-mv /tmp/portier-broker /tmp/tmpl /tmp/res ./
+mv /tmp/portier-broker /tmp/tmpl /tmp/lang /tmp/res ./
+rm lang/*.po
 
 mkdir certs
 cd certs
