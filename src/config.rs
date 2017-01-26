@@ -1,3 +1,5 @@
+#![allow(unknown_lints, cyclomatic_complexity)]
+
 extern crate serde;
 extern crate toml;
 
