@@ -244,7 +244,7 @@ impl ConfigBuilder {
         if let Some(table) = toml_config.server {
             if let Some(val) = table.listen_ip { self.listen_ip = val; }
             if let Some(val) = table.listen_port { self.listen_port = val; }
-            self.public_url = table.public_url.or(self.public_url.clone());
+            self.public_url = table.public_url.or_else(|| self.public_url.clone());
             if let Some(val) = table.allowed_origins { self.allowed_origins = Some(val) };
         }
 
@@ -253,11 +253,11 @@ impl ConfigBuilder {
             if let Some(val) = table.keyfiles {
                 self.keyfiles.append(&mut val.clone());
             }
-            self.keytext = table.keytext.or(self.keytext.clone());
+            self.keytext = table.keytext.or_else(|| self.keytext.clone());
         }
 
         if let Some(table) = toml_config.redis {
-            self.redis_url = table.url.or(self.redis_url.clone());
+            self.redis_url = table.url.or_else(|| self.redis_url.clone());
             if let Some(val) = table.session_ttl { self.redis_session_ttl = val; }
             if let Some(val) = table.cache_ttl { self.redis_cache_ttl = val; }
             if let Some(val) = table.cache_max_doc_size { self.redis_cache_max_doc_size = val; }
@@ -266,8 +266,8 @@ impl ConfigBuilder {
         if let Some(table) = toml_config.smtp {
             self.smtp_server = table.server;
             self.from_address = table.from_address;
-            self.smtp_username = table.username.or(self.smtp_username.clone());
-            self.smtp_password = table.password.or(self.smtp_password.clone());
+            self.smtp_username = table.username.or_else(|| self.smtp_username.clone());
+            self.smtp_password = table.password.or_else(|| self.smtp_password.clone());
             if let Some(val) = table.from_name { self.from_name = val; }
         }
 

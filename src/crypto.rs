@@ -76,9 +76,9 @@ impl NamedKey {
         let n = pkey.get_rsa().n().expect("unable to retrieve key's n value");
 
         let mut hasher = hash::Hasher::new(hash::Type::SHA256);
-        hasher.write(e.to_vec().as_slice()).expect("pubkey hashing failed");
-        hasher.write(b".").expect("pubkey hashing failed");
-        hasher.write(n.to_vec().as_slice()).expect("pubkey hashing failed");
+        hasher.write_all(e.to_vec().as_slice()).expect("pubkey hashing failed");
+        hasher.write_all(b".").expect("pubkey hashing failed");
+        hasher.write_all(n.to_vec().as_slice()).expect("pubkey hashing failed");
         let name = hasher.finish().to_base64(base64::URL_SAFE);
 
         Ok(NamedKey { id: name, key: pkey })
@@ -136,9 +136,9 @@ pub fn session_id(email: &EmailAddress, client_id: &str) -> String {
     let rand_bytes: Vec<u8> = (0..16).map(|_| rng.gen()).collect();
 
     let mut hasher = hash::Hasher::new(hash::Type::SHA256);
-    hasher.write(email.to_string().as_bytes()).expect("session hashing failed");
-    hasher.write(client_id.as_bytes()).expect("session hashing failed");
-    hasher.write(&rand_bytes).expect("session hashing failed");
+    hasher.write_all(email.to_string().as_bytes()).expect("session hashing failed");
+    hasher.write_all(client_id.as_bytes()).expect("session hashing failed");
+    hasher.write_all(&rand_bytes).expect("session hashing failed");
     hasher.finish().to_base64(base64::URL_SAFE)
 }
 
