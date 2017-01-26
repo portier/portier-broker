@@ -152,9 +152,9 @@ If you want to test support for well-known identity providers, you will need
 to configure them. For Google, you can request credentials through their
 `API Manager`_.
 
-It is not necessary to run your own email server to test it. Instead, use 
-`MailCatcher`_ or `MailHog`_ to get a dummy smtp inteface. The relevant part of 
-the config.toml to use MailCatcher with default settings can look like this:
+It is not necessary to run your own email server for testing. Instead, use
+`MailCatcher`_ or `MailHog`_ to get a dummy SMTP interface. The relevant part
+of configuration to use MailCatcher with default settings can look like this:
 
 .. code-block:: shell
 
@@ -165,7 +165,6 @@ the config.toml to use MailCatcher with default settings can look like this:
    from_address = "test@example.com"
    # Outgoing mailserver address - Default: (none)
    server = "127.0.0.1:1025"
-
 
 To test your changes, you will need to set up a Relying Party; so far, the
 Python `demo-rp` code has been used. This is a very bare-bones implementation
