@@ -6,8 +6,7 @@ use super::error::{BrokerError, BrokerResult};
 use super::lettre::email::EmailBuilder;
 use super::lettre::transport::EmailTransport;
 use super::lettre::transport::smtp::SmtpTransportBuilder;
-use super::{Config, create_jwt};
-use super::crypto::session_id;
+use super::{Config, create_jwt, crypto};
 use std::collections::HashMap;
 use std::error::Error;
 use std::iter::Iterator;
@@ -31,7 +30,7 @@ const CODE_CHARS: &'static [u8] = b"13456789abcdefghijkmnopqrstuwxyz";
 pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &Url, catalog: &Catalog)
                -> BrokerResult<String> {
 
-    let session = session_id(&email_addr, client_id);
+    let session = crypto::session_id(&email_addr, client_id);
 
     // Generate a 12-character one-time pad.
     let chars = String::from_utf8((0..12).map(|_| {

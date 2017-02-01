@@ -143,6 +143,13 @@ pub fn session_id(email: &EmailAddress, client_id: &str) -> String {
 }
 
 
+pub fn nonce() -> String {
+    let mut rng = OsRng::new().expect("unable to create rng");
+    let rand_bytes: Vec<u8> = (0..16).map(|_| rng.gen()).collect();
+    rand_bytes.to_base64(base64::URL_SAFE)
+}
+
+
 /// Helper function to deserialize key from JWK Key Set.
 ///
 /// Searches the provided JWK Key Set Value for the key matching the given

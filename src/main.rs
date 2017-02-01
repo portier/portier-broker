@@ -82,7 +82,8 @@ fn main() {
         post_auth: post "/auth" => broker::handlers::oidc::Auth::new(&app),
 
         // OpenID Connect relying party endpoints
-        callback:  get  "/callback" => broker::handlers::oauth2::Callback::new(&app),
+        get_cb:    get  "/callback" => broker::handlers::oauth2::Callback::new(&app),
+        post_cb:   post "/callback" => broker::handlers::oauth2::Callback::new(&app),
 
         // Lastly, fall back to trying to serve static files out of ./res/
         static:    get  "/*" => staticfile::Static::new(Path::new("./res/")),
