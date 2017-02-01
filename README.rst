@@ -60,6 +60,16 @@ public_url      BROKER_PUBLIC_URL      (none)
 allowed_origins BROKER_ALLOWED_ORIGINS (none (unrestricted))
 =============== ====================== =====================
 
+**[headers] section:**
+
+=============== ==================== ================
+``config.toml`` Environment Variable Default
+=============== ==================== ================
+static_ttl      BROKER_STATIC_TTL    604800 (1 week)
+discovery_ttl   BROKER_DISCOVERY_TTL 604800 (1 week)
+keys_ttl        BROKER_KEYS_TTL      86400 (1 day)
+=============== ==================== ================
+
 **[crypto] section:**
 
 =============== ==================== ================

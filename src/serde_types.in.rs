@@ -7,6 +7,7 @@
 #[derive(Clone,Debug,Deserialize)]
 struct TomlConfig {
     server: Option<TomlServerTable>,
+    headers: Option<TomlHeadersTable>,
     crypto: Option<TomlCryptoTable>,
     redis: Option<TomlRedisTable>,
     smtp: Option<TomlSmtpTable>,
@@ -20,6 +21,13 @@ struct TomlServerTable {
     listen_port: Option<u16>,
     public_url: Option<String>,
     allowed_origins: Option<Vec<String>>,
+}
+
+#[derive(Clone,Debug,Deserialize)]
+struct TomlHeadersTable {
+    static_ttl: Option<u32>,
+    discovery_ttl: Option<u32>,
+    keys_ttl: Option<u32>,
 }
 
 #[derive(Clone,Debug,Deserialize)]
@@ -70,6 +78,9 @@ struct EnvConfig {
     broker_port: Option<u16>,
     broker_public_url: Option<String>,
     broker_allowed_origins: Option<Vec<String>>,
+    broker_static_ttl: Option<u32>,
+    broker_discovery_ttl: Option<u32>,
+    broker_keys_ttl: Option<u32>,
     broker_token_ttl: Option<u16>,
     broker_keyfiles: Option<Vec<String>>,
     broker_keytext: Option<String>,

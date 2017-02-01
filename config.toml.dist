@@ -9,6 +9,15 @@ public_url =
 allowed_origins = 
 
 
+[headers]
+# Static resources cache max-age we indicate to clients - Default: 604800 (1 week)
+static_ttl = 604800
+# Discovery JSON cache max-age we indicate to clients - Default: 604800 (1 week)
+discovery_ttl = 604800
+# Keys JSON cache max-age we indicate to clients - Default: 86400 (1 day)
+keys_ttl = 86400
+
+
 [crypto]
 # Duration that id_tokens are valid for - Default: 600 (10 minutes)
 token_ttl = 600

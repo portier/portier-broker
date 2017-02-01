@@ -16,6 +16,7 @@ use std::error::Error;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::path::Path;
+use std::time::Duration;
 
 
 /// Defines the program's version, as set by Cargo at compile time.
@@ -86,12 +87,13 @@ fn main() {
         post_cb:   post "/callback" => broker::handlers::oauth2::Callback::new(&app),
 
         // Lastly, fall back to trying to serve static files out of ./res/
-        static:    get  "/*" => staticfile::Static::new(Path::new("./res/")),
+        static:    get  "/*" => staticfile::Static::new(Path::new("./res/"))
+                                    .cache(Duration::from_secs(app.static_ttl as u64)),
     };
 
     let mut chain = Chain::new(router);
     chain.link_before(broker::middleware::LogRequest);
-    chain.link_after(broker::middleware::SecurityHeaders);
+    chain.link_after(broker::middleware::CommonHeaders);
 
     let ipaddr = std::net::IpAddr::from_str(&app.listen_ip).expect("Unable to parse listen IP address");
     let socket = std::net::SocketAddr::new(ipaddr, app.listen_port);
