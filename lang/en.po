@@ -1,0 +1,23 @@
+msgid "Finish logging in to"
+msgstr "Finish logging in to"
+
+msgid "You received this email so that we may confirm your email address and finish your login to:"
+msgstr "You received this email so that we may confirm your email address and finish your login to:"
+
+msgid "Click here to login"
+msgstr "Click here to login"
+
+msgid "Alternatively, enter the following code on the login page:"
+msgstr "Alternatively, enter the following code on the login page:"
+
+msgid "Confirm your address"
+msgstr "Confirm your address"
+
+msgid "We've sent you an email to confirm your address."
+msgstr "We've sent you an email to confirm your address."
+
+msgid "Use the link in that email to login to"
+msgstr "Use the link in that email to login to"
+
+msgid "Alternatively, enter the code from the email to continue in this browser tab:"
+msgstr "Alternatively, enter the code from the email to continue in this browser tab:"

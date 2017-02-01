@@ -1,4 +1,5 @@
 target
+lang/*.mo
 *.pem
 res/.well-known/*
 config.toml

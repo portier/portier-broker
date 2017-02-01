@@ -3,21 +3,20 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Portier &ndash; Finish logging in to {{ client_id }}</title>
+    <title>Portier &ndash; {{ title }} {{ client_id }}</title>
   </head>
   <body style="font: normal 1em/1.25em sans-serif">
     <div style="margin: 72px auto; max-width: 640px; text-align: center">
       <p style="margin: 24px; font:normal 1.25em sans-serif">
-        You received this email so that we may confirm your email address
-        and finish your login to: <em>{{ client_id }}</em>
+        {{ explanation }} <em>{{ client_id }}</em>
       </p>
       <p style="margin:24px">
         <a href="{{ link }}" style="display: inline-block; border:1px solid #23a1d9; border-radius: 4px; padding: 12px 24px; background: #36abdf; color:#fff; font-size: 1.25em; text-decoration: none">
-          Click here to login
+          {{ click }}
         </a>
       </p>
       <p style="margin:24px">
-        Alternatively, enter the following code on the login page:
+        {{ alternate }}
       </p>
       <p style="margin:24px;font: bold 1.25em monospace">
         {{ code }}

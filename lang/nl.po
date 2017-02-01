@@ -1,0 +1,23 @@
+msgid "Finish logging in to"
+msgstr "Login afronden voor"
+
+msgid "You received this email so that we may confirm your email address and finish your login to:"
+msgstr "U ontvangt deze email zodat wij uw email adres kunnen bevestigen en uw login kunnen afronden voor:"
+
+msgid "Click here to login"
+msgstr "Klik hier om in te loggen"
+
+msgid "Alternatively, enter the following code on the login page:"
+msgstr "Als alternatief kunt u ook de volgende code gebruiken op de login pagina:"
+
+msgid "Confirm your address"
+msgstr "Bevestig uw adres"
+
+msgid "We've sent you an email to confirm your address."
+msgstr "We hebben u een email gestuurd zodat wij uw adres kunnen bevestigen."
+
+msgid "Use the link in that email to login to"
+msgstr "Gebruik de link in die email om in te loggen op"
+
+msgid "Alternatively, enter the code from the email to continue in this browser tab:"
+msgstr "Als alternatief kunt u ook de code uit de email invoeren om in deze browser tab verder te gaan:"
