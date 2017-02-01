@@ -97,6 +97,8 @@ pub struct Templates {
     pub error: Template,
     /// A dummy form used to redirect back to the RP with a POST request.
     pub forward: Template,
+    /// A dummy form used to capture fragment parameters.
+    pub fragment_callback: Template,
 }
 
 
@@ -115,6 +117,7 @@ impl Default for Templates {
             email_text: Self::compile_template("tmpl/email_text.mustache"),
             error: Self::compile_template("tmpl/error.mustache"),
             forward: Self::compile_template("tmpl/forward.mustache"),
+            fragment_callback: Self::compile_template("tmpl/fragment_callback.mustache"),
         }
     }
 }
