@@ -42,7 +42,7 @@ urlencoded = "0.5.0"
 lettre = { git = "https://github.com/lettre/lettre.git", rev = "0488e3f943b96a62523e6bc43466a9827fd7bf4c" }
 
 # 0.6.3+patches, pending #445 and a new release
-ring = { git = "https://github.com/stephank/ring.git", rev = "53648987df5850aa43e7f9d9f1218f9db0d3fd4b", features = ["rsa_signing"] }
+ring = { git = "https://github.com/stephank/ring.git", rev = "15f5e6b7d117e5340e17b7a655af73159fe57937", features = ["rsa_signing"] }
 
 # 0.3.1+git, pending a new release
 staticfile = { git = "https://github.com/iron/staticfile.git", rev = "4af9e613dfa71f5d5067bf54b2f2869059ed4aa5", features = ["cache"] }

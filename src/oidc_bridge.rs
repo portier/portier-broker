@@ -170,8 +170,11 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, id_token: &str)
                 BrokerError::Provider(format!("could not fetch {}'s keys: {}",
                                               domain, e.description()))
             })?;
-        crypto::verify_jws(id_token, &keys_obj).map_err(|_| {
-            BrokerError::Provider(format!("could not verify the token received from {}", domain))
+        crypto::verify_jws(id_token, &keys_obj).map_err(|e| {
+            BrokerError::Provider(format!(
+                "could not verify the token received from {}: {}",
+                domain, e.description()
+            ))
         })?
     };
 
