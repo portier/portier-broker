@@ -4,22 +4,9 @@
 // See https://serde.rs/codegen-stable.html for more information.
 
 extern crate glob;
-extern crate serde_codegen;
 
 use glob::glob;
-use std::env;
-use std::path::Path;
 use std::process::Command;
-
-/// Build Serde generated code.
-pub fn build_serde() {
-    let out_dir = env::var_os("OUT_DIR").expect("build.rs $OUT_DIR not specified");
-
-    let src = Path::new("src/serde_types.in.rs");
-    let dst = Path::new(&out_dir).join("serde_types.rs");
-
-    serde_codegen::expand(&src, &dst).expect("serde codegen failed");
-}
 
 // Build gettext catalogs.
 pub fn build_gettext() {
@@ -39,6 +26,5 @@ pub fn build_gettext() {
 }
 
 pub fn main() {
-    build_serde();
     build_gettext();
 }
