@@ -10,6 +10,8 @@ use self::rustc_serialize::base64::{self, FromBase64, ToBase64};
 use serde_json::de::from_slice;
 use serde_json::value::Value;
 use std;
+use std::error::Error;
+use std::fmt::{self, Display};
 use std::fs::File;
 use std::io::Read;
 use std::sync::Arc;
@@ -31,6 +33,31 @@ impl From<&'static str> for CryptoError {
 impl From<std::io::Error> for CryptoError {
     fn from(err: std::io::Error) -> CryptoError {
         CryptoError::Io(err)
+    }
+}
+
+impl Error for CryptoError {
+    fn description(&self) -> &str {
+        match *self {
+            CryptoError::Custom(string) => string,
+            CryptoError::Io(ref err) => err.description(),
+        }
+    }
+
+    fn cause(&self) -> Option<&Error> {
+        match *self {
+            CryptoError::Custom(_) => None,
+            CryptoError::Io(ref err) => Some(err),
+        }
+    }
+}
+
+impl Display for CryptoError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            CryptoError::Custom(string) => write!(f, "Crypto error: {}", string),
+            CryptoError::Io(ref err) => write!(f, "IO error: {}", err),
+        }
     }
 }
 
