@@ -14,7 +14,6 @@ name = "portier-broker"
 
 [build-dependencies]
 glob = "0.2.11"
-serde_codegen = "0.8.0"
 
 [dependencies]
 docopt = "0.6.86"
@@ -30,8 +29,9 @@ rand = "0.3.15"
 redis = "0.8.0"
 router = "0.4.0"
 rustc-serialize = "0.3.22"
-serde = "0.8.21"
-serde_json = "0.8.4"
+serde = "0.8.23"
+serde_derive = "0.8.23"
+serde_json = "0.8.6"
 staticfile = { version = "0.3.1", features = ["cache"] }
 time = "0.1.35"
 toml = { version = "0.2.1", default-features = false, features = ["serde"]}
