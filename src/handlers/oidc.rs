@@ -8,7 +8,6 @@ use iron::method::Method;
 use iron::modifiers;
 use iron::status;
 use oidc_bridge;
-use serde_json::builder::{ArrayBuilder, ObjectBuilder};
 use std::sync::Arc;
 use super::{RedirectUri, handle_error, json_response};
 use super::super::store_limits::addr_limiter;
@@ -20,20 +19,18 @@ use validation::{valid_uri, only_origin, same_origin};
 /// Most of this is hard-coded for now, although the URLs are constructed by
 /// using the base URL as configured in the `public_url` configuration value.
 broker_handler!(Discovery, |app, _req| {
-    let obj = ObjectBuilder::new()
-        .insert("issuer", &app.public_url)
-        .insert("authorization_endpoint",
-                format!("{}/auth", app.public_url))
-        .insert("jwks_uri", format!("{}/keys.json", app.public_url))
-        .insert("scopes_supported", vec!["openid", "email"])
-        .insert("claims_supported",
-                vec!["aud", "email", "email_verified", "exp", "iat", "iss", "sub"])
-        .insert("response_types_supported", vec!["id_token"])
-        .insert("response_modes_supported", vec!["form_post"])
-        .insert("grant_types_supported", vec!["implicit"])
-        .insert("subject_types_supported", vec!["public"])
-        .insert("id_token_signing_alg_values_supported", vec!["RS256"])
-        .build();
+    let obj = json!({
+        "issuer": app.public_url,
+        "authorization_endpoint": format!("{}/auth", app.public_url),
+        "jwks_uri": format!("{}/keys.json", app.public_url),
+        "scopes_supported": vec!["openid", "email"],
+        "claims_supported": vec!["aud", "email", "email_verified", "exp", "iat", "iss", "sub"],
+        "response_types_supported": vec!["id_token"],
+        "response_modes_supported": vec!["form_post"],
+        "grant_types_supported": vec!["implicit"],
+        "subject_types_supported": vec!["public"],
+        "id_token_signing_alg_values_supported": vec!["RS256"],
+    });
     json_response(&obj, app.discovery_ttl)
 });
 
@@ -45,13 +42,11 @@ broker_handler!(Discovery, |app, _req| {
 /// Relying Parties will need to fetch this data to be able to verify identity
 /// tokens issued by this daemon instance.
 broker_handler!(KeySet, |app, _req| {
-    let mut keys = ArrayBuilder::new();
-    for key in &app.keys {
-        keys = keys.push(key.public_jwk())
-    }
-    let obj = ObjectBuilder::new()
-        .insert("keys", keys.build())
-        .build();
+    let obj = json!({
+        "keys": app.keys.iter()
+            .map(|key| key.public_jwk())
+            .collect::<Vec<_>>(),
+    });
     json_response(&obj, app.keys_ttl)
 });
 

@@ -22,14 +22,16 @@ use super::store_limits::Ratelimit;
 pub enum ConfigError {
     Custom(String),
     Io(std::io::Error),
+    Toml(toml::de::Error),
     Store(&'static str),
 }
 
 impl Error for ConfigError {
     fn description(&self) -> &str {
         match *self {
-            ConfigError::Io(ref err) => err.description(),
             ConfigError::Custom(ref string) => string,
+            ConfigError::Io(ref err) => err.description(),
+            ConfigError::Toml(ref err) => err.description(),
             ConfigError::Store(static_str) => static_str,
         }
     }
@@ -37,9 +39,10 @@ impl Error for ConfigError {
 
 impl Display for ConfigError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self{
-            ConfigError::Io(ref err) => write!(f, "IO error: {}", err),
+        match *self {
             ConfigError::Custom(ref string) => write!(f, "Configuration error: {}", string),
+            ConfigError::Io(ref err) => write!(f, "IO error: {}", err),
+            ConfigError::Toml(ref err) => write!(f, "TOML error: {}", err),
             ConfigError::Store(static_str) => write!(f, "Store error: {}", static_str),
         }
     }
@@ -57,6 +60,7 @@ macro_rules! from_error {
 
 from_error!(String, Custom);
 from_error!(std::io::Error, Io);
+from_error!(toml::de::Error, Toml);
 from_error!(&'static str, Store);
 
 
@@ -277,8 +281,7 @@ impl ConfigBuilder {
         let mut file = File::open(path)?;
         let mut file_contents = String::new();
         file.read_to_string(&mut file_contents)?;
-        let toml_config: TomlConfig =
-            toml::decode_str(&file_contents).ok_or("unable to parse config file")?;
+        let toml_config = toml::from_str::<TomlConfig>(&file_contents)?;
 
         if let Some(table) = toml_config.server {
             if let Some(val) = table.listen_ip { self.listen_ip = val; }
