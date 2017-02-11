@@ -65,6 +65,16 @@ public_url      BROKER_PUBLIC_URL      (none)
 allowed_origins BROKER_ALLOWED_ORIGINS (none (unrestricted))
 =============== ====================== =====================
 
+**[headers] section:**
+
+=============== ==================== ================
+``config.toml`` Environment Variable Default
+=============== ==================== ================
+static_ttl      BROKER_STATIC_TTL    604800 (1 week)
+discovery_ttl   BROKER_DISCOVERY_TTL 604800 (1 week)
+keys_ttl        BROKER_KEYS_TTL      86400 (1 day)
+=============== ==================== ================
+
 **[crypto] section:**
 
 =============== ==================== ================
@@ -157,6 +167,20 @@ If you want to test support for well-known identity providers, you will need
 to configure them. For Google, you can request credentials through their
 `API Manager`_.
 
+It is not necessary to run your own email server for testing. Instead, use
+`MailCatcher`_ or `MailHog`_ to get a dummy SMTP interface. The relevant part
+of configuration to use MailCatcher with default settings can look like this:
+
+.. code-block:: shell
+
+   [smtp]
+   # Display name for confirmation emails - Default: "Portier"
+   from_name = "Portier"
+   # Sender address for confirmation emails - Default: (none)
+   from_address = "test@example.com"
+   # Outgoing mailserver address - Default: (none)
+   server = "127.0.0.1:1025"
+
 To test your changes, you will need to set up a Relying Party; so far, the
 Python `demo-rp` code has been used. This is a very bare-bones implementation
 that only serves to prove authentication to the broker.
@@ -164,3 +188,5 @@ that only serves to prove authentication to the broker.
 .. _demo-rp: https://github.com/portier/demo-rp
 .. _Let's Encrypt: https://letsencrypt.org/
 .. _API Manager: https://console.developers.google.com/apis/credentials
+.. _MailCatcher: https://mailcatcher.me/
+.. _MailHog: https://github.com/mailhog/MailHog

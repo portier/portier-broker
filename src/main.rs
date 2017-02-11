@@ -16,6 +16,7 @@ use std::error::Error;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::path::Path;
+use std::time::Duration;
 
 
 /// Defines the program's version, as set by Cargo at compile time.
@@ -70,27 +71,29 @@ fn main() {
 
     let router = router!{
         // Human-targeted endpoints
-        get "/" => broker::handlers::pages::Index,
-        get "/ver.txt" => broker::handlers::pages::Version,
-        get "/confirm" => broker::handlers::email::Confirmation::new(&app),
+        index:     get  "/" => broker::handlers::pages::Index,
+        version:   get  "/ver.txt" => broker::handlers::pages::Version,
+        confirm:   get  "/confirm" => broker::handlers::email::Confirmation::new(&app),
 
         // OpenID Connect provider endpoints
-        get "/.well-known/openid-configuration" =>
-               broker::handlers::oidc::Discovery::new(&app),
-        get "/keys.json" => broker::handlers::oidc::KeySet::new(&app),
-        get "/auth" => broker::handlers::oidc::Auth::new(&app),
-        post "/auth" => broker::handlers::oidc::Auth::new(&app),
+        config:    get  "/.well-known/openid-configuration" =>
+                            broker::handlers::oidc::Discovery::new(&app),
+        keys:      get  "/keys.json" => broker::handlers::oidc::KeySet::new(&app),
+        get_auth:  get  "/auth" => broker::handlers::oidc::Auth::new(&app),
+        post_auth: post "/auth" => broker::handlers::oidc::Auth::new(&app),
 
         // OpenID Connect relying party endpoints
-        get "/callback" => broker::handlers::oauth2::Callback::new(&app),
+        get_cb:    get  "/callback" => broker::handlers::oauth2::Callback::new(&app),
+        post_cb:   post "/callback" => broker::handlers::oauth2::Callback::new(&app),
 
         // Lastly, fall back to trying to serve static files out of ./res/
-        get "/*" => staticfile::Static::new(Path::new("./res/")),
+        static:    get  "/*" => staticfile::Static::new(Path::new("./res/"))
+                                    .cache(Duration::from_secs(app.static_ttl as u64)),
     };
 
     let mut chain = Chain::new(router);
     chain.link_before(broker::middleware::LogRequest);
-    chain.link_after(broker::middleware::SecurityHeaders);
+    chain.link_after(broker::middleware::CommonHeaders);
 
     let ipaddr = std::net::IpAddr::from_str(&app.listen_ip).expect("Unable to parse listen IP address");
     let socket = std::net::SocketAddr::new(ipaddr, app.listen_port);

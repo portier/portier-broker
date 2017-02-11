@@ -1,3 +1,5 @@
+#![allow(unknown_lints, cyclomatic_complexity)]
+
 extern crate serde;
 extern crate toml;
 
@@ -10,9 +12,9 @@ use std::fs::File;
 use std::io::Read;
 
 use super::{crypto, store, mustache};
+use super::gettext::Catalog;
+use super::hyper::LanguageTag;
 use super::store_limits::Ratelimit;
-
-include!(concat!(env!("OUT_DIR"), "/serde_types.rs"));
 
 
 /// Union of all possible error types seen while parsing.
@@ -75,7 +77,7 @@ impl Template {
 
     pub fn render_data(&self, data: &mustache::Data) -> String {
         let mut out: Vec<u8> = Vec::new();
-        self.0.render_data(&mut out, data);
+        self.0.render_data(&mut out, data).expect("unable to render template");
         String::from_utf8(out).expect("unable to render template as string")
     }
 }
@@ -93,6 +95,8 @@ pub struct Templates {
     pub error: Template,
     /// A dummy form used to redirect back to the RP with a POST request.
     pub forward: Template,
+    /// A dummy form used to capture fragment parameters.
+    pub fragment_callback: Template,
 }
 
 
@@ -111,6 +115,31 @@ impl Default for Templates {
             email_text: Self::compile_template("tmpl/email_text.mustache"),
             error: Self::compile_template("tmpl/error.mustache"),
             forward: Self::compile_template("tmpl/forward.mustache"),
+            fragment_callback: Self::compile_template("tmpl/fragment_callback.mustache"),
+        }
+    }
+}
+
+
+// Contains all gettext catalogs we use in compiled form.
+pub struct I18n {
+    pub catalogs: Vec<(LanguageTag, Catalog)>,
+}
+
+
+const SUPPORTED_LANGUAGES: &'static [&'static str] = &["en", "de", "nl"];
+
+impl Default for I18n {
+    fn default() -> I18n {
+        I18n {
+            catalogs: SUPPORTED_LANGUAGES.iter().map(|lang| {
+                let tag = lang.parse().expect("could not parse language tag");
+                let file = File::open(format!("lang/{}.mo", lang))
+                    .expect("could not open catalog file");
+                let catalog = Catalog::parse(file)
+                    .expect("could not parse catalog file");
+                (tag, catalog)
+            }).collect(),
         }
     }
 }
@@ -129,6 +158,9 @@ pub struct Config {
     pub listen_port: u16,
     pub public_url: String,
     pub allowed_origins: Option<Vec<String>>,
+    pub static_ttl: u32,
+    pub discovery_ttl: u32,
+    pub keys_ttl: u32,
     pub token_ttl: u16,
     pub keys: Vec<crypto::NamedKey>,
     pub store: store::Store,
@@ -140,6 +172,7 @@ pub struct Config {
     pub limit_per_email: Ratelimit,
     pub providers: HashMap<String, Provider>,
     pub templates: Templates,
+    pub i18n: I18n,
 }
 
 
@@ -149,6 +182,9 @@ pub struct ConfigBuilder {
     pub listen_port: u16,
     pub public_url: Option<String>,
     pub allowed_origins: Option<Vec<String>>,
+    pub static_ttl: u32,
+    pub discovery_ttl: u32,
+    pub keys_ttl: u32,
     pub token_ttl: u16,
     pub keyfiles: Vec<String>,
     pub keytext: Option<String>,
@@ -217,6 +253,9 @@ impl ConfigBuilder {
             listen_port: 3333,
             public_url: None,
             allowed_origins: None,
+            static_ttl: 604800,
+            discovery_ttl: 604800,
+            keys_ttl: 86400,
             token_ttl: 600,
             keyfiles: Vec::new(),
             keytext: None,
@@ -244,8 +283,14 @@ impl ConfigBuilder {
         if let Some(table) = toml_config.server {
             if let Some(val) = table.listen_ip { self.listen_ip = val; }
             if let Some(val) = table.listen_port { self.listen_port = val; }
-            self.public_url = table.public_url.or(self.public_url.clone());
+            self.public_url = table.public_url.or_else(|| self.public_url.clone());
             if let Some(val) = table.allowed_origins { self.allowed_origins = Some(val) };
+        }
+
+        if let Some(table) = toml_config.headers {
+            if let Some(val) = table.static_ttl { self.static_ttl = val; }
+            if let Some(val) = table.discovery_ttl { self.discovery_ttl = val; }
+            if let Some(val) = table.keys_ttl { self.keys_ttl = val; }
         }
 
         if let Some(table) = toml_config.crypto {
@@ -253,11 +298,11 @@ impl ConfigBuilder {
             if let Some(val) = table.keyfiles {
                 self.keyfiles.append(&mut val.clone());
             }
-            self.keytext = table.keytext.or(self.keytext.clone());
+            self.keytext = table.keytext.or_else(|| self.keytext.clone());
         }
 
         if let Some(table) = toml_config.redis {
-            self.redis_url = table.url.or(self.redis_url.clone());
+            self.redis_url = table.url.or_else(|| self.redis_url.clone());
             if let Some(val) = table.session_ttl { self.redis_session_ttl = val; }
             if let Some(val) = table.cache_ttl { self.redis_cache_ttl = val; }
             if let Some(val) = table.cache_max_doc_size { self.redis_cache_max_doc_size = val; }
@@ -266,8 +311,8 @@ impl ConfigBuilder {
         if let Some(table) = toml_config.smtp {
             self.smtp_server = table.server;
             self.from_address = table.from_address;
-            self.smtp_username = table.username.or(self.smtp_username.clone());
-            self.smtp_password = table.password.or(self.smtp_password.clone());
+            self.smtp_username = table.username.or_else(|| self.smtp_username.clone());
+            self.smtp_password = table.password.or_else(|| self.smtp_password.clone());
             if let Some(val) = table.from_name { self.from_name = val; }
         }
 
@@ -328,6 +373,10 @@ impl ConfigBuilder {
         if let Some(val) = env_config.broker_port { self.listen_port = val; }
         if let Some(val) = env_config.broker_public_url { self.public_url = Some(val); }
         if let Some(val) = env_config.broker_allowed_origins { self.allowed_origins = Some(val); }
+
+        if let Some(val) = env_config.broker_static_ttl { self.static_ttl = val; }
+        if let Some(val) = env_config.broker_discovery_ttl { self.discovery_ttl = val; }
+        if let Some(val) = env_config.broker_keys_ttl { self.keys_ttl = val; }
 
         if let Some(val) = env_config.broker_token_ttl { self.token_ttl = val; }
         if let Some(val) = env_config.broker_keyfiles { self.keyfiles = val; }
@@ -409,6 +458,9 @@ impl ConfigBuilder {
             listen_port: self.listen_port,
             public_url: self.public_url.expect("no public url configured"),
             allowed_origins: self.allowed_origins,
+            static_ttl: self.static_ttl,
+            discovery_ttl: self.discovery_ttl,
+            keys_ttl: self.keys_ttl,
             token_ttl: self.token_ttl,
             keys: keys,
             store: store,
@@ -420,10 +472,108 @@ impl ConfigBuilder {
             limit_per_email: ratelimit,
             providers: providers,
             templates: Templates::default(),
+            i18n: I18n::default(),
         })
     }
 }
 
+
+/// Intermediate structure for deserializing TOML files
+#[derive(Clone,Debug,Deserialize)]
+struct TomlConfig {
+    server: Option<TomlServerTable>,
+    headers: Option<TomlHeadersTable>,
+    crypto: Option<TomlCryptoTable>,
+    redis: Option<TomlRedisTable>,
+    smtp: Option<TomlSmtpTable>,
+    limit: Option<TomlLimitTable>,
+    providers: Option<HashMap<String, TomlProviderTable>>,
+}
+
+#[derive(Clone,Debug,Deserialize)]
+struct TomlServerTable {
+    listen_ip: Option<String>,
+    listen_port: Option<u16>,
+    public_url: Option<String>,
+    allowed_origins: Option<Vec<String>>,
+}
+
+#[derive(Clone,Debug,Deserialize)]
+struct TomlHeadersTable {
+    static_ttl: Option<u32>,
+    discovery_ttl: Option<u32>,
+    keys_ttl: Option<u32>,
+}
+
+#[derive(Clone,Debug,Deserialize)]
+struct TomlCryptoTable {
+    token_ttl: Option<u16>,
+    keyfiles: Option<Vec<String>>,
+    keytext: Option<String>,
+}
+
+#[derive(Clone,Debug,Deserialize)]
+struct TomlRedisTable {
+    url: Option<String>,
+    session_ttl: Option<u16>,
+    cache_ttl: Option<u16>,
+    cache_max_doc_size: Option<u16>,
+}
+
+#[derive(Clone,Debug,Deserialize)]
+struct TomlSmtpTable {
+    from_name: Option<String>,
+    from_address: Option<String>,
+    server: Option<String>,
+    username: Option<String>,
+    password: Option<String>,
+}
+
+#[derive(Clone,Debug,Deserialize)]
+struct TomlLimitTable {
+    per_email: Option<String>,
+}
+
+#[derive(Clone,Debug,Deserialize)]
+struct TomlProviderTable {
+    client_id: Option<String>,
+    secret: Option<String>,
+    discovery_url: Option<String>,
+    issuer_domain: Option<String>,
+}
+
+
+/// Intermediate structure for deserializing environment variables
+///
+/// Environment variable `FOO_BAR` deserializes in to struct member `foo_bar`.
+/// These vars have high precendence and must be prefixed to avoid collisions.
+#[derive(Clone,Debug,Deserialize)]
+struct EnvConfig {
+    broker_ip: Option<String>,
+    broker_port: Option<u16>,
+    broker_public_url: Option<String>,
+    broker_allowed_origins: Option<Vec<String>>,
+    broker_static_ttl: Option<u32>,
+    broker_discovery_ttl: Option<u32>,
+    broker_keys_ttl: Option<u32>,
+    broker_token_ttl: Option<u16>,
+    broker_keyfiles: Option<Vec<String>>,
+    broker_keytext: Option<String>,
+    broker_redis_url: Option<String>,
+    broker_session_ttl: Option<u16>,
+    broker_cache_ttl: Option<u16>,
+    broker_cache_max_doc_size: Option<u16>,
+    broker_from_name: Option<String>,
+    broker_from_address: Option<String>,
+    broker_smtp_server: Option<String>,
+    broker_smtp_username: Option<String>,
+    broker_smtp_password: Option<String>,
+    broker_limit_per_email: Option<String>,
+    broker_gmail_client: Option<String>,
+    broker_gmail_secret: Option<String>,
+    broker_gmail_discovery: Option<String>,
+    broker_gmail_issuer: Option<String>,
+}
 
 impl EnvConfig {
     /// Manually deserialize from environment variables
@@ -435,6 +585,10 @@ impl EnvConfig {
             broker_port: env::var("BROKER_PORT").ok().and_then(|x| x.parse().ok()),
             broker_public_url: env::var("BROKER_PUBLIC_URL").ok(),
             broker_allowed_origins: env::var("BROKER_ALLOWED_ORIGINS").ok().map(|x| x.split(',').map(|x| x.to_string()).collect()),
+
+            broker_static_ttl: env::var("BROKER_STATIC_TTL").ok().and_then(|x| x.parse().ok()),
+            broker_discovery_ttl: env::var("BROKER_DISCOVERY_TTL").ok().and_then(|x| x.parse().ok()),
+            broker_keys_ttl: env::var("BROKER_KEYS_TTL").ok().and_then(|x| x.parse().ok()),
 
             broker_token_ttl: env::var("BROKER_TOKEN_TTL").ok().and_then(|x| x.parse().ok()),
             broker_keyfiles: env::var("BROKER_KEYFILES").ok().map(|x| x.split(',').map(|x| x.to_string()).collect()),

@@ -8,10 +8,13 @@ extern crate lettre;
 extern crate mustache;
 extern crate redis;
 extern crate serde;
+#[macro_use]
+extern crate serde_derive;
 extern crate serde_json;
 extern crate time;
 extern crate url;
 extern crate urlencoded;
+extern crate gettext;
 
 use serde_json::builder::ObjectBuilder;
 use time::now_utc;

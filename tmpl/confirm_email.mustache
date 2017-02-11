@@ -3,25 +3,24 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Portier &ndash; Confirm your address</title>
+    <title>Portier &ndash; {{ title }}</title>
     <link rel="stylesheet" href="/static/style.css">
   </head>
   <body>
     <div class="container">
       <main>
         <h1 class="head">
-          We've sent you an email to confirm your address.
+          {{ explanation }}
         </h1>
         <p>
-          Use the link in that email to login to:<br>
+          {{ use }}<br>
           <em>{{ client_id }}</em>
         </p>
       </main>
       <hr />
       <aside>
         <p>
-          Alternatively, enter the code from the email
-          to continue in this browser tab:
+          {{ alternate }}
         </p>
         <form id="form" action="/confirm" method="get">
           <input type="hidden" name="session" value="{{ session_id }}">

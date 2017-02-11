@@ -6,12 +6,12 @@ use super::error::{BrokerError, BrokerResult};
 use super::lettre::email::EmailBuilder;
 use super::lettre::transport::EmailTransport;
 use super::lettre::transport::smtp::SmtpTransportBuilder;
-use super::{Config, create_jwt};
-use super::crypto::session_id;
+use super::{Config, create_jwt, crypto};
 use std::collections::HashMap;
 use std::error::Error;
 use std::iter::Iterator;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
+use gettext::Catalog;
 
 
 /// The z-base-32 character set, from which we select characters for the one-time pad.
@@ -27,10 +27,10 @@ const CODE_CHARS: &'static [u8] = b"13456789abcdefghijkmnopqrstuwxyz";
 ///
 /// Returns the session ID, so a form can be rendered as an alternative way
 /// to confirm, without following the link.
-pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &Url)
+pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &Url, catalog: &Catalog)
                -> BrokerResult<String> {
 
-    let session = session_id(&email_addr, client_id);
+    let session = crypto::session_id(&email_addr, client_id);
 
     // Generate a 12-character one-time pad.
     let chars = String::from_utf8((0..12).map(|_| {
@@ -60,13 +60,17 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
         ("client_id", client_id),
         ("code", &chars_fmt),
         ("link", &href),
+        ("title", catalog.gettext("Finish logging in to")),
+        ("explanation", catalog.gettext("You received this email so that we may confirm your email address and finish your login to:")),
+        ("click", catalog.gettext("Click here to login")),
+        ("alternate", catalog.gettext("Alternatively, enter the following code on the login page:")),
     ];
     let email = EmailBuilder::new()
         .to(email_addr.to_string().as_str())
         .from((&*app.from_address, &*app.from_name))
         .alternative(&app.templates.email_html.render(params),
                      &app.templates.email_text.render(params))
-        .subject(&format!("Finish logging in to {}", client_id))
+        .subject(&[catalog.gettext("Finish logging in to"), client_id].join(" "))
         .build()
         .unwrap_or_else(|err| panic!("unhandled error building email: {}", err.description()));
     let mut builder = SmtpTransportBuilder::new(app.smtp_server.as_str())?;

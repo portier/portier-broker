@@ -3,7 +3,7 @@ use email_bridge;
 use emailaddress::EmailAddress;
 use error::{BrokerError, BrokerResult};
 use iron::{Handler, IronResult, Plugin, Request, Response, Url};
-use iron::headers::{ContentType, Location};
+use iron::headers::{ContentType, Location, AcceptLanguage};
 use iron::method::Method;
 use iron::modifiers;
 use iron::status;
@@ -15,13 +15,12 @@ use super::super::store_limits::addr_limiter;
 use urlencoded::{UrlEncodedBody, UrlEncodedQuery};
 use validation::{valid_uri, only_origin, same_origin};
 
-
 /// Iron handler to return the OpenID Discovery document.
 ///
 /// Most of this is hard-coded for now, although the URLs are constructed by
 /// using the base URL as configured in the `public_url` configuration value.
 broker_handler!(Discovery, |app, _req| {
-    json_response(&ObjectBuilder::new()
+    let obj = ObjectBuilder::new()
         .insert("issuer", &app.public_url)
         .insert("authorization_endpoint",
                 format!("{}/auth", app.public_url))
@@ -34,7 +33,8 @@ broker_handler!(Discovery, |app, _req| {
         .insert("grant_types_supported", vec!["implicit"])
         .insert("subject_types_supported", vec!["public"])
         .insert("id_token_signing_alg_values_supported", vec!["RS256"])
-        .build())
+        .build();
+    json_response(&obj, app.discovery_ttl)
 });
 
 
@@ -49,9 +49,10 @@ broker_handler!(KeySet, |app, _req| {
     for key in &app.keys {
         keys = keys.push(key.public_jwk())
     }
-    json_response(&ObjectBuilder::new()
-                      .insert("keys", keys.build())
-                      .build())
+    let obj = ObjectBuilder::new()
+        .insert("keys", keys.build())
+        .build();
+    json_response(&obj, app.keys_ttl)
 });
 
 
@@ -115,21 +116,36 @@ broker_handler!(Auth, |app, req| {
     }
 
     if app.providers.contains_key(&email_addr.domain.to_lowercase()) {
-
         // OIDC authentication. Redirect to the identity provider.
         let auth_url = oidc_bridge::request(app, email_addr, client_id, nonce, &parsed_redirect_uri)?;
         Ok(Response::with((status::SeeOther, modifiers::Header(Location(auth_url.to_string())))))
 
     } else {
+        // Determine the language catalog to use.
+        let mut catalog = &app.i18n.catalogs[0].1;
+        if let Some(accept) = req.headers.get::<AcceptLanguage>() {
+            'outer: for accept_language in accept.iter() {
+                for &(ref lang_tag, ref lang_catalog) in &app.i18n.catalogs {
+                    if lang_tag.matches(&accept_language.item) {
+                        catalog = lang_catalog;
+                        break 'outer;
+                    }
+                }
+            }
+        }
 
         // Email loop authentication. Render a message and form.
-        let session_id = email_bridge::request(app, email_addr, client_id, nonce, &parsed_redirect_uri)?;
+        let session_id = email_bridge::request(app, email_addr, client_id, nonce, &parsed_redirect_uri, &catalog)?;
+
         Ok(Response::with((status::Ok,
                            modifiers::Header(ContentType::html()),
                            app.templates.confirm_email.render(&[
                                ("client_id", &client_id),
                                ("session_id", &session_id),
+                               ("title", catalog.gettext("Confirm your address")),
+                               ("explanation", catalog.gettext("We've sent you an email to confirm your address.")),
+                               ("use", catalog.gettext("Use the link in that email to login to")),
+                               ("alternate", catalog.gettext("Alternatively, enter the code from the email to continue in this browser tab:")),
                            ]))))
-
     }
 });
