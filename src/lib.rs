@@ -10,13 +10,13 @@ extern crate redis;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
 extern crate serde_json;
 extern crate time;
 extern crate url;
 extern crate urlencoded;
 extern crate gettext;
 
-use serde_json::builder::ObjectBuilder;
 use time::now_utc;
 
 pub mod error;
@@ -39,16 +39,16 @@ pub mod validation;
 /// the configuration object.
 fn create_jwt(app: &Config, email: &str, origin: &str, nonce: &str) -> String {
     let now = now_utc().to_timespec().sec;
-    let payload = &ObjectBuilder::new()
-        .insert("aud", origin)
-        .insert("email", email)
-        .insert("email_verified", email)
-        .insert("exp", now + app.token_ttl as i64)
-        .insert("iat", now)
-        .insert("iss", &app.public_url)
-        .insert("sub", email)
-        .insert("nonce", nonce)
-        .build();
+    let payload = json!({
+        "aud": origin,
+        "email": email,
+        "email_verified": email,
+        "exp": now + app.token_ttl as i64,
+        "iat": now,
+        "iss": &app.public_url,
+        "sub": email,
+        "nonce": nonce,
+    });
     let key = app.keys.last().expect("unable to locate signing key");
-    key.sign_jws(payload)
+    key.sign_jws(&payload)
 }

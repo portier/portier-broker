@@ -12,7 +12,6 @@ extern crate rustc_serialize;
 use portier_broker as broker;
 use docopt::Docopt;
 use iron::{Iron, Chain};
-use std::error::Error;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::path::Path;
@@ -51,7 +50,7 @@ struct Args {
 /// The `main()` method. Will loop forever to serve HTTP requests.
 fn main() {
     if let Err(err) = env_logger::init() {
-        panic!(format!("failed to initialize logger: {}", err.description()));
+        panic!(format!("failed to initialize logger: {}", err));
     }
     let args: Args = Docopt::new(USAGE)
                          .and_then(|d| d.version(Some(VERSION.to_string())).decode())
@@ -60,13 +59,13 @@ fn main() {
     let mut builder = broker::config::ConfigBuilder::new();
     if let Some(path) = args.arg_CONFIG {
         builder.update_from_file(&path).unwrap_or_else(|err| {
-            panic!(format!("failed to read config file: {}", err.description()))
+            panic!(format!("failed to read config file: {}", err))
         });
     }
     builder.update_from_common_env();
     builder.update_from_broker_env();
     let app = Arc::new(builder.done().unwrap_or_else(|err| {
-        panic!(format!("failed to build configuration: {}", err.description()))
+        panic!(format!("failed to build configuration: {}", err))
     }));
 
     let router = router!{

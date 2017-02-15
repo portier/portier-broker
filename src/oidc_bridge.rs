@@ -21,7 +21,7 @@ use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 /// ```
 macro_rules! try_get_json_field {
     ( $input:expr, $key:tt, $conv:ident, $descr:expr ) => {
-        $input.find($key).and_then(|v| v.$conv()).ok_or_else(|| {
+        $input.get($key).and_then(|v| v.$conv()).ok_or_else(|| {
             BrokerError::Provider(format!("{} missing from {}", $key, $descr))
         })?
     }

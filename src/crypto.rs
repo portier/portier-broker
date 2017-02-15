@@ -9,10 +9,8 @@ use self::openssl::crypto::pkey::PKey;
 use self::openssl::crypto::rsa::RSA;
 use self::rand::{OsRng, Rng};
 use self::rustc_serialize::base64::{self, FromBase64, ToBase64};
-use serde_json::builder::ObjectBuilder;
 use serde_json::de::from_slice;
 use serde_json::value::Value;
-use super::serde_json;
 use std;
 use std::fs::File;
 use std::io::{Read, Write};
@@ -86,15 +84,12 @@ impl NamedKey {
 
     /// Create a JSON Web Signature (JWS) for the given JSON structure.
     pub fn sign_jws(&self, payload: &Value) -> String {
-        let header = serde_json::to_string(
-            &ObjectBuilder::new()
-                .insert("kid", &self.id)
-                .insert("alg", "RS256")
-                .build()
-            ).expect("unable to coerce jwt header into string");
+        let header = json!({
+            "kid": &self.id,
+            "alg": "RS256",
+        }).to_string();
 
-        let payload = serde_json::to_string(&payload)
-            .expect("unable to coerce jwt payload into string");
+        let payload = payload.to_string();
         let mut input = Vec::<u8>::new();
         input.extend(header.as_bytes().to_base64(base64::URL_SAFE).into_bytes());
         input.push(b'.');
@@ -114,14 +109,14 @@ impl NamedKey {
         }
         let n = self.key.get_rsa().n().expect("unable to retrieve key's n value");
         let e = self.key.get_rsa().e().expect("unable to retrieve key's e value");
-        ObjectBuilder::new()
-            .insert("kty", "RSA")
-            .insert("alg", "RS256")
-            .insert("use", "sig")
-            .insert("kid", &self.id)
-            .insert("n", json_big_num(&n))
-            .insert("e", json_big_num(&e))
-            .build()
+        json!({
+            "kty": "RSA",
+            "alg": "RS256",
+            "use": "sig",
+            "kid": &self.id,
+            "n": json_big_num(&n),
+            "e": json_big_num(&e),
+        })
     }
 }
 
@@ -155,11 +150,11 @@ pub fn nonce() -> String {
 /// Searches the provided JWK Key Set Value for the key matching the given
 /// id. Returns a usable public key if exactly one key is found.
 pub fn jwk_key_set_find(set: &Value, kid: &str) -> Result<PKey, ()> {
-    let key_objs = set.find("keys").and_then(|v| v.as_array()).ok_or(())?;
+    let key_objs = set.get("keys").and_then(|v| v.as_array()).ok_or(())?;
     let matching = key_objs.iter()
         .filter(|key_obj| {
-            key_obj.find("kid").and_then(|v| v.as_str()) == Some(kid) &&
-            key_obj.find("use").and_then(|v| v.as_str()) == Some("sig")
+            key_obj.get("kid").and_then(|v| v.as_str()) == Some(kid) &&
+            key_obj.get("use").and_then(|v| v.as_str()) == Some("sig")
         })
         .collect::<Vec<&Value>>();
 
@@ -169,10 +164,10 @@ pub fn jwk_key_set_find(set: &Value, kid: &str) -> Result<PKey, ()> {
     }
 
     // Then, use the data to build a public key object for verification.
-    let n = matching[0].find("n").and_then(|v| v.as_str()).ok_or(())
+    let n = matching[0].get("n").and_then(|v| v.as_str()).ok_or(())
                 .and_then(|data| data.from_base64().map_err(|_| ()))
                 .and_then(|data| BigNum::new_from_slice(&data).map_err(|_| ()))?;
-    let e = matching[0].find("e").and_then(|v| v.as_str()).ok_or(())
+    let e = matching[0].get("e").and_then(|v| v.as_str()).ok_or(())
                 .and_then(|data| data.from_base64().map_err(|_| ()))
                 .and_then(|data| BigNum::new_from_slice(&data).map_err(|_| ()))?;
     let rsa = RSA::from_public_components(n, e).map_err(|_| ())?;
@@ -193,7 +188,7 @@ pub fn verify_jws(jws: &str, key_set: &Value) -> Result<Value, ()> {
     let decoded = parts.iter().map(|s| s.from_base64())
                     .collect::<Result<Vec<_>, _>>().map_err(|_| ())?;
     let jwt_header: Value = from_slice(&decoded[0]).map_err(|_| ())?;
-    let kid = jwt_header.find("kid").and_then(|v| v.as_str()).ok_or(())?;
+    let kid = jwt_header.get("kid").and_then(|v| v.as_str()).ok_or(())?;
     let pub_key = jwk_key_set_find(key_set, kid)?;
 
     // Verify the identity token's signature.
