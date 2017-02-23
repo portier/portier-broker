@@ -35,6 +35,15 @@ impl Error for ConfigError {
             ConfigError::Store(static_str) => static_str,
         }
     }
+
+    fn cause(&self) -> Option<&Error> {
+        match *self {
+            ConfigError::Custom(_) => None,
+            ConfigError::Io(ref err) => Some(err),
+            ConfigError::Toml(ref err) => Some(err),
+            ConfigError::Store(_) => None,
+        }
+    }
 }
 
 impl Display for ConfigError {

@@ -16,25 +16,33 @@ name = "portier-broker"
 glob = "0.2.11"
 
 [dependencies]
-docopt = "0.6.86"
+docopt = "0.7.0"
 emailaddress = "0.4.0"
-env_logger = "0.3.5"
-hyper = "0.9.14"
-iron = "0.4.0"
-lettre = "0.6.1"
+env_logger = "0.4.0"
+gettext = "0.2.0"
+hyper = "0.10.4"
+hyper-native-tls = "0.2.2"
+iron = "0.5.1"
 log = "0.3.6"
 mustache = "0.8.0"
-openssl = "0.7.14"
-rand = "0.3.15"
 redis = "0.8.0"
-router = "0.4.0"
+router = "0.5.1"
 rustc-serialize = "0.3.22"
+pem = "0.2.0"
 serde = "0.9.7"
 serde_derive = "0.9.7"
 serde_json = "0.9.6"
-staticfile = { version = "0.3.1", features = ["cache"] }
-time = "0.1.35"
+time = "0.1.36"
 toml = "0.3.0"
-url = "1.2.4"
-urlencoded = "0.4.1"
-gettext = "0.2.0"
+untrusted = "0.3.2"
+url = "1.4.0"
+urlencoded = "0.5.0"
+
+# 0.6.1+git, pending a new release
+lettre = { git = "https://github.com/lettre/lettre.git", rev = "0488e3f943b96a62523e6bc43466a9827fd7bf4c" }
+
+# 0.6.3+patches, pending #445 and a new release
+ring = { git = "https://github.com/stephank/ring.git", rev = "15f5e6b7d117e5340e17b7a655af73159fe57937", features = ["rsa_signing"] }
+
+# 0.3.1+git, pending a new release
+staticfile = { git = "https://github.com/iron/staticfile.git", rev = "4af9e613dfa71f5d5067bf54b2f2869059ed4aa5", features = ["cache"] }
