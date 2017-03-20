@@ -66,7 +66,7 @@ impl From<BrokerError> for String {
 
 impl From<ValidationError> for BrokerError {
     fn from(err: ValidationError) -> BrokerError {
-        BrokerError::Input(err.description().to_string())
+        BrokerError::Input(format!("{}", err))
     }
 }
 

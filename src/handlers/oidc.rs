@@ -74,8 +74,8 @@ broker_handler!(Auth, |app, req| {
     let client_id = try_get_param!(params, "client_id");
     let redirect_uri = try_get_param!(params, "redirect_uri");
 
-    valid_uri(redirect_uri)?;
-    valid_uri(client_id)?;
+    valid_uri(redirect_uri, "redirect_uri")?;
+    valid_uri(client_id, "client_id")?;
     same_origin(client_id, redirect_uri)?;
     only_origin(client_id)?;
     if let Some(ref whitelist) = app.allowed_origins {
