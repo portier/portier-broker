@@ -1,14 +1,12 @@
 use error::{BrokerError, BrokerResult};
-use hyper::client::Client as HttpClient;
-use hyper::header::{
-    CacheControl as HyCacheControl,
-    CacheDirective as HyCacheDirective
-};
+use futures::{Future, Stream};
+use http::{Client as HttpClient};
+use hyper::header::{ContentLength, CacheControl, CacheDirective};
 use redis::Commands;
 use serde_json::de::from_str;
 use serde_json::value::Value;
 use std::cmp::max;
-use std::io::Read;
+use std::str::from_utf8;
 use store::Store;
 
 
@@ -44,31 +42,41 @@ pub fn fetch_json_url(store: &Store, key: &CacheKey, session: &HttpClient, url: 
     stored.map_or_else(|| {
 
         // Cache miss, make a request.
-        let rsp = session.get(url).send()?;
+        let rsp = session.get(
+            url.parse().expect("could not parse request url")
+        ).wait()?;
+
+        // Check the Content-Length. We require it.
+        rsp.headers().get()
+            .ok_or_else(|| BrokerError::Custom("missing content-length header in response".to_string()))
+            .and_then(|header: &ContentLength| {
+                if header.0 > store.max_response_size {
+                    Err(BrokerError::Custom("response exceeds the size limit".to_string()))
+                } else {
+                    Ok(())
+                }
+            })?;
 
         // Grab the max-age directive from the Cache-Control header.
-        let max_age = rsp.headers.get().map_or(0, |header: &HyCacheControl| {
+        let max_age = rsp.headers().get().map_or(0, |header: &CacheControl| {
             for dir in header.iter() {
-                if let HyCacheDirective::MaxAge(seconds) = *dir {
+                if let CacheDirective::MaxAge(seconds) = *dir {
                     return seconds;
                 }
             }
             0
         });
 
-        // We read up to size+1, because we use the extra byte as a
-        // sentinel to detect responses that exceed our maximum size.
-        let mut data = String::new();
-        let bytes_read = rsp.take(store.max_response_size + 1).read_to_string(&mut data)?;
-        if bytes_read as u64 > store.max_response_size {
-            return Err(BrokerError::Custom("response exceeded the size limit".to_string()))
-        }
+        // Receive the body.
+        let chunk = rsp.body().concat2().wait()?;
+        let data = from_utf8(&chunk)
+            .map_err(|_| BrokerError::Custom("response contained invalid utf-8".to_string()))?;
 
         // Cache the response for at least `expire_cache`, but honor longer `max-age`.
         let seconds = max(store.expire_cache, max_age as usize);
-        store.client.set_ex::<_, _, ()>(&key_str, &data, seconds)?;
+        store.client.set_ex::<_, _, ()>(&key_str, data, seconds)?;
 
-        Ok(data)
+        Ok(data.to_owned())
 
     }, |data| {
         Ok(data)

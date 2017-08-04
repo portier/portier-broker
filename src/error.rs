@@ -1,5 +1,5 @@
 use emailaddress;
-use hyper::Error as HttpError;
+use hyper::Error as HyperError;
 use lettre::transport::smtp::error::Error as MailError;
 use redis::RedisError;
 use std::convert::From;
@@ -20,7 +20,7 @@ pub enum BrokerError {
     Custom(String),
     Io(IoError),
     Redis(RedisError),
-    Http(HttpError),
+    Hyper(HyperError),
     Mail(MailError),
 }
 
@@ -34,7 +34,7 @@ impl Error for BrokerError {
             BrokerError::Custom(ref description) => description,
             BrokerError::Io(ref err) => err.description(),
             BrokerError::Redis(ref err) => err.description(),
-            BrokerError::Http(ref err) => err.description(),
+            BrokerError::Hyper(ref err) => err.description(),
             BrokerError::Mail(ref err) => err.description(),
         }
     }
@@ -46,7 +46,7 @@ impl Error for BrokerError {
             BrokerError::Custom(_) => None,
             BrokerError::Io(ref e) => Some(e),
             BrokerError::Redis(ref e) => Some(e),
-            BrokerError::Http(ref e) => Some(e),
+            BrokerError::Hyper(ref e) => Some(e),
             BrokerError::Mail(ref e) => Some(e),
         }
     }
@@ -88,6 +88,6 @@ macro_rules! from_error {
 }
 
 from_error!(IoError, Io);
-from_error!(HttpError, Http);
+from_error!(HyperError, Hyper);
 from_error!(RedisError, Redis);
 from_error!(MailError, Mail);

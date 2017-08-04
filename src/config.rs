@@ -2,7 +2,7 @@
 
 use crypto;
 use gettext::Catalog;
-use hyper::LanguageTag;
+use hyper::header::LanguageTag;
 use mustache;
 use std::collections::HashMap;
 use std::env;

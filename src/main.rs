@@ -1,10 +1,9 @@
 extern crate docopt;
 extern crate emailaddress;
 extern crate env_logger;
+extern crate futures;
 extern crate gettext;
-#[macro_use]
 extern crate hyper;
-extern crate iron;
 extern crate lettre;
 #[macro_use]
 extern crate log;
@@ -12,26 +11,23 @@ extern crate mustache;
 extern crate openssl;
 extern crate rand;
 extern crate redis;
-#[macro_use(router)]
-extern crate router;
 extern crate rustc_serialize;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
-extern crate staticfile;
 extern crate time;
+extern crate tokio_core;
 extern crate toml;
 extern crate url;
-extern crate urlencoded;
 
 mod config;
 mod crypto;
 mod email_bridge;
 mod error;
 mod handlers;
-mod middleware;
+mod http;
 mod oidc_bridge;
 mod store;
 mod store_cache;
@@ -39,11 +35,43 @@ mod store_limits;
 mod validation;
 
 use docopt::Docopt;
-use iron::{Iron, Chain};
-use std::path::Path;
-use std::str::FromStr;
+use futures::{future, Future, Stream};
+use hyper::{Method, StatusCode};
+use hyper::server::{Http, Request, Response};
+use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::Duration;
+
+
+/// Route the request, returning a handler
+fn route(req: &Request) -> http::Handler {
+    match (req.method(), req.path()) {
+        // Human-targeted endpoints
+        (&Method::Get, "/") => handlers::pages::index,
+        (&Method::Get, "/ver.txt") => handlers::pages::version,
+        (&Method::Get, "/confirm") => handlers::email::confirmation,
+
+        // OpenID Connect provider endpoints
+        (&Method::Get, "/.well-known/openid-configuration") => handlers::oidc::discovery,
+        (&Method::Get, "/keys.json") => handlers::oidc::key_set,
+        (&Method::Get, "/auth") | (&Method::Post, "/auth") => handlers::oidc::auth,
+
+        // OpenID Connect relying party endpoints
+        (&Method::Get, "/callback") | (&Method::Post, "/callback") => handlers::oauth2::callback,
+
+        // Lastly, fall back to trying to serve static files out of ./res/
+        // TODO
+
+        _ => handle_unmatched,
+    }
+}
+
+
+/// Handler used when no routing matches nothing
+fn handle_unmatched(_: Request, _: http::ContextHandle) -> http::HandlerResult {
+    let res = Response::new()
+        .with_status(StatusCode::BadRequest);
+    future::ok(res).boxed()
+}
 
 
 /// Defines the program's version, as set by Cargo at compile time.
@@ -96,35 +124,31 @@ fn main() {
         panic!(format!("failed to build configuration: {}", err))
     }));
 
-    let router = router!{
-        // Human-targeted endpoints
-        index:     get  "/" => handlers::pages::Index,
-        version:   get  "/ver.txt" => handlers::pages::Version,
-        confirm:   get  "/confirm" => handlers::email::Confirmation::new(&app),
+    let mut core = tokio_core::reactor::Core::new()
+        .expect("Could not start the event loop");
+    let handle = core.handle();
+    let proto = Http::new();
 
-        // OpenID Connect provider endpoints
-        config:    get  "/.well-known/openid-configuration" =>
-                            handlers::oidc::Discovery::new(&app),
-        keys:      get  "/keys.json" => handlers::oidc::KeySet::new(&app),
-        get_auth:  get  "/auth" => handlers::oidc::Auth::new(&app),
-        post_auth: post "/auth" => handlers::oidc::Auth::new(&app),
+    let ip_addr = app.listen_ip.parse()
+        .expect("Unable to parse listen address");
+    let addr = SocketAddr::new(ip_addr, app.listen_port);
+    let listener = tokio_core::net::TcpListener::bind(&addr, &handle)
+        .expect("Unable to bind listen address");
+    info!("Listening on http://{}", addr);
 
-        // OpenID Connect relying party endpoints
-        get_cb:    get  "/callback" => handlers::oauth2::Callback::new(&app),
-        post_cb:   post "/callback" => handlers::oauth2::Callback::new(&app),
-
-        // Lastly, fall back to trying to serve static files out of ./res/
-        static:    get  "/*" => staticfile::Static::new(Path::new("./res/"))
-                                    .cache(Duration::from_secs(app.static_ttl as u64)),
-    };
-
-    let mut chain = Chain::new(router);
-    chain.link_before(middleware::LogRequest);
-    chain.link_after(middleware::CommonHeaders);
-
-    let ipaddr = std::net::IpAddr::from_str(&app.listen_ip).expect("Unable to parse listen IP address");
-    let socket = std::net::SocketAddr::new(ipaddr, app.listen_port);
-    info!("listening on http://{}", socket);
-
-    Iron::new(chain).http(socket).expect("Unable to start http server");
+    core.run(
+        listener.incoming()
+            .for_each(move |(sock, addr)| {
+                proto.bind_connection(&handle, sock, addr, http::Service {
+                    app: app.clone(),
+                    handle: handle.remote().clone(),
+                    route: route,
+                });
+                Ok(())
+            })
+            .map_err(|err| {
+                error!("{}", err);
+                ()
+            })
+    ).expect("Unhandled failure running the server");
 }

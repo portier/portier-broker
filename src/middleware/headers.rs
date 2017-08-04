@@ -1,7 +1,4 @@
 use hyper::header::{StrictTransportSecurity, CacheControl, CacheDirective};
-use iron::middleware::AfterMiddleware;
-use iron::modifiers;
-use iron::{IronError, IronResult, Request, Response, Set};
 
 header! { (ContentSecurityPolicy, "Content-Security-Policy") => [String] }
 header! { (XContentSecurityPolicy, "X-Content-Security-Policy") => [String] }
@@ -54,7 +51,6 @@ fn set_headers(res: &mut Response) {
 
 #[cfg(test)]
 mod tests {
-    use iron::Response;
     use super::set_headers;
 
     #[test]

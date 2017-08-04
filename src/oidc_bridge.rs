@@ -2,13 +2,14 @@ use config::Config;
 use crypto;
 use emailaddress::EmailAddress;
 use error::{BrokerError, BrokerResult};
-use hyper::client::Client as HttpClient;
-use iron::Url;
+use http::{Client as HttpClient};
 use serde_json::value::Value;
 use std::collections::HashMap;
 use std::error::Error;
 use super::store_cache::{CacheKey, fetch_json_url};
 use time::now_utc;
+use tokio_core::reactor::Remote;
+use url::Url;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 
 
@@ -39,7 +40,7 @@ macro_rules! try_get_json_field {
 /// user will be redirected back to after confirming (or denying) the
 /// Authentication Request. Included in the request is a nonce which we can
 /// later use to definitively match the callback to this request.
-pub fn request(app: &Config, email_addr: &EmailAddress, client_id: &str, nonce: &str, redirect_uri: &Url)
+pub fn request(app: &Config, handle: &Remote, email_addr: &EmailAddress, client_id: &str, nonce: &str, redirect_uri: &Url)
                -> BrokerResult<Url> {
 
     let session = crypto::session_id(email_addr, client_id);
@@ -58,7 +59,9 @@ pub fn request(app: &Config, email_addr: &EmailAddress, client_id: &str, nonce: 
         ("redirect", &redirect_uri.to_string()),
     ])?;
 
-    let client = HttpClient::new();
+    // TODO: Better handle management
+    let handle = handle.handle().expect("didn't expect multithreading");
+    let client = HttpClient::new(&handle);
 
     // Retrieve the provider's Discovery document and extract the
     // `authorization_endpoint` from it.
@@ -132,13 +135,15 @@ pub fn canonicalized(email: &str) -> String {
 /// Match the returned email address and nonce against our Redis data, then
 /// extract the identity token returned by the provider and verify it. Return
 /// an identity token for the RP if successful, or an error message otherwise.
-pub fn verify(app: &Config, stored: &HashMap<String, String>, id_token: &str)
-              -> BrokerResult<(String, String)> {
+pub fn verify(app: &Config, handle: &Remote, stored: &HashMap<String, String>, id_token: &str)
+              -> BrokerResult<String> {
 
     let email_addr = EmailAddress::new(&stored["email"])?;
     let origin = &stored["client_id"];
 
-    let client = HttpClient::new();
+    // TODO: Better handle management
+    let handle = handle.handle().expect("didn't expect multithreading");
+    let client = HttpClient::new(&handle);
 
     // Request the provider's Discovery document to get the `jwks_uri` values from it.
     let domain = &email_addr.domain.to_lowercase();
@@ -182,9 +187,7 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, id_token: &str)
 
     // If everything is okay, build a new identity token and send it
     // to the relying party.
-    let id_token = crypto::create_jwt(app, &email_addr.to_string(), origin, &stored["nonce"]);
-    let redirect = &stored["redirect"];
-    Ok((id_token, redirect.to_string()))
+    Ok(crypto::create_jwt(app, &email_addr.to_string(), origin, &stored["nonce"]))
 
 }
 

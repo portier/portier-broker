@@ -1,15 +1,11 @@
-use config::Config;
-use error::{BrokerResult, BrokerError};
-use handlers::{RedirectUri, handle_error, return_to_relier};
-use iron::headers::ContentType;
-use iron::method::Method;
-use iron::middleware::Handler;
-use iron::modifiers;
-use iron::status;
-use iron::{IronResult, Plugin, Request, Response, Url};
+use error::BrokerError;
+use futures::future::{self, Future};
+use handlers::return_to_relier;
+use http::{self, HandlerResult, ContextHandle};
+use hyper::{Method};
+use hyper::header::{ContentType};
+use hyper::server::{Request, Response};
 use oidc_bridge;
-use std::sync::Arc;
-use urlencoded::UrlEncodedBody;
 
 
 /// Iron handler for OAuth callbacks
@@ -18,32 +14,48 @@ use urlencoded::UrlEncodedBody;
 /// identity provider, they will be redirected back to the callback handler.
 ///
 /// For providers that don't support `response_type=form_post`, we capture the
-/// fragment parameters in JavaScript and emulate the POST request.
+/// fragment parameters in javascript and emulate the POST request.
 ///
 /// Once we have a POST request, we can verify the callback data and return the
 /// resulting token to the relying party, or error.
-broker_handler!(Callback, |app, req| {
-    match req.method {
+pub fn callback(req: Request, shared_ctx: ContextHandle) -> HandlerResult {
+    match *req.method() {
         Method::Get => {
-            Ok(Response::with((status::Ok,
-                               modifiers::Header(ContentType::html()),
-                               app.templates.fragment_callback.render(&[]))))
+            let ctx = shared_ctx.lock().expect("failed to lock request context");
+            let res = Response::new()
+                .with_header(ContentType::html())
+                .with_body(ctx.app.templates.fragment_callback.render(&[]));
+            future::ok(res).boxed()
         },
         Method::Post => {
-            let params = try!(req.compute::<UrlEncodedBody>()
-                .map_err(|_| BrokerError::Input("no query string in POST data".to_string())));
+            http::parse_form_encoded_body(req)
+                .and_then(move |mut params| {
+                    let state = try_get_param!(params, "state");
+                    let id_token = try_get_param!(params, "id_token");
 
-            let stored = try!(app.store.get_session("oidc", try_get_param!(params, "state")));
-            req.extensions.insert::<RedirectUri>(
-                Url::parse(&stored["redirect"]).expect("redirect_uri missing from session")
-            );
+                    let result = {
+                        let ctx = shared_ctx.lock().expect("failed to lock request context");
+                        ctx.app.store.get_session("oidc", &state)
+                    };
 
-            let id_token = try_get_param!(params, "id_token");
-            let (jwt, redirect_uri) = try!(oidc_bridge::verify(app, &stored, id_token));
-            Ok(Response::with(return_to_relier(app, &redirect_uri, &[("id_token", &jwt)])))
+                    future::result(result.map(|stored| (shared_ctx, stored, id_token)))
+                })
+                .and_then(|(shared_ctx, stored, id_token)| {
+                    let result = {
+                        let mut ctx = shared_ctx.lock().expect("failed to lock request context");
+                        ctx.redirect_uri = Some(stored["redirect"].parse().expect("redirect_uri missing from session"));
+
+                        oidc_bridge::verify(&ctx.app, &ctx.handle, &stored, &id_token)
+                    };
+
+                    future::result(result.map(|jwt| (shared_ctx, jwt)))
+                })
+                .and_then(|(shared_ctx, jwt)| {
+                    let ctx = shared_ctx.lock().expect("failed to lock request context");
+                    return_to_relier(&ctx, &[("id_token", &jwt)])
+                })
+                .boxed()
         },
-        _ => {
-            panic!("Unsupported method: {}", req.method)
-        }
+        _ => unreachable!(),
     }
-});
+}

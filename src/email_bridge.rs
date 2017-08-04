@@ -3,7 +3,6 @@ use crypto;
 use emailaddress::EmailAddress;
 use error::{BrokerError, BrokerResult};
 use gettext::Catalog;
-use iron::Url;
 use lettre::email::EmailBuilder;
 use lettre::transport::EmailTransport;
 use lettre::transport::smtp::SmtpTransportBuilder;
@@ -11,6 +10,7 @@ use rand;
 use std::collections::HashMap;
 use std::error::Error;
 use std::iter::Iterator;
+use url::Url;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 
 
@@ -89,7 +89,7 @@ pub fn request(app: &Config, email_addr: &EmailAddress, client_id: &str, nonce: 
 /// Checks the one-time pad against the stored session data. If a match,
 /// returns the Identity Token; otherwise, returns an error message.
 pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
-              -> BrokerResult<(String, String)> {
+              -> BrokerResult<String> {
 
     let trimmed = code.replace(|c: char| c.is_whitespace(), "").to_lowercase();
     if trimmed != stored["code"] {
@@ -99,8 +99,5 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
     let email = &stored["email"];
     let client_id = &stored["client_id"];
     let nonce = &stored["nonce"];
-    let id_token = crypto::create_jwt(app, email, client_id, nonce);
-    let redirect = &stored["redirect"];
-    Ok((id_token, redirect.to_string()))
-
+    Ok(crypto::create_jwt(app, email, client_id, nonce))
 }
