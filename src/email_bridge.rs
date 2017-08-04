@@ -1,17 +1,17 @@
-extern crate rand;
-
+use config::{Config};
+use crypto;
 use emailaddress::EmailAddress;
+use error::{BrokerError, BrokerResult};
+use gettext::Catalog;
 use iron::Url;
-use super::error::{BrokerError, BrokerResult};
-use super::lettre::email::EmailBuilder;
-use super::lettre::transport::EmailTransport;
-use super::lettre::transport::smtp::SmtpTransportBuilder;
-use super::{Config, create_jwt, crypto};
+use lettre::email::EmailBuilder;
+use lettre::transport::EmailTransport;
+use lettre::transport::smtp::SmtpTransportBuilder;
+use rand;
 use std::collections::HashMap;
 use std::error::Error;
 use std::iter::Iterator;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
-use gettext::Catalog;
 
 
 /// The z-base-32 character set, from which we select characters for the one-time pad.
@@ -99,7 +99,7 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
     let email = &stored["email"];
     let client_id = &stored["client_id"];
     let nonce = &stored["nonce"];
-    let id_token = create_jwt(app, email, client_id, nonce);
+    let id_token = crypto::create_jwt(app, email, client_id, nonce);
     let redirect = &stored["redirect"];
     Ok((id_token, redirect.to_string()))
 

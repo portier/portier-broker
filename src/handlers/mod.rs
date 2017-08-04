@@ -1,14 +1,14 @@
 use config::Config;
 use error::{BrokerResult, BrokerError};
 use hyper;
-use iron::{IronError, IronResult, Request, Response, Url};
 use iron::headers::{ContentType, CacheControl, CacheDirective};
 use iron::modifiers;
 use iron::status;
 use iron::typemap;
+use iron::{IronError, IronResult, Request, Response, Url};
 use mustache;
-use serde_json;
 use serde_json::value::Value;
+use serde_json;
 use std::error::Error;
 
 
@@ -180,3 +180,4 @@ pub mod pages;
 pub mod oidc;
 pub mod oauth2;
 pub mod email;
+

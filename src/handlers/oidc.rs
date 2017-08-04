@@ -2,15 +2,15 @@ use config::Config;
 use email_bridge;
 use emailaddress::EmailAddress;
 use error::{BrokerError, BrokerResult};
-use iron::{Handler, IronResult, Plugin, Request, Response, Url};
+use handlers::{RedirectUri, handle_error, json_response};
 use iron::headers::{ContentType, Location, AcceptLanguage};
 use iron::method::Method;
 use iron::modifiers;
 use iron::status;
+use iron::{Handler, IronResult, Plugin, Request, Response, Url};
 use oidc_bridge;
 use std::sync::Arc;
-use super::{RedirectUri, handle_error, json_response};
-use super::super::store_limits::addr_limiter;
+use store_limits::addr_limiter;
 use urlencoded::{UrlEncodedBody, UrlEncodedQuery};
 use validation::{valid_uri, only_origin, same_origin};
 

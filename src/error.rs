@@ -1,11 +1,11 @@
 use emailaddress;
-use std::fmt;
+use hyper::Error as HttpError;
+use lettre::transport::smtp::error::Error as MailError;
+use redis::RedisError;
 use std::convert::From;
 use std::error::Error;
+use std::fmt;
 use std::io::Error as IoError;
-use super::hyper::Error as HttpError;
-use super::redis::RedisError;
-use super::lettre::transport::smtp::error::Error as MailError;
 use validation::ValidationError;
 
 

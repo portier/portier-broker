@@ -1,14 +1,14 @@
 use config::Config;
 use error::{BrokerResult, BrokerError};
-use iron::{IronResult, Plugin, Request, Response, Url};
+use handlers::{RedirectUri, handle_error, return_to_relier};
 use iron::headers::ContentType;
 use iron::method::Method;
 use iron::middleware::Handler;
 use iron::modifiers;
 use iron::status;
+use iron::{IronResult, Plugin, Request, Response, Url};
 use oidc_bridge;
 use std::sync::Arc;
-use super::{RedirectUri, handle_error, return_to_relier};
 use urlencoded::UrlEncodedBody;
 
 

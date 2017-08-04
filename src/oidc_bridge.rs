@@ -1,11 +1,12 @@
-use std::error::Error;
-use std::collections::HashMap;
+use config::Config;
+use crypto;
 use emailaddress::EmailAddress;
+use error::{BrokerError, BrokerResult};
+use hyper::client::Client as HttpClient;
 use iron::Url;
 use serde_json::value::Value;
-use super::error::{BrokerError, BrokerResult};
-use super::hyper::client::Client as HttpClient;
-use super::{Config, create_jwt, crypto};
+use std::collections::HashMap;
+use std::error::Error;
 use super::store_cache::{CacheKey, fetch_json_url};
 use time::now_utc;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
@@ -181,7 +182,7 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, id_token: &str)
 
     // If everything is okay, build a new identity token and send it
     // to the relying party.
-    let id_token = create_jwt(app, &email_addr.to_string(), origin, &stored["nonce"]);
+    let id_token = crypto::create_jwt(app, &email_addr.to_string(), origin, &stored["nonce"]);
     let redirect = &stored["redirect"];
     Ok((id_token, redirect.to_string()))
 

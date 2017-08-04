@@ -1,20 +1,19 @@
 #![allow(unknown_lints, cyclomatic_complexity)]
 
-extern crate serde;
-extern crate toml;
-
-use std;
+use crypto;
+use gettext::Catalog;
+use hyper::LanguageTag;
+use mustache;
 use std::collections::HashMap;
 use std::env;
-use std::fmt::{self, Display};
 use std::error::Error;
+use std::fmt::{self, Display};
 use std::fs::File;
 use std::io::Read;
-
-use super::{crypto, store, mustache};
-use super::gettext::Catalog;
-use super::hyper::LanguageTag;
-use super::store_limits::Ratelimit;
+use std;
+use store;
+use store_limits::Ratelimit;
+use toml;
 
 
 /// Union of all possible error types seen while parsing.

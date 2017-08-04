@@ -1,19 +1,18 @@
-extern crate openssl;
-extern crate rand;
-extern crate rustc_serialize;
-
+use config::Config;
 use emailaddress::EmailAddress;
-use self::openssl::bn::BigNum;
-use self::openssl::crypto::hash;
-use self::openssl::crypto::pkey::PKey;
-use self::openssl::crypto::rsa::RSA;
-use self::rand::{OsRng, Rng};
-use self::rustc_serialize::base64::{self, FromBase64, ToBase64};
+use openssl::bn::BigNum;
+use openssl::crypto::hash;
+use openssl::crypto::pkey::PKey;
+use openssl::crypto::rsa::RSA;
+use openssl;
+use rand::{OsRng, Rng};
+use rustc_serialize::base64::{self, FromBase64, ToBase64};
 use serde_json::de::from_slice;
 use serde_json::value::Value;
-use std;
 use std::fs::File;
 use std::io::{Read, Write};
+use std;
+use time::now_utc;
 
 
 /// Union of all possible error types seen while parsing.
@@ -200,3 +199,24 @@ pub fn verify_jws(jws: &str, key_set: &Value) -> Result<Value, ()> {
 
     Ok(from_slice(&decoded[1]).map_err(|_| ())?)
 }
+
+/// Helper method to create a JWT for a given email address and origin.
+///
+/// Builds the JSON payload, then signs it using the last key provided in
+/// the configuration object.
+pub fn create_jwt(app: &Config, email: &str, origin: &str, nonce: &str) -> String {
+    let now = now_utc().to_timespec().sec;
+    let payload = json!({
+        "aud": origin,
+        "email": email,
+        "email_verified": email,
+        "exp": now + app.token_ttl as i64,
+        "iat": now,
+        "iss": &app.public_url,
+        "sub": email,
+        "nonce": nonce,
+    });
+    let key = app.keys.last().expect("unable to locate signing key");
+    key.sign_jws(&payload)
+}
+

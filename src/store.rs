@@ -1,6 +1,6 @@
+use error::{BrokerResult, BrokerError};
+use redis::{self, Commands, PipelineCommands};
 use std::collections::HashMap;
-use super::error::{BrokerResult, BrokerError};
-use super::redis::{self, Commands, PipelineCommands};
 
 
 #[derive(Clone)]

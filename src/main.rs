@@ -1,20 +1,48 @@
 extern crate docopt;
+extern crate emailaddress;
 extern crate env_logger;
+extern crate gettext;
+#[macro_use]
+extern crate hyper;
 extern crate iron;
+extern crate lettre;
 #[macro_use]
 extern crate log;
-extern crate portier_broker;
+extern crate mustache;
+extern crate openssl;
+extern crate rand;
+extern crate redis;
 #[macro_use(router)]
 extern crate router;
-extern crate staticfile;
 extern crate rustc_serialize;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+#[macro_use]
+extern crate serde_json;
+extern crate staticfile;
+extern crate time;
+extern crate toml;
+extern crate url;
+extern crate urlencoded;
 
-use portier_broker as broker;
+mod config;
+mod crypto;
+mod email_bridge;
+mod error;
+mod handlers;
+mod middleware;
+mod oidc_bridge;
+mod store;
+mod store_cache;
+mod store_limits;
+mod validation;
+
 use docopt::Docopt;
 use iron::{Iron, Chain};
+use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::path::Path;
 use std::time::Duration;
 
 
@@ -56,7 +84,7 @@ fn main() {
                          .and_then(|d| d.version(Some(VERSION.to_string())).decode())
                          .unwrap_or_else(|e| e.exit());
 
-    let mut builder = broker::config::ConfigBuilder::new();
+    let mut builder = config::ConfigBuilder::new();
     if let Some(path) = args.arg_CONFIG {
         builder.update_from_file(&path).unwrap_or_else(|err| {
             panic!(format!("failed to read config file: {}", err))
@@ -70,20 +98,20 @@ fn main() {
 
     let router = router!{
         // Human-targeted endpoints
-        index:     get  "/" => broker::handlers::pages::Index,
-        version:   get  "/ver.txt" => broker::handlers::pages::Version,
-        confirm:   get  "/confirm" => broker::handlers::email::Confirmation::new(&app),
+        index:     get  "/" => handlers::pages::Index,
+        version:   get  "/ver.txt" => handlers::pages::Version,
+        confirm:   get  "/confirm" => handlers::email::Confirmation::new(&app),
 
         // OpenID Connect provider endpoints
         config:    get  "/.well-known/openid-configuration" =>
-                            broker::handlers::oidc::Discovery::new(&app),
-        keys:      get  "/keys.json" => broker::handlers::oidc::KeySet::new(&app),
-        get_auth:  get  "/auth" => broker::handlers::oidc::Auth::new(&app),
-        post_auth: post "/auth" => broker::handlers::oidc::Auth::new(&app),
+                            handlers::oidc::Discovery::new(&app),
+        keys:      get  "/keys.json" => handlers::oidc::KeySet::new(&app),
+        get_auth:  get  "/auth" => handlers::oidc::Auth::new(&app),
+        post_auth: post "/auth" => handlers::oidc::Auth::new(&app),
 
         // OpenID Connect relying party endpoints
-        get_cb:    get  "/callback" => broker::handlers::oauth2::Callback::new(&app),
-        post_cb:   post "/callback" => broker::handlers::oauth2::Callback::new(&app),
+        get_cb:    get  "/callback" => handlers::oauth2::Callback::new(&app),
+        post_cb:   post "/callback" => handlers::oauth2::Callback::new(&app),
 
         // Lastly, fall back to trying to serve static files out of ./res/
         static:    get  "/*" => staticfile::Static::new(Path::new("./res/"))
@@ -91,8 +119,8 @@ fn main() {
     };
 
     let mut chain = Chain::new(router);
-    chain.link_before(broker::middleware::LogRequest);
-    chain.link_after(broker::middleware::CommonHeaders);
+    chain.link_before(middleware::LogRequest);
+    chain.link_after(middleware::CommonHeaders);
 
     let ipaddr = std::net::IpAddr::from_str(&app.listen_ip).expect("Unable to parse listen IP address");
     let socket = std::net::SocketAddr::new(ipaddr, app.listen_port);

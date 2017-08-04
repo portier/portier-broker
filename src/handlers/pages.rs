@@ -1,6 +1,6 @@
-use iron::{Handler, IronResult, Request, Response, status};
 use iron::headers::ContentType;
 use iron::modifiers::{Header, RedirectRaw};
+use iron::{Handler, IronResult, Request, Response, status};
 use std::env;
 
 /// Handler for the root path, redirects to the Portier homepage.

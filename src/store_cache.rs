@@ -1,15 +1,15 @@
-use std::cmp::max;
-use std::io::Read;
-use super::hyper::client::Client as HttpClient;
-use super::hyper::header::{
+use error::{BrokerError, BrokerResult};
+use hyper::client::Client as HttpClient;
+use hyper::header::{
     CacheControl as HyCacheControl,
     CacheDirective as HyCacheDirective
 };
-use super::redis::Commands;
-use super::error::{BrokerError, BrokerResult};
-use super::store::Store;
+use redis::Commands;
 use serde_json::de::from_str;
 use serde_json::value::Value;
+use std::cmp::max;
+use std::io::Read;
+use store::Store;
 
 
 /// Represents a Redis key.

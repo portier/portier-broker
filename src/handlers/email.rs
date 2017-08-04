@@ -1,10 +1,10 @@
 use config::Config;
 use email_bridge;
 use error::{BrokerResult, BrokerError};
-use iron::{IronResult, Plugin, Request, Response, Url};
+use handlers::{RedirectUri, handle_error, return_to_relier};
 use iron::middleware::Handler;
+use iron::{IronResult, Plugin, Request, Response, Url};
 use std::sync::Arc;
-use super::{RedirectUri, handle_error, return_to_relier};
 use urlencoded::UrlEncodedQuery;
 
 
