@@ -66,7 +66,7 @@ pub fn fetch_json_url(store: &Store, key: CacheKey, session: &HttpClient, url: &
 
         // Cache the response for at least `expire_cache`, but honor longer `max-age`.
         let seconds = max(store.expire_cache, max_age as usize);
-        store.client.set_ex(&key_str, &data, seconds)?;
+        store.client.set_ex::<_, _, ()>(&key_str, &data, seconds)?;
 
         Ok(data)
 

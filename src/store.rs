@@ -33,7 +33,7 @@ impl Store {
             .atomic()
             .hset_multiple(&key, data).ignore()
             .expire(&key, self.expire_sessions).ignore()
-            .query(&self.client)?;
+            .query::<()>(&self.client)?;
         Ok(())
     }
 
