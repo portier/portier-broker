@@ -2,7 +2,7 @@ use config::Config;
 use crypto;
 use emailaddress::EmailAddress;
 use error::{BrokerError, BrokerResult};
-use http::{Client as HttpClient};
+use http;
 use serde_json::value::Value;
 use std::collections::HashMap;
 use std::error::Error;
@@ -59,9 +59,7 @@ pub fn request(app: &Config, handle: &Remote, email_addr: &EmailAddress, client_
         ("redirect", &redirect_uri.to_string()),
     ])?;
 
-    // TODO: Better handle management
-    let handle = handle.handle().expect("didn't expect multithreading");
-    let client = HttpClient::new(&handle);
+    let client = http::create_client(handle);
 
     // Retrieve the provider's Discovery document and extract the
     // `authorization_endpoint` from it.
@@ -141,9 +139,7 @@ pub fn verify(app: &Config, handle: &Remote, stored: &HashMap<String, String>, i
     let email_addr = EmailAddress::new(&stored["email"])?;
     let origin = &stored["client_id"];
 
-    // TODO: Better handle management
-    let handle = handle.handle().expect("didn't expect multithreading");
-    let client = HttpClient::new(&handle);
+    let client = http::create_client(handle);
 
     // Request the provider's Discovery document to get the `jwks_uri` values from it.
     let domain = &email_addr.domain.to_lowercase();

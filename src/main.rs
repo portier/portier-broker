@@ -4,6 +4,7 @@ extern crate env_logger;
 extern crate futures;
 extern crate gettext;
 extern crate hyper;
+extern crate hyper_tls;
 extern crate lettre;
 #[macro_use]
 extern crate log;

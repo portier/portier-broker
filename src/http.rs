@@ -6,6 +6,7 @@ use handlers::return_to_relier;
 use hyper::{self, StatusCode, Error as HyperError};
 use hyper::header::{ContentType};
 use hyper::server::{Request, Response, Service as HyperService};
+use hyper_tls::HttpsConnector;
 use std::collections::HashMap;
 use std::error::Error;
 use std::sync::{Arc, Mutex};
@@ -14,8 +15,16 @@ use url::{Url, form_urlencoded};
 
 
 /// The default type of client we use for outgoing requests
-// TODO: Use a HTTPS connector
-pub type Client = hyper::Client<hyper::client::HttpConnector>;
+pub type Client = hyper::Client<HttpsConnector<hyper::client::HttpConnector>>;
+
+/// Helper function to create a HTTPS client
+pub fn create_client(handle: &Remote) -> Client {
+    // TODO: Better handle management
+    let handle = handle.handle().expect("didn't expect multithreading");
+    let connector = HttpsConnector::new(4, &handle)
+        .expect("could not initialize https connector");
+    hyper::Client::configure().connector(connector).build(&handle)
+}
 
 
 /// HTTP request context
