@@ -3,6 +3,7 @@ extern crate emailaddress;
 extern crate env_logger;
 extern crate futures;
 extern crate gettext;
+#[macro_use]
 extern crate hyper;
 extern crate hyper_tls;
 extern crate lettre;
