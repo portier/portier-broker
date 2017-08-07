@@ -10,7 +10,7 @@ pub enum ValidationError {
     Parse(url::ParseError),
     MismatchedOrigin,
     NotBareOrigin,
-    BadScheme,
+    BadScheme(String),
     UserinfoPresent,
     InconsistentSerialization,
     BadPort,
@@ -22,7 +22,7 @@ impl fmt::Display for ValidationError {
             ValidationError::Parse(ref err) => err.fmt(f),
             ValidationError::MismatchedOrigin => write!(f, "origins did not match"),
             ValidationError::NotBareOrigin => write!(f, "uri was not a bare origin"),
-            ValidationError::BadScheme => write!(f, "scheme was not http(s)"),
+            ValidationError::BadScheme(ref param) => write!(f, "{} scheme was not http(s)", param),
             ValidationError::UserinfoPresent => write!(f, "a username or password was specified in the uri"),
             ValidationError::InconsistentSerialization => write!(f, "parsing and re-serializing the uri changed its representation, check for unnecessary information like default ports"),
             ValidationError::BadPort => write!(f, "invalid port specified"),
@@ -36,7 +36,7 @@ impl Error for ValidationError {
             ValidationError::Parse(ref err) => err.description(),
             ValidationError::MismatchedOrigin => "origins did not match",
             ValidationError::NotBareOrigin => "uri was not a bare origin",
-            ValidationError::BadScheme => "scheme was not http(s)",
+            ValidationError::BadScheme(_) => "scheme was not http(s)",
             ValidationError::UserinfoPresent => "a username or password was specified in the uri",
             ValidationError::InconsistentSerialization => "parsing and re-serializing the uri changed its representation, check for unnecessary information like default ports",
             ValidationError::BadPort => "invalid port specified",
@@ -48,7 +48,7 @@ impl Error for ValidationError {
             ValidationError::Parse(ref err) => Some(err),
             ValidationError::MismatchedOrigin
                 | ValidationError::NotBareOrigin
-                | ValidationError::BadScheme
+                | ValidationError::BadScheme(_)
                 | ValidationError::UserinfoPresent
                 | ValidationError::InconsistentSerialization
                 | ValidationError::BadPort
@@ -66,11 +66,11 @@ impl From<url::ParseError> for ValidationError {
 // -- Validation Functions --
 
 /// Test that a URI is valid and conforms to our expetations.
-pub fn valid_uri(raw_uri: &str) -> Result<(), ValidationError> {
+pub fn valid_uri(raw_uri: &str, param: &str) -> Result<(), ValidationError> {
     let uri = Url::parse(raw_uri)?;
 
     if !raw_uri.starts_with("http://") && !raw_uri.starts_with("https://") {
-        return Err(ValidationError::BadScheme)
+        return Err(ValidationError::BadScheme(param.to_string()))
     }
 
     if uri.username() != "" || uri.password().is_some() {
@@ -145,7 +145,7 @@ mod tests {
             "http://example.com:8080/path#baz",
             "http://example.com:8080/path?foo=bar",
         ] {
-            if let Err(err) = valid_uri(uri) {
+            if let Err(err) = valid_uri(uri, "input") {
                 panic!(format!("unexpectedly rejected uri: {}. Reported: {}", uri, err))
             }
         }
@@ -195,7 +195,7 @@ mod tests {
             "http://:8080:8080",
             "http://»",
         ] {
-            if valid_uri(uri).is_ok() {
+            if valid_uri(uri, "input").is_ok() {
                 panic!(format!("did not reject uri: {}", uri))
             }
         }

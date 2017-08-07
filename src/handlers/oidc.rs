@@ -74,8 +74,8 @@ broker_handler!(Auth, |app, req| {
     let client_id = try_get_param!(params, "client_id");
     let redirect_uri = try_get_param!(params, "redirect_uri");
 
-    valid_uri(redirect_uri)?;
-    valid_uri(client_id)?;
+    valid_uri(redirect_uri, "redirect_uri")?;
+    valid_uri(client_id, "client_id")?;
     same_origin(client_id, redirect_uri)?;
     only_origin(client_id)?;
     if let Some(ref whitelist) = app.allowed_origins {
@@ -103,7 +103,7 @@ broker_handler!(Auth, |app, req| {
         .map_err(|_| BrokerError::Input("login_hint is not a valid email address".to_string()))?;
 
     // Enforce ratelimit based on the login_hint
-    if !addr_limiter(&app.store, &login_hint, &app.limit_per_email)? {
+    if !addr_limiter(&app.store, login_hint, &app.limit_per_email)? {
         return Ok(Response::with((
                     status::TooManyRequests,
                     modifiers::Header(ContentType::plaintext()),
@@ -112,7 +112,7 @@ broker_handler!(Auth, |app, req| {
 
     if app.providers.contains_key(&email_addr.domain.to_lowercase()) {
         // OIDC authentication. Redirect to the identity provider.
-        let auth_url = oidc_bridge::request(app, email_addr, client_id, nonce, &parsed_redirect_uri)?;
+        let auth_url = oidc_bridge::request(app, &email_addr, client_id, nonce, &parsed_redirect_uri)?;
         Ok(Response::with((status::SeeOther, modifiers::Header(Location(auth_url.to_string())))))
 
     } else {
@@ -130,12 +130,12 @@ broker_handler!(Auth, |app, req| {
         }
 
         // Email loop authentication. Render a message and form.
-        let session_id = email_bridge::request(app, email_addr, client_id, nonce, &parsed_redirect_uri, &catalog)?;
+        let session_id = email_bridge::request(app, &email_addr, client_id, nonce, &parsed_redirect_uri, catalog)?;
 
         Ok(Response::with((status::Ok,
                            modifiers::Header(ContentType::html()),
                            app.templates.confirm_email.render(&[
-                               ("client_id", &client_id),
+                               ("client_id", client_id),
                                ("session_id", &session_id),
                                ("title", catalog.gettext("Confirm your address")),
                                ("explanation", catalog.gettext("We've sent you an email to confirm your address.")),

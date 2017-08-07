@@ -33,7 +33,7 @@ broker_handler!(Callback, |app, req| {
             let params = try!(req.compute::<UrlEncodedBody>()
                 .map_err(|_| BrokerError::Input("no query string in POST data".to_string())));
 
-            let stored = try!(app.store.get_session("oidc", &try_get_param!(params, "state")));
+            let stored = try!(app.store.get_session("oidc", try_get_param!(params, "state")));
             req.extensions.insert::<RedirectUri>(
                 Url::parse(&stored["redirect"]).expect("redirect_uri missing from session")
             );

@@ -35,7 +35,7 @@ impl<'a> CacheKey<'a> {
 /// Fetch `url` from cache or using a HTTP GET request, and parse the response as JSON. The
 /// cache is stored in `store` with `key`. The `session` is used to make the HTTP GET request,
 /// if necessary.
-pub fn fetch_json_url(store: &Store, key: CacheKey, session: &HttpClient, url: &str)
+pub fn fetch_json_url(store: &Store, key: &CacheKey, session: &HttpClient, url: &str)
                       -> BrokerResult<Value> {
 
     // Try to retrieve the result from cache.
@@ -66,7 +66,7 @@ pub fn fetch_json_url(store: &Store, key: CacheKey, session: &HttpClient, url: &
 
         // Cache the response for at least `expire_cache`, but honor longer `max-age`.
         let seconds = max(store.expire_cache, max_age as usize);
-        store.client.set_ex(&key_str, &data, seconds)?;
+        store.client.set_ex::<_, _, ()>(&key_str, &data, seconds)?;
 
         Ok(data)
 

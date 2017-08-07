@@ -27,10 +27,10 @@ const CODE_CHARS: &'static [u8] = b"13456789abcdefghijkmnopqrstuwxyz";
 ///
 /// Returns the session ID, so a form can be rendered as an alternative way
 /// to confirm, without following the link.
-pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &Url, catalog: &Catalog)
+pub fn request(app: &Config, email_addr: &EmailAddress, client_id: &str, nonce: &str, redirect_uri: &Url, catalog: &Catalog)
                -> BrokerResult<String> {
 
-    let session = crypto::session_id(&email_addr, client_id);
+    let session = crypto::session_id(email_addr, client_id);
 
     // Generate a 12-character one-time pad.
     let chars = String::from_utf8((0..12).map(|_| {
@@ -92,7 +92,7 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, code: &str)
               -> BrokerResult<(String, String)> {
 
     let trimmed = code.replace(|c: char| c.is_whitespace(), "").to_lowercase();
-    if &trimmed != &stored["code"] {
+    if trimmed != stored["code"] {
         return Err(BrokerError::Input("incorrect code".to_string()));
     }
 
