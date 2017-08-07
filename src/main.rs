@@ -5,6 +5,7 @@ extern crate futures;
 extern crate gettext;
 #[macro_use]
 extern crate hyper;
+extern crate hyper_staticfile;
 extern crate hyper_tls;
 extern crate lettre;
 #[macro_use]
@@ -37,16 +38,17 @@ mod store_limits;
 mod validation;
 
 use docopt::Docopt;
-use futures::{future, Future, Stream};
-use hyper::{Method, StatusCode};
-use hyper::server::{Http, Request, Response};
+use futures::Stream;
+use hyper::Method;
+use hyper::server::{Http, Request};
 use std::net::SocketAddr;
+use std::path::Path;
 use std::sync::Arc;
 
 
 /// Route the request, returning a handler
-fn route(req: &Request) -> http::Handler {
-    match (req.method(), req.path()) {
+fn router(req: &Request) -> Option<http::Handler> {
+    Some(match (req.method(), req.path()) {
         // Human-targeted endpoints
         (&Method::Get, "/") => handlers::pages::index,
         (&Method::Get, "/ver.txt") => handlers::pages::version,
@@ -61,18 +63,8 @@ fn route(req: &Request) -> http::Handler {
         (&Method::Get, "/callback") | (&Method::Post, "/callback") => handlers::oauth2::callback,
 
         // Lastly, fall back to trying to serve static files out of ./res/
-        // TODO
-
-        _ => handle_unmatched,
-    }
-}
-
-
-/// Handler used when no routing matches nothing
-fn handle_unmatched(_: Request, _: http::ContextHandle) -> http::HandlerResult {
-    let res = Response::new()
-        .with_status(StatusCode::BadRequest);
-    future::ok(res).boxed()
+        _ => return None,
+    })
 }
 
 
@@ -138,19 +130,11 @@ fn main() {
         .expect("Unable to bind listen address");
     info!("Listening on http://{}", addr);
 
-    core.run(
-        listener.incoming()
-            .for_each(move |(sock, addr)| {
-                proto.bind_connection(&handle, sock, addr, http::Service {
-                    app: app.clone(),
-                    handle: handle.remote().clone(),
-                    route: route,
-                });
-                Ok(())
-            })
-            .map_err(|err| {
-                error!("{}", err);
-                ()
-            })
-    ).expect("Unhandled failure running the server");
+    let server = listener.incoming().for_each(move |(sock, addr)| {
+        let res_path = Path::new("./res/");
+        let s = http::Service::new(&handle, &app, router, res_path);
+        proto.bind_connection(&handle, sock, addr, s);
+        Ok(())
+    });
+    core.run(server).expect("error while running the event loop");
 }

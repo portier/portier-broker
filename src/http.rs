@@ -6,11 +6,13 @@ use handlers::return_to_relier;
 use hyper::{self, StatusCode, Error as HyperError};
 use hyper::header::{ContentType, StrictTransportSecurity, CacheControl, CacheDirective};
 use hyper::server::{Request, Response, Service as HyperService};
+use hyper_staticfile::Static;
 use hyper_tls::HttpsConnector;
 use std::collections::HashMap;
 use std::error::Error;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use tokio_core::reactor::Remote;
+use tokio_core::reactor::{Handle, Remote};
 use url::{Url, form_urlencoded};
 
 
@@ -49,18 +51,33 @@ pub struct Context {
 pub type ContextHandle = Arc<Mutex<Context>>;
 /// Result type of handlers
 pub type HandlerResult = BoxFuture<Response, BrokerError>;
-/// Handler function type.
+/// Handler function type
 pub type Handler = fn(Request, ContextHandle) -> HandlerResult;
+/// Router function type
+pub type Router = fn(&Request) -> Option<Handler>;
 
 
 // HTTP service
 pub struct Service {
     /// The application configuration
-    pub app: Arc<Config>,
+    app: Arc<Config>,
     /// A Tokio reactor handle
-    pub handle: Remote,
+    handle: Handle,
     /// The routing function
-    pub route: fn(&Request) -> Handler,
+    router: Router,
+    /// The static file serving service
+    static_: Static,
+}
+
+impl Service {
+    pub fn new<P: Into<PathBuf>>(handle: &Handle, app: &Arc<Config>, router: Router, path: P) -> Service {
+        Service {
+            app: app.clone(),
+            handle: handle.clone(),
+            router: router,
+            static_: Static::new(handle, path).with_cache_headers(app.static_ttl),
+        }
+    }
 }
 
 impl HyperService for Service {
@@ -72,13 +89,18 @@ impl HyperService for Service {
     fn call(&self, req: Request) -> Self::Future {
         info!("{} {}", req.method(), req.path());
 
+        let handler = match (self.router)(&req) {
+            Some(handler) => handler,
+            None => return self.static_.call(req),
+        };
+
         let ctx = Arc::new(Mutex::new(Context {
             app: self.app.clone(),
-            handle: self.handle.clone(),
+            handle: self.handle.remote().clone(),
             redirect_uri: None,
         }));
 
-        (self.route)(&req)(req, ctx.clone())
+        handler(req, ctx.clone())
             .or_else(|err| handle_error(ctx, err))
             .map(|mut res| { set_headers(&mut res); res })
             .boxed()
