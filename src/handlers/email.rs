@@ -16,7 +16,7 @@ broker_handler!(Confirmation, |app, req| {
     let params = req.compute::<UrlEncodedQuery>()
             .map_err(|_| BrokerError::Input("no query string in GET request".to_string()))?;
 
-    let stored = app.store.get_session("email", &try_get_param!(params, "session"))?;
+    let stored = app.store.get_session("email", try_get_param!(params, "session"))?;
     req.extensions.insert::<RedirectUri>(Url::parse(&stored["redirect"]).expect("unable to parse stored redirect uri"));
 
     let code = try_get_param!(params, "code");

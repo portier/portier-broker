@@ -11,6 +11,7 @@ license = "MIT/Apache-2.0"
 
 [[bin]]
 name = "portier-broker"
+path = "src/main.rs"
 
 [build-dependencies]
 glob = "0.2.11"

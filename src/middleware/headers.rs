@@ -36,7 +36,7 @@ fn set_headers(res: &mut Response) {
         "form-action *",
     ].join("; ");
 
-    res.set_mut((modifiers::Header(StrictTransportSecurity::excluding_subdomains(31536000u64)),
+    res.set_mut((modifiers::Header(StrictTransportSecurity::excluding_subdomains(31_536_000u64)),
                  modifiers::Header(ContentSecurityPolicy(csp.clone())),
                  modifiers::Header(XContentSecurityPolicy(csp)),
                  modifiers::Header(XContentTypeOptions("nosniff".to_string())),

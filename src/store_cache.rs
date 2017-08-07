@@ -35,7 +35,7 @@ impl<'a> CacheKey<'a> {
 /// Fetch `url` from cache or using a HTTP GET request, and parse the response as JSON. The
 /// cache is stored in `store` with `key`. The `session` is used to make the HTTP GET request,
 /// if necessary.
-pub fn fetch_json_url(store: &Store, key: CacheKey, session: &HttpClient, url: &str)
+pub fn fetch_json_url(store: &Store, key: &CacheKey, session: &HttpClient, url: &str)
                       -> BrokerResult<Value> {
 
     // Try to retrieve the result from cache.

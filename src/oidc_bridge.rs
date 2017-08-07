@@ -13,7 +13,7 @@ use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 
 /// Macro used to extract a typed field from a JSON Value.
 ///
-/// Will return from the caller with a BrokerError if the field is missing or its value is an
+/// Will return from the caller with a `BrokerError` if the field is missing or its value is an
 /// incompatible type. `descr` is used to format the error message.
 ///
 /// ```
@@ -38,10 +38,10 @@ macro_rules! try_get_json_field {
 /// user will be redirected back to after confirming (or denying) the
 /// Authentication Request. Included in the request is a nonce which we can
 /// later use to definitively match the callback to this request.
-pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &Url)
+pub fn request(app: &Config, email_addr: &EmailAddress, client_id: &str, nonce: &str, redirect_uri: &Url)
                -> BrokerResult<Url> {
 
-    let session = crypto::session_id(&email_addr, client_id);
+    let session = crypto::session_id(email_addr, client_id);
 
     // Generate a nonce for the provider.
     let provider_nonce = crypto::nonce();
@@ -63,7 +63,7 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
     // `authorization_endpoint` from it.
     let domain = &email_addr.domain.to_lowercase();
     let provider = &app.providers[domain];
-    let config_obj: Value = fetch_json_url(&app.store, CacheKey::Discovery { domain: domain },
+    let config_obj: Value = fetch_json_url(&app.store, &CacheKey::Discovery { domain: domain },
                                            &client, &provider.discovery_url)
         .map_err(|e| {
             BrokerError::Provider(format!("could not fetch {}'s discovery document: {}",
@@ -96,7 +96,7 @@ pub fn request(app: &Config, email_addr: EmailAddress, client_id: &str, nonce: &
 
 }
 
-pub fn canonicalize_google(email: String) -> String {
+pub fn canonicalize_google(email: &str) -> String {
     let at = email.find('@').expect("no @ sign in email address");
     let (user, domain) = email.split_at(at);
     let domain = &domain[1..];
@@ -120,7 +120,7 @@ pub fn canonicalize_google(email: String) -> String {
 pub fn canonicalized(email: &str) -> String {
     let normalized = email.to_lowercase();
     if normalized.ends_with("@gmail.com") || normalized.ends_with("@googlemail.com") {
-        canonicalize_google(normalized)
+        canonicalize_google(&normalized)
     } else {
         normalized
     }
@@ -142,7 +142,7 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, id_token: &str)
     // Request the provider's Discovery document to get the `jwks_uri` values from it.
     let domain = &email_addr.domain.to_lowercase();
     let provider = &app.providers[domain];
-    let config_obj: Value = fetch_json_url(&app.store, CacheKey::Discovery { domain: domain },
+    let config_obj: Value = fetch_json_url(&app.store, &CacheKey::Discovery { domain: domain },
                                            &client, &provider.discovery_url)
         .map_err(|e| {
             BrokerError::Provider(format!("could not fetch {}'s discovery document: {}",
@@ -153,7 +153,7 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, id_token: &str)
 
     // Grab the keys from the provider, then verify the signature.
     let jwt_payload = {
-        let keys_obj: Value = fetch_json_url(&app.store, CacheKey::KeySet { domain: domain },
+        let keys_obj: Value = fetch_json_url(&app.store, &CacheKey::KeySet { domain: domain },
                                              &client, jwks_url)
             .map_err(|e| {
                 BrokerError::Provider(format!("could not fetch {}'s keys: {}",
@@ -173,11 +173,11 @@ pub fn verify(app: &Config, stored: &HashMap<String, String>, id_token: &str)
     let nonce = try_get_json_field!(jwt_payload, "nonce", as_str, descr);
     let issuer_origin = vec!["https://", &provider.issuer_domain].join("");
     assert!(iss == provider.issuer_domain || iss == issuer_origin);
-    assert!(aud == provider.client_id);
-    assert!(canonicalized(token_addr) == canonicalized(&email_addr.to_string()));
+    assert_eq!(aud, provider.client_id);
+    assert_eq!(canonicalized(token_addr), canonicalized(&email_addr.to_string()));
     let now = now_utc().to_timespec().sec;
     assert!(now < exp);
-    assert!(nonce == &stored["provider_nonce"]);
+    assert_eq!(nonce, stored["provider_nonce"]);
 
     // If everything is okay, build a new identity token and send it
     // to the relying party.

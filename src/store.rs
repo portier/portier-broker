@@ -44,7 +44,7 @@ impl Store {
         if stored.is_empty() {
             return Err(BrokerError::Input("session not found".to_string()));
         }
-        if &stored["type"] != type_value {
+        if stored["type"] != type_value {
             return Err(BrokerError::Input("invalid session".to_string()));
         }
         Ok(stored)

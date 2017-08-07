@@ -42,7 +42,7 @@ macro_rules! broker_handler {
 }
 
 
-/// Macro used to extract a parameter from a QueryMap.
+/// Macro used to extract a parameter from a `QueryMap`.
 ///
 /// Will return from the caller with a `BrokerError` if
 /// the parameter is missing and has no default.
