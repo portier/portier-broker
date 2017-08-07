@@ -13,7 +13,7 @@ use url::Url;
 use validation::{valid_uri, only_origin, same_origin};
 
 
-/// Iron handler to return the OpenID Discovery document.
+/// Request handler to return the OpenID Discovery document.
 ///
 /// Most of this is hard-coded for now, although the URLs are constructed by
 /// using the base URL as configured in the `public_url` configuration value.
@@ -35,7 +35,7 @@ pub fn discovery(_: Request, shared_ctx: ContextHandle) -> HandlerResult {
 }
 
 
-/// Iron handler for the JSON Web Key Set document.
+/// Request handler for the JSON Web Key Set document.
 ///
 /// Respond with the JWK key set containing all of the configured keys.
 ///
@@ -52,7 +52,7 @@ pub fn key_set(_: Request, shared_ctx: ContextHandle) -> HandlerResult {
 }
 
 
-/// Iron handler for authentication requests from the RP.
+/// Request handler for authentication requests from the RP.
 ///
 /// Calls the `oidc::request()` function if the provided email address's
 /// domain matches one of the configured famous providers. Otherwise, calls the

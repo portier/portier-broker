@@ -8,7 +8,7 @@ use hyper::server::{Request, Response};
 use oidc_bridge;
 
 
-/// Iron handler for OAuth callbacks
+/// Request handler for OAuth callbacks
 ///
 /// After the user allows or denies the Authentication Request with the famous
 /// identity provider, they will be redirected back to the callback handler.

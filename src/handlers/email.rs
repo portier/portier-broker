@@ -8,7 +8,7 @@ use http::{self, HandlerResult, ContextHandle};
 use hyper::server::Request;
 
 
-/// Iron handler for one-time pad email loop confirmation.
+/// Request handler for one-time pad email loop confirmation.
 ///
 /// Retrieves the session based session ID and the expected one-time pad.
 /// Verify the code and return the resulting token or error to the RP.

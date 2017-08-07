@@ -62,7 +62,7 @@ pub fn return_to_relier<E>(ctx: &Context, params: &[(&str, &str)]) -> FutureResu
 }
 
 
-/// Helper function for returning an Iron response with JSON data.
+/// Helper function for returning a response with JSON data.
 ///
 /// Serializes the argument value to JSON and returns a HTTP 200 response
 /// code with the serialized JSON as the body.

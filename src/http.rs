@@ -108,11 +108,10 @@ impl HyperService for Service {
 }
 
 
-/// Handle an `BrokerError` and create an `IronResult`.
+/// Handle an `BrokerError` and create a response.
 ///
-/// The `broker_handler!` macro calls this on error. We don't use a `From`
-/// implementation, because this way we get app and request context, and we
-/// don't necessarily have to pass the error on to Iron.
+/// Our service calls this on error. We handle all these errors, and always
+/// return a response.
 ///
 /// When we handle an error, we want to:
 ///
@@ -125,8 +124,8 @@ impl HyperService for Service {
 ///  - Return the error to the relier via redirect, as per the OAuth2 spec.
 ///  - Always show something to the user, even if we cannot redirect.
 ///
-/// The large match-statement below handles all these scenario's properly,
-/// and sets proper response codes for each category.
+/// The large match-statement below handles all these scenario's properly, and
+/// sets proper response codes for each category.
 fn handle_error(shared_ctx: ContextHandle, err: BrokerError) -> FutureResult<Response, HyperError> {
     let ctx = shared_ctx.lock().expect("failed to lock request context");
     match (err, ctx.redirect_uri.as_ref()) {
