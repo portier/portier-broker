@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use super::store_cache::{CacheKey, fetch_json_url};
 use time::now_utc;
-use tokio_core::reactor::Remote;
+use tokio_core::reactor::Handle;
 use url::Url;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 
@@ -40,7 +40,7 @@ macro_rules! try_get_json_field {
 /// user will be redirected back to after confirming (or denying) the
 /// Authentication Request. Included in the request is a nonce which we can
 /// later use to definitively match the callback to this request.
-pub fn request(app: &Config, handle: &Remote, email_addr: &EmailAddress, client_id: &str, nonce: &str, redirect_uri: &Url)
+pub fn request(app: &Config, handle: &Handle, email_addr: &EmailAddress, client_id: &str, nonce: &str, redirect_uri: &Url)
                -> BrokerResult<Url> {
 
     let session = crypto::session_id(email_addr, client_id);
@@ -133,7 +133,7 @@ pub fn canonicalized(email: &str) -> String {
 /// Match the returned email address and nonce against our Redis data, then
 /// extract the identity token returned by the provider and verify it. Return
 /// an identity token for the RP if successful, or an error message otherwise.
-pub fn verify(app: &Config, handle: &Remote, stored: &HashMap<String, String>, id_token: &str)
+pub fn verify(app: &Config, handle: &Handle, stored: &HashMap<String, String>, id_token: &str)
               -> BrokerResult<String> {
 
     let email_addr = EmailAddress::new(&stored["email"])?;

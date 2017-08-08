@@ -1,7 +1,7 @@
 use error::BrokerError;
 use futures::future::{self, Future};
 use handlers::return_to_relier;
-use http::{self, HandlerResult, ContextHandle};
+use http::{self, Service, ContextHandle, HandlerResult};
 use hyper::{Method};
 use hyper::header::{ContentType};
 use hyper::server::{Request, Response};
@@ -18,43 +18,44 @@ use oidc_bridge;
 ///
 /// Once we have a POST request, we can verify the callback data and return the
 /// resulting token to the relying party, or error.
-pub fn callback(req: Request, shared_ctx: ContextHandle) -> HandlerResult {
+pub fn callback(service: &Service, req: Request, shared_ctx: ContextHandle) -> HandlerResult {
     match *req.method() {
         Method::Get => {
-            let ctx = shared_ctx.lock().expect("failed to lock request context");
             let res = Response::new()
                 .with_header(ContentType::html())
-                .with_body(ctx.app.templates.fragment_callback.render(&[]));
-            future::ok(res).boxed()
+                .with_body(service.app.templates.fragment_callback.render(&[]));
+            Box::new(future::ok(res))
         },
         Method::Post => {
-            http::parse_form_encoded_body(req)
-                .and_then(move |mut params| {
-                    let state = try_get_param!(params, "state");
-                    let id_token = try_get_param!(params, "id_token");
+            let f = http::parse_form_encoded_body(req);
 
-                    let result = {
-                        let ctx = shared_ctx.lock().expect("failed to lock request context");
-                        ctx.app.store.get_session("oidc", &state)
-                    };
+            let app = service.app.clone();
+            let f = f.and_then(move |mut params| {
+                let state = try_get_param!(params, "state");
+                let id_token = try_get_param!(params, "id_token");
 
-                    future::result(result.map(|stored| (shared_ctx, stored, id_token)))
-                })
-                .and_then(|(shared_ctx, stored, id_token)| {
-                    let result = {
-                        let mut ctx = shared_ctx.lock().expect("failed to lock request context");
-                        ctx.redirect_uri = Some(stored["redirect"].parse().expect("redirect_uri missing from session"));
+                let result = app.store.get_session("oidc", &state);
+                future::result(result.map(|stored| (stored, id_token)))
+            });
 
-                        oidc_bridge::verify(&ctx.app, &ctx.handle, &stored, &id_token)
-                    };
+            let app = service.app.clone();
+            let handle = service.handle.clone();
+            let ctx = shared_ctx.clone();
+            let f = f.and_then(move |(stored, id_token)| {
+                ctx.borrow_mut().redirect_uri = Some(
+                    stored["redirect"].parse().expect("redirect_uri missing from session"));
 
-                    future::result(result.map(|jwt| (shared_ctx, jwt)))
-                })
-                .and_then(|(shared_ctx, jwt)| {
-                    let ctx = shared_ctx.lock().expect("failed to lock request context");
-                    return_to_relier(&ctx, &[("id_token", &jwt)])
-                })
-                .boxed()
+                future::result(oidc_bridge::verify(&*app, &handle, &stored, &id_token))
+            });
+
+            let app = service.app.clone();
+            let ctx = shared_ctx.clone();
+            let f = f.and_then(move |jwt| {
+                let ctx = ctx.borrow();
+                return_to_relier(&*app, &ctx, &[("id_token", &jwt)])
+            });
+
+            Box::new(f)
         },
         _ => unreachable!(),
     }

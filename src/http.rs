@@ -1,6 +1,6 @@
 use config::Config;
 use error::BrokerError;
-use futures::future::{self, Future, BoxFuture, FutureResult};
+use futures::future::{self, Future, FutureResult};
 use futures::Stream;
 use handlers::return_to_relier;
 use hyper::{self, StatusCode, Error as HyperError};
@@ -8,11 +8,12 @@ use hyper::header::{ContentType, StrictTransportSecurity, CacheControl, CacheDir
 use hyper::server::{Request, Response, Service as HyperService};
 use hyper_staticfile::Static;
 use hyper_tls::HttpsConnector;
+use std::cell::{RefCell, Ref};
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-use tokio_core::reactor::{Handle, Remote};
+use std::sync::Arc;
+use tokio_core::reactor::Handle;
 use url::{Url, form_urlencoded};
 
 
@@ -23,36 +24,35 @@ header! { (XXSSProtection, "X-XSS-Protection") => [String] }
 header! { (XFrameOptions, "X-Frame-Options") => [String] }
 
 
+/// A boxed future. Unlike the regular `BoxFuture`, this is not `Send`.
+/// This means we also do not use the `boxed()` method.
+pub type BoxFuture<T, E> = Box<Future<Item=T, Error=E>>;
+
 /// The default type of client we use for outgoing requests
 pub type Client = hyper::Client<HttpsConnector<hyper::client::HttpConnector>>;
 
 /// Helper function to create a HTTPS client
-pub fn create_client(handle: &Remote) -> Client {
+pub fn create_client(handle: &Handle) -> Client {
     // TODO: Better handle management
-    let handle = handle.handle().expect("didn't expect multithreading");
-    let connector = HttpsConnector::new(4, &handle)
+    let connector = HttpsConnector::new(4, handle)
         .expect("could not initialize https connector");
-    hyper::Client::configure().connector(connector).build(&handle)
+    hyper::Client::configure().connector(connector).build(handle)
 }
 
 
-/// HTTP request context
+/// Additional context for a request
 pub struct Context {
-    /// The application configuration
-    pub app: Arc<Config>,
-    /// A Tokio reactor handle
-    pub handle: Remote,
     /// Redirect URI of the relying party
     pub redirect_uri: Option<Url>,
 }
 
 
 /// Short-hand
-pub type ContextHandle = Arc<Mutex<Context>>;
+pub type ContextHandle = Arc<RefCell<Context>>;
 /// Result type of handlers
 pub type HandlerResult = BoxFuture<Response, BrokerError>;
 /// Handler function type
-pub type Handler = fn(Request, ContextHandle) -> HandlerResult;
+pub type Handler = fn(&Service, Request, ContextHandle) -> HandlerResult;
 /// Router function type
 pub type Router = fn(&Request) -> Option<Handler>;
 
@@ -60,9 +60,9 @@ pub type Router = fn(&Request) -> Option<Handler>;
 // HTTP service
 pub struct Service {
     /// The application configuration
-    app: Arc<Config>,
+    pub app: Arc<Config>,
     /// A Tokio reactor handle
-    handle: Handle,
+    pub handle: Handle,
     /// The routing function
     router: Router,
     /// The static file serving service
@@ -94,16 +94,24 @@ impl HyperService for Service {
             None => return self.static_.call(req),
         };
 
-        let ctx = Arc::new(Mutex::new(Context {
-            app: self.app.clone(),
-            handle: self.handle.remote().clone(),
+        let ctx = Arc::new(RefCell::new(Context {
             redirect_uri: None,
         }));
 
-        handler(req, ctx.clone())
-            .or_else(|err| handle_error(ctx, err))
-            .map(|mut res| { set_headers(&mut res); res })
-            .boxed()
+        let f = handler(self, req, ctx.clone());
+
+        let app = self.app.clone();
+        let f = f.or_else(move |err| {
+            let ctx = ctx.borrow();
+            handle_error(&*app, &ctx, err)
+        });
+
+        let f = f.map(|mut res| {
+            set_headers(&mut res);
+            res
+        });
+
+        Box::new(f)
     }
 }
 
@@ -126,11 +134,10 @@ impl HyperService for Service {
 ///
 /// The large match-statement below handles all these scenario's properly, and
 /// sets proper response codes for each category.
-fn handle_error(shared_ctx: ContextHandle, err: BrokerError) -> FutureResult<Response, HyperError> {
-    let ctx = shared_ctx.lock().expect("failed to lock request context");
+fn handle_error(app: &Config, ctx: &Ref<Context>, err: BrokerError) -> FutureResult<Response, HyperError> {
     match (err, ctx.redirect_uri.as_ref()) {
         (err @ BrokerError::Input(_), Some(_)) => {
-            return_to_relier(&ctx, &[
+            return_to_relier(app, ctx, &[
                 ("error", "invalid_request"),
                 ("error_description", err.description()),
             ])
@@ -139,14 +146,14 @@ fn handle_error(shared_ctx: ContextHandle, err: BrokerError) -> FutureResult<Res
             let res = Response::new()
                 .with_status(StatusCode::BadRequest)
                 .with_header(ContentType::html())
-                .with_body(ctx.app.templates.error.render(&[
+                .with_body(app.templates.error.render(&[
                     ("error", err.description()),
                 ]));
             future::ok(res)
         },
         (err @ BrokerError::Provider(_), Some(_)) => {
             error!("{}", err);
-            return_to_relier(&ctx, &[
+            return_to_relier(app, ctx, &[
                 ("error", "temporarily_unavailable"),
                 ("error_description", &err.description().to_string()),
             ])
@@ -156,14 +163,14 @@ fn handle_error(shared_ctx: ContextHandle, err: BrokerError) -> FutureResult<Res
             let res = Response::new()
                 .with_status(StatusCode::ServiceUnavailable)
                 .with_header(ContentType::html())
-                .with_body(ctx.app.templates.error.render(&[
+                .with_body(app.templates.error.render(&[
                     ("error", &err.description().to_string()),
                 ]));
             future::ok(res)
         },
         (err, Some(_)) => {
             error!("{}", err);
-            return_to_relier(&ctx, &[
+            return_to_relier(app, ctx, &[
                 ("error", "server_error"),
             ])
         },
@@ -172,7 +179,7 @@ fn handle_error(shared_ctx: ContextHandle, err: BrokerError) -> FutureResult<Res
             let res = Response::new()
                 .with_status(StatusCode::InternalServerError)
                 .with_header(ContentType::html())
-                .with_body(ctx.app.templates.error.render(&[
+                .with_body(app.templates.error.render(&[
                     ("error", "internal server error"),
                 ]));
             future::ok(res)
@@ -234,10 +241,10 @@ pub fn parse_query(req: &Request) -> HashMap<String, String> {
 
 /// Parse the request form-encoded body into a `HashMap`.
 pub fn parse_form_encoded_body(req: Request) -> BoxFuture<HashMap<String, String>, BrokerError> {
-    req.body().concat2()
+    let f = req.body().concat2()
         .map_err(|err| err.into())
-        .map(|chunk| parse_form_encoded(&chunk))
-        .boxed()
+        .map(|chunk| parse_form_encoded(&chunk));
+    Box::new(f)
 }
 
 
