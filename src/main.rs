@@ -106,6 +106,10 @@ fn main() {
                          .and_then(|d| d.version(Some(VERSION.to_string())).decode())
                          .unwrap_or_else(|e| e.exit());
 
+    let mut core = tokio_core::reactor::Core::new()
+        .expect("Could not start the event loop");
+    let handle = core.handle();
+
     let mut builder = config::ConfigBuilder::new();
     if let Some(path) = args.arg_CONFIG {
         builder.update_from_file(&path).unwrap_or_else(|err| {
@@ -114,14 +118,9 @@ fn main() {
     }
     builder.update_from_common_env();
     builder.update_from_broker_env();
-    let app = Arc::new(builder.done().unwrap_or_else(|err| {
+    let app = Arc::new(builder.done(&handle).unwrap_or_else(|err| {
         panic!(format!("failed to build configuration: {}", err))
     }));
-
-    let mut core = tokio_core::reactor::Core::new()
-        .expect("Could not start the event loop");
-    let handle = core.handle();
-    let proto = Http::new();
 
     let ip_addr = app.listen_ip.parse()
         .expect("Unable to parse listen address");
@@ -130,6 +129,7 @@ fn main() {
         .expect("Unable to bind listen address");
     info!("Listening on http://{}", addr);
 
+    let proto = Http::new();
     let server = listener.incoming().for_each(move |(sock, addr)| {
         let res_path = Path::new("./res/");
         let s = http::Service::new(&handle, &app, router, res_path);

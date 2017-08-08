@@ -109,10 +109,7 @@ pub fn auth(service: &Service, req: Request, ctx: ContextHandle) -> HandlerResul
     });
 
     let app = service.app.clone();
-    let handle = service.handle.remote().clone();
     let f = f.and_then(move |(client_id, redirect_uri, nonce, login_hint, email_addr)| {
-        let handle = handle.handle().expect("could not get handle");
-
         // Enforce ratelimit based on the login_hint
         match addr_limiter(&app.store, &login_hint, &app.limit_per_email) {
             Err(err) => return future::err(err),
@@ -129,7 +126,7 @@ pub fn auth(service: &Service, req: Request, ctx: ContextHandle) -> HandlerResul
         future::result(
             if app.providers.contains_key(&email_addr.domain.to_lowercase()) {
                 // OIDC authentication. Redirect to the identity provider.
-                oidc_bridge::request(&*app, &handle, &email_addr, &client_id, &nonce, &redirect_uri)
+                oidc_bridge::request(&*app, &email_addr, &client_id, &nonce, &redirect_uri)
                     .map(|auth_url| {
                         Response::new()
                             .with_status(StatusCode::SeeOther)

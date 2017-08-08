@@ -1,6 +1,6 @@
 use error::{BrokerError, BrokerResult};
 use futures::{Future, Stream};
-use http::{Client as HttpClient};
+use config::HttpClient;
 use hyper::header::{ContentLength, CacheControl, CacheDirective};
 use redis::Commands;
 use serde_json::de::from_str;
@@ -31,9 +31,9 @@ impl<'a> CacheKey<'a> {
 
 
 /// Fetch `url` from cache or using a HTTP GET request, and parse the response as JSON. The
-/// cache is stored in `store` with `key`. The `session` is used to make the HTTP GET request,
+/// cache is stored in `store` with `key`. The `client` is used to make the HTTP GET request,
 /// if necessary.
-pub fn fetch_json_url(store: &Store, key: &CacheKey, session: &HttpClient, url: &str)
+pub fn fetch_json_url(store: &Store, key: &CacheKey, client: &HttpClient, url: &str)
                       -> BrokerResult<Value> {
 
     // Try to retrieve the result from cache.
@@ -42,7 +42,7 @@ pub fn fetch_json_url(store: &Store, key: &CacheKey, session: &HttpClient, url: 
     stored.map_or_else(|| {
 
         // Cache miss, make a request.
-        let rsp = session.get(
+        let rsp = client.get(
             url.parse().expect("could not parse request url")
         ).wait()?;
 

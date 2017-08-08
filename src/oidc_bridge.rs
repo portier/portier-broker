@@ -2,13 +2,11 @@ use config::Config;
 use crypto;
 use emailaddress::EmailAddress;
 use error::{BrokerError, BrokerResult};
-use http;
 use serde_json::value::Value;
 use std::collections::HashMap;
 use std::error::Error;
 use super::store_cache::{CacheKey, fetch_json_url};
 use time::now_utc;
-use tokio_core::reactor::Handle;
 use url::Url;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 
@@ -40,7 +38,7 @@ macro_rules! try_get_json_field {
 /// user will be redirected back to after confirming (or denying) the
 /// Authentication Request. Included in the request is a nonce which we can
 /// later use to definitively match the callback to this request.
-pub fn request(app: &Config, handle: &Handle, email_addr: &EmailAddress, client_id: &str, nonce: &str, redirect_uri: &Url)
+pub fn request(app: &Config, email_addr: &EmailAddress, client_id: &str, nonce: &str, redirect_uri: &Url)
                -> BrokerResult<Url> {
 
     let session = crypto::session_id(email_addr, client_id);
@@ -59,14 +57,12 @@ pub fn request(app: &Config, handle: &Handle, email_addr: &EmailAddress, client_
         ("redirect", &redirect_uri.to_string()),
     ])?;
 
-    let client = http::create_client(handle);
-
     // Retrieve the provider's Discovery document and extract the
     // `authorization_endpoint` from it.
     let domain = &email_addr.domain.to_lowercase();
     let provider = &app.providers[domain];
     let config_obj: Value = fetch_json_url(&app.store, &CacheKey::Discovery { domain: domain },
-                                           &client, &provider.discovery_url)
+                                           &app.http_client, &provider.discovery_url)
         .map_err(|e| {
             BrokerError::Provider(format!("could not fetch {}'s discovery document: {}",
                                           domain, e.description()))
@@ -133,19 +129,17 @@ pub fn canonicalized(email: &str) -> String {
 /// Match the returned email address and nonce against our Redis data, then
 /// extract the identity token returned by the provider and verify it. Return
 /// an identity token for the RP if successful, or an error message otherwise.
-pub fn verify(app: &Config, handle: &Handle, stored: &HashMap<String, String>, id_token: &str)
+pub fn verify(app: &Config, stored: &HashMap<String, String>, id_token: &str)
               -> BrokerResult<String> {
 
     let email_addr = EmailAddress::new(&stored["email"])?;
     let origin = &stored["client_id"];
 
-    let client = http::create_client(handle);
-
     // Request the provider's Discovery document to get the `jwks_uri` values from it.
     let domain = &email_addr.domain.to_lowercase();
     let provider = &app.providers[domain];
     let config_obj: Value = fetch_json_url(&app.store, &CacheKey::Discovery { domain: domain },
-                                           &client, &provider.discovery_url)
+                                           &app.http_client, &provider.discovery_url)
         .map_err(|e| {
             BrokerError::Provider(format!("could not fetch {}'s discovery document: {}",
                                           domain, e.description()))
@@ -156,7 +150,7 @@ pub fn verify(app: &Config, handle: &Handle, stored: &HashMap<String, String>, i
     // Grab the keys from the provider, then verify the signature.
     let jwt_payload = {
         let keys_obj: Value = fetch_json_url(&app.store, &CacheKey::KeySet { domain: domain },
-                                             &client, jwks_url)
+                                             &app.http_client, jwks_url)
             .map_err(|e| {
                 BrokerError::Provider(format!("could not fetch {}'s keys: {}",
                                               domain, e.description()))

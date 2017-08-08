@@ -3,11 +3,10 @@ use error::BrokerError;
 use futures::future::{self, Future, FutureResult};
 use futures::Stream;
 use handlers::return_to_relier;
-use hyper::{self, StatusCode, Error as HyperError};
+use hyper::{StatusCode, Error as HyperError};
 use hyper::header::{ContentType, StrictTransportSecurity, CacheControl, CacheDirective};
 use hyper::server::{Request, Response, Service as HyperService};
 use hyper_staticfile::Static;
-use hyper_tls::HttpsConnector;
 use std::cell::{RefCell, Ref};
 use std::collections::HashMap;
 use std::error::Error;
@@ -27,17 +26,6 @@ header! { (XFrameOptions, "X-Frame-Options") => [String] }
 /// A boxed future. Unlike the regular `BoxFuture`, this is not `Send`.
 /// This means we also do not use the `boxed()` method.
 pub type BoxFuture<T, E> = Box<Future<Item=T, Error=E>>;
-
-/// The default type of client we use for outgoing requests
-pub type Client = hyper::Client<HttpsConnector<hyper::client::HttpConnector>>;
-
-/// Helper function to create a HTTPS client
-pub fn create_client(handle: &Handle) -> Client {
-    // TODO: Better handle management
-    let connector = HttpsConnector::new(4, handle)
-        .expect("could not initialize https connector");
-    hyper::Client::configure().connector(connector).build(handle)
-}
 
 
 /// Additional context for a request
@@ -61,8 +49,6 @@ pub type Router = fn(&Request) -> Option<Handler>;
 pub struct Service {
     /// The application configuration
     pub app: Arc<Config>,
-    /// A Tokio reactor handle
-    pub handle: Handle,
     /// The routing function
     router: Router,
     /// The static file serving service
@@ -73,7 +59,6 @@ impl Service {
     pub fn new<P: Into<PathBuf>>(handle: &Handle, app: &Arc<Config>, router: Router, path: P) -> Service {
         Service {
             app: app.clone(),
-            handle: handle.clone(),
             router: router,
             static_: Static::new(handle, path).with_cache_headers(app.static_ttl),
         }

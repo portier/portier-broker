@@ -2,7 +2,9 @@
 
 use crypto;
 use gettext::Catalog;
+use hyper;
 use hyper::header::LanguageTag;
+use hyper_tls::HttpsConnector;
 use mustache;
 use std::collections::HashMap;
 use std::env;
@@ -13,7 +15,13 @@ use std::io::Read;
 use std;
 use store;
 use store_limits::Ratelimit;
+use tokio_core::reactor::Handle;
+
 use toml;
+
+
+/// The type of HTTP client we use, with TLS enabled.
+pub type HttpClient = hyper::Client<HttpsConnector<hyper::client::HttpConnector>>;
 
 
 /// Union of all possible error types seen while parsing.
@@ -167,6 +175,7 @@ pub struct Config {
     pub token_ttl: u16,
     pub keys: Vec<crypto::NamedKey>,
     pub store: store::Store,
+    pub http_client: HttpClient,
     pub from_name: String,
     pub from_address: String,
     pub smtp_server: String,
@@ -404,7 +413,7 @@ impl ConfigBuilder {
         self
     }
 
-    pub fn done(self) -> Result<Config, ConfigError> {
+    pub fn done(self, handle: &Handle) -> Result<Config, ConfigError> {
         // Additional validations
         if self.smtp_username.is_none() != self.smtp_password.is_none() {
             return Err(ConfigError::Custom(
@@ -429,6 +438,11 @@ impl ConfigBuilder {
             self.redis_session_ttl as usize,
             self.redis_cache_max_doc_size as u64,
         ).expect("unable to instantiate new redis store");
+
+        let http_connector = HttpsConnector::new(4, handle)
+            .expect("could not initialize https connector");
+        let http_client = hyper::Client::configure()
+            .connector(http_connector).build(handle);
 
         let idx = self.limit_per_email.find('/')
             .expect("unable to parse limit.per_email format");
@@ -459,6 +473,7 @@ impl ConfigBuilder {
             token_ttl: self.token_ttl,
             keys: keys,
             store: store,
+            http_client: http_client,
             from_name: self.from_name,
             from_address: self.from_address.expect("no smtp from address configured"),
             smtp_server: self.smtp_server.expect("no smtp outserver address configured"),
