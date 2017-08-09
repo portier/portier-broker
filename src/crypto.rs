@@ -12,7 +12,6 @@ use serde_json::de::from_slice;
 use serde_json::value::Value;
 use std::fs::File;
 use std::io::{Read, Error as IoError};
-use std::sync::Arc;
 use time::now_utc;
 
 
@@ -44,10 +43,9 @@ impl From<SslErrorStack> for CryptoError {
 
 
 /// A named key pair, for use in JWS signing.
-#[derive(Clone)]
 pub struct NamedKey {
     id: String,
-    key: Arc<PKey>,
+    key: PKey,
 }
 
 
@@ -80,7 +78,7 @@ impl NamedKey {
                 .and_then(|_| hasher.finish2())?
                 .to_base64(base64::URL_SAFE)
         };
-        let key = Arc::new(PKey::from_rsa(rsa)?);
+        let key = PKey::from_rsa(rsa)?;
         Ok(NamedKey { id, key })
     }
 

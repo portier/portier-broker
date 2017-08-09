@@ -11,7 +11,7 @@ use std::cell::{RefCell, Ref};
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::rc::Rc;
 use tokio_core::reactor::Handle;
 use url::{Url, form_urlencoded};
 
@@ -36,7 +36,7 @@ pub struct Context {
 
 
 /// Short-hand
-pub type ContextHandle = Arc<RefCell<Context>>;
+pub type ContextHandle = Rc<RefCell<Context>>;
 /// Result type of handlers
 pub type HandlerResult = BoxFuture<Response, BrokerError>;
 /// Handler function type
@@ -48,7 +48,7 @@ pub type Router = fn(&Request) -> Option<Handler>;
 // HTTP service
 pub struct Service {
     /// The application configuration
-    pub app: Arc<Config>,
+    pub app: Rc<Config>,
     /// The routing function
     router: Router,
     /// The static file serving service
@@ -56,7 +56,7 @@ pub struct Service {
 }
 
 impl Service {
-    pub fn new<P: Into<PathBuf>>(handle: &Handle, app: &Arc<Config>, router: Router, path: P) -> Service {
+    pub fn new<P: Into<PathBuf>>(handle: &Handle, app: &Rc<Config>, router: Router, path: P) -> Service {
         Service {
             app: app.clone(),
             router: router,
@@ -79,7 +79,7 @@ impl HyperService for Service {
             None => return self.static_.call(req),
         };
 
-        let ctx = Arc::new(RefCell::new(Context {
+        let ctx = Rc::new(RefCell::new(Context {
             redirect_uri: None,
         }));
 
