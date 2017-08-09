@@ -5,7 +5,7 @@ use futures::future::{self, Future};
 use handlers::json_response;
 use http::{self, Service, ContextHandle, HandlerResult};
 use hyper::{Method, StatusCode};
-use hyper::header::{ContentType, Location, AcceptLanguage};
+use hyper::header::{ContentType, Location};
 use hyper::server::{Request, Response};
 use oidc_bridge;
 use store_limits::addr_limiter;
@@ -56,13 +56,6 @@ pub fn key_set(service: &Service, _: Request, _: ContextHandle) -> HandlerResult
 /// domain matches one of the configured famous providers. Otherwise, calls the
 /// `email::request()` function to allow authentication through the email loop.
 pub fn auth(service: &Service, req: Request, ctx: ContextHandle) -> HandlerResult {
-    // Parse the Accept-Language header
-    // TODO: Don't always have to do this, but can't carry Request
-    let accept_languages = match req.headers().get::<AcceptLanguage>() {
-        Some(&AcceptLanguage(ref list)) => list.clone(),
-        None => vec![],
-    };
-
     let f = match *req.method() {
         Method::Get => Box::new(future::ok(http::parse_query(&req))),
         Method::Post => http::parse_form_encoded_body(req),
@@ -102,65 +95,58 @@ pub fn auth(service: &Service, req: Request, ctx: ContextHandle) -> HandlerResul
                 EmailAddress::new(&login_hint)
                     .map_err(|_| BrokerError::Input("login_hint is not a valid email address".to_string()))
                     .and_then(move |email_addr| {
-                        Ok((client_id, redirect_uri, nonce, login_hint, email_addr))
+                        Ok((app, ctx, client_id, redirect_uri, nonce, login_hint, email_addr))
                     })
             });
         future::result(result)
     });
 
-    let app = service.app.clone();
-    let f = f.and_then(move |(client_id, redirect_uri, nonce, login_hint, email_addr)| {
+    let f = f.and_then(move |vars| {
         // Enforce ratelimit based on the login_hint
-        match addr_limiter(&app.store, &login_hint, &app.limit_per_email) {
-            Err(err) => return future::err(err),
-            Ok(false) => {
-                let res = Response::new()
-                    .with_status(StatusCode::TooManyRequests)
-                    .with_header(ContentType::plaintext())
-                    .with_body("Rate limit exceeded. Please try again later.");
-                return future::ok(res)
-            },
-            _ => {},
+        let result = {
+            let (ref app, _, _, _, _, ref login_hint, _) = vars;
+            addr_limiter(&app.store, login_hint, &app.limit_per_email)
+        };
+        match result {
+            Err(err) => future::err(err),
+            Ok(false) => future::err(BrokerError::RateLimited),
+            _ => future::ok(vars),
         }
+    });
 
-        future::result(
-            if app.providers.contains_key(&email_addr.domain.to_lowercase()) {
-                // OIDC authentication. Redirect to the identity provider.
-                oidc_bridge::request(&*app, &email_addr, &client_id, &nonce, &redirect_uri)
-                    .map(|auth_url| {
-                        Response::new()
-                            .with_status(StatusCode::SeeOther)
-                            .with_header(Location::new(auth_url.into_string()))
-                    })
+    let f = f.and_then(move |(app, ctx, client_id, redirect_uri, nonce, _, email_addr)|
+                       -> Box<Future<Item=Response, Error=BrokerError>> {
+        if app.providers.contains_key(&email_addr.domain.to_lowercase()) {
+            // OIDC authentication. Redirect to the identity provider.
+            let f = oidc_bridge::request(app, email_addr, &client_id, &nonce, &redirect_uri)
+                .map(|auth_url| {
+                    Response::new()
+                        .with_status(StatusCode::SeeOther)
+                        .with_header(Location::new(auth_url.into_string()))
+                });
+            Box::new(f)
 
-            } else {
-                // Determine the language catalog to use.
-                let mut catalog = &app.i18n.catalogs[0].1;
-                'outer: for accept_language in &accept_languages {
-                    for &(ref lang_tag, ref lang_catalog) in &app.i18n.catalogs {
-                        if lang_tag.matches(&accept_language.item) {
-                            catalog = lang_catalog;
-                            break 'outer;
-                        }
-                    }
-                }
-
-                // Email loop authentication. Render a message and form.
-                email_bridge::request(&*app, &email_addr, &client_id, &nonce, &redirect_uri, catalog)
-                    .map(|session_id| {
-                        Response::new()
-                            .with_header(ContentType::html())
-                            .with_body(app.templates.confirm_email.render(&[
-                                ("client_id", &client_id),
-                                ("session_id", &session_id),
-                                ("title", catalog.gettext("Confirm your address")),
-                                ("explanation", catalog.gettext("We've sent you an email to confirm your address.")),
-                                ("use", catalog.gettext("Use the link in that email to login to")),
-                                ("alternate", catalog.gettext("Alternatively, enter the code from the email to continue in this browser tab:")),
-                            ]))
-                    })
+        } else {
+            // Email loop authentication. Render a message and form.
+            let f = {
+                let catalog = ctx.borrow().catalog(&*app);
+                email_bridge::request(app.clone(), &email_addr, &client_id, &nonce, &redirect_uri, catalog)
             }
-        )
+                .map(move |session_id| {
+                    let catalog = ctx.borrow().catalog(&*app);
+                    Response::new()
+                        .with_header(ContentType::html())
+                        .with_body(app.templates.confirm_email.render(&[
+                            ("client_id", &client_id),
+                            ("session_id", &session_id),
+                            ("title", catalog.gettext("Confirm your address")),
+                            ("explanation", catalog.gettext("We've sent you an email to confirm your address.")),
+                            ("use", catalog.gettext("Use the link in that email to login to")),
+                            ("alternate", catalog.gettext("Alternatively, enter the code from the email to continue in this browser tab:")),
+                        ]))
+                });
+            Box::new(f)
+        }
     });
 
     Box::new(f)

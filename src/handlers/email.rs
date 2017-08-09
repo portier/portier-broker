@@ -23,21 +23,19 @@ pub fn confirmation(service: &Service, req: Request, shared_ctx: ContextHandle) 
         let code = try_get_param!(params, "code");
 
         let result = app.store.get_session("email", &session_id);
-        future::result(result.map(|stored| (stored, code)))
+        future::result(result.map(|stored| (app, stored, code)))
     });
 
-    let app = service.app.clone();
     let ctx = shared_ctx.clone();
-    let f = f.and_then(move |(stored, code)| {
+    let f = f.and_then(move |(app, stored, code)| {
         ctx.borrow_mut().redirect_uri = Some(
             stored["redirect"].parse().expect("unable to parse stored redirect uri"));
 
-        future::result(email_bridge::verify(&*app, &stored, &code))
+        email_bridge::verify(app.clone(), &stored, &code)
+            .map(move |jwt| (app, ctx, jwt))
     });
 
-    let app = service.app.clone();
-    let ctx = shared_ctx.clone();
-    let f = f.and_then(move |jwt| {
+    let f = f.and_then(|(app, ctx, jwt)| {
         let ctx = ctx.borrow();
         return_to_relier(&*app, &ctx, &[("id_token", &jwt)])
     });

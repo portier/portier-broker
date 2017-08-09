@@ -35,21 +35,19 @@ pub fn callback(service: &Service, req: Request, shared_ctx: ContextHandle) -> H
                 let id_token = try_get_param!(params, "id_token");
 
                 let result = app.store.get_session("oidc", &state);
-                future::result(result.map(|stored| (stored, id_token)))
+                future::result(result.map(|stored| (app, stored, id_token)))
             });
 
-            let app = service.app.clone();
             let ctx = shared_ctx.clone();
-            let f = f.and_then(move |(stored, id_token)| {
+            let f = f.and_then(move |(app, stored, id_token)| {
                 ctx.borrow_mut().redirect_uri = Some(
                     stored["redirect"].parse().expect("redirect_uri missing from session"));
 
-                future::result(oidc_bridge::verify(&*app, &stored, &id_token))
+                oidc_bridge::verify(app.clone(), stored, id_token)
+                    .map(move |jwt| (app, ctx, jwt))
             });
 
-            let app = service.app.clone();
-            let ctx = shared_ctx.clone();
-            let f = f.and_then(move |jwt| {
+            let f = f.and_then(|(app, ctx, jwt)| {
                 let ctx = ctx.borrow();
                 return_to_relier(&*app, &ctx, &[("id_token", &jwt)])
             });

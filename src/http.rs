@@ -2,9 +2,10 @@ use config::Config;
 use error::BrokerError;
 use futures::future::{self, Future, FutureResult};
 use futures::Stream;
+use gettext::Catalog;
 use handlers::return_to_relier;
 use hyper::{StatusCode, Error as HyperError};
-use hyper::header::{ContentType, StrictTransportSecurity, CacheControl, CacheDirective};
+use hyper::header::{AcceptLanguage, ContentType, StrictTransportSecurity, CacheControl, CacheDirective};
 use hyper::server::{Request, Response, Service as HyperService};
 use hyper_staticfile::Static;
 use std::cell::{RefCell, Ref};
@@ -30,8 +31,17 @@ pub type BoxFuture<T, E> = Box<Future<Item=T, Error=E>>;
 
 /// Additional context for a request
 pub struct Context {
+    /// Index into the config catalogs of the language to use
+    pub catalog_idx: usize,
     /// Redirect URI of the relying party
     pub redirect_uri: Option<Url>,
+}
+
+impl Context {
+    /// Get a reference to the language catalog to use
+    pub fn catalog<'a>(&self, app: &'a Config) -> &'a Catalog {
+        &app.i18n.catalogs[self.catalog_idx].1
+    }
 }
 
 
@@ -74,23 +84,42 @@ impl HyperService for Service {
     fn call(&self, req: Request) -> Self::Future {
         info!("{} {}", req.method(), req.path());
 
+        // Match route or serve static files.
         let handler = match (self.router)(&req) {
             Some(handler) => handler,
             None => return self.static_.call(req),
         };
 
+        // Determine the language catalog to use.
+        let mut catalog_idx = 0;
+        if let Some(&AcceptLanguage(ref list)) = req.headers().get() {
+            for entry in list {
+                for (idx, &(ref tag, _)) in self.app.i18n.catalogs.iter().enumerate() {
+                    if tag.matches(&entry.item) {
+                        catalog_idx = idx;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Create the request context.
         let ctx = Rc::new(RefCell::new(Context {
+            catalog_idx: catalog_idx,
             redirect_uri: None,
         }));
 
+        // Call the route handler.
         let f = handler(self, req, ctx.clone());
 
+        // Handle errors.
         let app = self.app.clone();
         let f = f.or_else(move |err| {
             let ctx = ctx.borrow();
             handle_error(&*app, &ctx, err)
         });
 
+        // Set common headers.
         let f = f.map(|mut res| {
             set_headers(&mut res);
             res
@@ -121,6 +150,13 @@ impl HyperService for Service {
 /// sets proper response codes for each category.
 fn handle_error(app: &Config, ctx: &Ref<Context>, err: BrokerError) -> FutureResult<Response, HyperError> {
     match (err, ctx.redirect_uri.as_ref()) {
+        (BrokerError::RateLimited, _) => {
+            let res = Response::new()
+                .with_status(StatusCode::TooManyRequests)
+                .with_header(ContentType::plaintext())
+                .with_body("Rate limit exceeded. Please try again later.");
+            future::ok(res)
+        },
         (err @ BrokerError::Input(_), Some(_)) => {
             return_to_relier(app, ctx, &[
                 ("error", "invalid_request"),
