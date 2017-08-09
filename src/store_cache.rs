@@ -1,7 +1,8 @@
 use error::BrokerError;
 use futures::{Future, Stream, future};
-use config::    Config;
-use hyper::header::{ContentLength, CacheControl, CacheDirective};
+use config::Config;
+use hyper::{Chunk, Error as HyperError};
+use hyper::header::{CacheControl, CacheDirective};
 use redis::Commands;
 use serde_json::de::from_str;
 use serde_json::value::Value;
@@ -52,18 +53,6 @@ pub fn fetch_json_url(app: &Rc<Config>, url: &str, key: &CacheKey)
 
         let app = app.clone();
         let f = f.and_then(move |res| {
-            // Check the Content-Length. We require it.
-            let size = match res.headers().get() {
-                Some(&ContentLength(size)) => size,
-                None => return future::err(BrokerError::Custom(
-                    "missing content-length header in response".to_string())),
-            };
-
-            if size > app.store.max_response_size {
-                return future::err(BrokerError::Custom(
-                    "response exceeds the size limit".to_string()));
-            }
-
             // Grab the max-age directive from the Cache-Control header.
             let max_age = res.headers().get().map_or(0, |header: &CacheControl| {
                 for dir in header.iter() {
@@ -74,12 +63,17 @@ pub fn fetch_json_url(app: &Rc<Config>, url: &str, key: &CacheKey)
                 0
             });
 
-            future::ok((app, res, max_age))
-        });
-
-        // Receive the body.
-        let f = f.and_then(|(app, res, max_age)| {
-            res.body().concat2()
+            // Receive the body.
+            let max_size = app.store.max_response_size as usize;
+            res.body()
+                .fold(Chunk::default(), move |mut acc, chunk| {
+                    if acc.len() + chunk.len() > max_size {
+                        future::err(HyperError::TooLarge)
+                    } else {
+                        acc.extend(chunk);
+                        future::ok(acc)
+                    }
+                })
                 .map(move |chunk| (app, chunk, max_age))
                 .map_err(|err| err.into())
         });
