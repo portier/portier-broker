@@ -58,7 +58,7 @@ pub fn key_set(service: &Service, _: Request, _: ContextHandle) -> HandlerResult
 pub fn auth(service: &Service, req: Request, ctx: ContextHandle) -> HandlerResult {
     let f = match *req.method() {
         Method::Get => Box::new(future::ok(http::parse_query(&req))),
-        Method::Post => http::parse_form_encoded_body(req),
+        Method::Post => http::parse_form_encoded_body(req.body()),
         _ => unreachable!(),
     };
 

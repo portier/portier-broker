@@ -1,7 +1,7 @@
 use error::BrokerError;
-use futures::{Future, Stream, future};
+use futures::{Future, future};
 use config::Config;
-use hyper::{Chunk, Error as HyperError};
+use http;
 use hyper::header::{CacheControl, CacheDirective};
 use redis::Commands;
 use serde_json::de::from_str;
@@ -64,18 +64,8 @@ pub fn fetch_json_url(app: &Rc<Config>, url: &str, key: &CacheKey)
             });
 
             // Receive the body.
-            let max_size = app.store.max_response_size as usize;
-            res.body()
-                .fold(Chunk::default(), move |mut acc, chunk| {
-                    if acc.len() + chunk.len() > max_size {
-                        future::err(HyperError::TooLarge)
-                    } else {
-                        acc.extend(chunk);
-                        future::ok(acc)
-                    }
-                })
+            http::read_body(res.body())
                 .map(move |chunk| (app, chunk, max_age))
-                .map_err(|err| err.into())
         });
 
         let f = f.and_then(|(app, chunk, max_age)| {

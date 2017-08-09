@@ -8,11 +8,10 @@ pub struct Store {
     pub client: redis::Client,
     pub expire_sessions: usize, // TTL of session keys, in seconds
     pub expire_cache: usize, // TTL of cache keys, in seconds
-    pub max_response_size: u64, // Maximum size of HTTP GET responses
 }
 
 impl Store {
-    pub fn new(url: &str, expire_sessions: usize, expire_cache: usize, max_response_size: u64)
+    pub fn new(url: &str, expire_sessions: usize, expire_cache: usize)
                -> Result<Store, &'static str> {
 
         match redis::Client::open(url) {
@@ -21,7 +20,6 @@ impl Store {
                 client: client,
                 expire_sessions: expire_sessions,
                 expire_cache: expire_cache,
-                max_response_size: max_response_size,
             }),
         }
     }

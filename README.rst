@@ -82,14 +82,13 @@ keytext         BROKER_KEYTEXT       (none)
 
 **[redis] section:**
 
-================== ========================= ================
-``config.toml``    Environment Variable       Default
-================== ========================= ================
-url                BROKER_REDIS_URL          (none)
-session_ttl        BROKER_SESSION_TTL        900 (15 minutes)
-cache_ttl          BROKER_CACHE_TTL          3600 (1 hour)
-cache_max_doc_size BROKER_CACHE_MAX_DOC_SIZE 8096 (8 KiB)
-================== ========================= ================
+=============== ==================== ================
+``config.toml`` Environment Variable Default
+=============== ==================== ================
+url             BROKER_REDIS_URL     (none)
+session_ttl     BROKER_SESSION_TTL   900 (15 minutes)
+cache_ttl       BROKER_CACHE_TTL     3600 (1 hour)
+=============== ==================== ================
 
 **[smtp] section:**
 

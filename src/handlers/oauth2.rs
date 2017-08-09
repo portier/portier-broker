@@ -27,7 +27,7 @@ pub fn callback(service: &Service, req: Request, shared_ctx: ContextHandle) -> H
             Box::new(future::ok(res))
         },
         Method::Post => {
-            let f = http::parse_form_encoded_body(req);
+            let f = http::parse_form_encoded_body(req.body());
 
             let app = service.app.clone();
             let f = f.and_then(move |mut params| {

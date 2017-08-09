@@ -203,7 +203,6 @@ pub struct ConfigBuilder {
     pub redis_url: Option<String>,
     pub redis_session_ttl: u16,
     pub redis_cache_ttl: u16,
-    pub redis_cache_max_doc_size: u16,
     pub from_name: String,
     pub from_address: Option<String>,
     pub smtp_server: Option<String>,
@@ -274,7 +273,6 @@ impl ConfigBuilder {
             redis_url: None,
             redis_session_ttl: 900,
             redis_cache_ttl: 3600,
-            redis_cache_max_doc_size: 8096,
             from_name: "Portier".to_string(),
             from_address: None,
             smtp_username: None,
@@ -316,7 +314,6 @@ impl ConfigBuilder {
             self.redis_url = table.url.or_else(|| self.redis_url.clone());
             if let Some(val) = table.session_ttl { self.redis_session_ttl = val; }
             if let Some(val) = table.cache_ttl { self.redis_cache_ttl = val; }
-            if let Some(val) = table.cache_max_doc_size { self.redis_cache_max_doc_size = val; }
         }
 
         if let Some(table) = toml_config.smtp {
@@ -389,7 +386,6 @@ impl ConfigBuilder {
         if let Some(val) = env_config.broker_redis_url { self.redis_url = Some(val); }
         if let Some(val) = env_config.broker_session_ttl { self.redis_session_ttl = val; }
         if let Some(val) = env_config.broker_cache_ttl { self.redis_cache_ttl = val; }
-        if let Some(val) = env_config.broker_cache_max_doc_size { self.redis_cache_max_doc_size = val; }
 
         if let Some(val) = env_config.broker_from_name { self.from_name = val; }
         if let Some(val) = env_config.broker_from_address { self.from_address = Some(val); }
@@ -436,7 +432,6 @@ impl ConfigBuilder {
             &self.redis_url.expect("no redis url configured"),
             self.redis_cache_ttl as usize,
             self.redis_session_ttl as usize,
-            self.redis_cache_max_doc_size as u64,
         ).expect("unable to instantiate new redis store");
 
         let http_connector = HttpsConnector::new(4, handle)
@@ -527,7 +522,6 @@ struct TomlRedisTable {
     url: Option<String>,
     session_ttl: Option<u16>,
     cache_ttl: Option<u16>,
-    cache_max_doc_size: Option<u16>,
 }
 
 #[derive(Clone,Debug,Deserialize)]
@@ -572,7 +566,6 @@ struct EnvConfig {
     broker_redis_url: Option<String>,
     broker_session_ttl: Option<u16>,
     broker_cache_ttl: Option<u16>,
-    broker_cache_max_doc_size: Option<u16>,
     broker_from_name: Option<String>,
     broker_from_address: Option<String>,
     broker_smtp_server: Option<String>,
@@ -607,7 +600,6 @@ impl EnvConfig {
             broker_redis_url: env::var("BROKER_REDIS_URL").ok(),
             broker_session_ttl: env::var("BROKER_SESSION_TTL").ok().and_then(|x| x.parse().ok()),
             broker_cache_ttl: env::var("BROKER_CACHE_TTL").ok().and_then(|x| x.parse().ok()),
-            broker_cache_max_doc_size: env::var("BROKER_CACHE_MAX_DOC_SIZE").ok().and_then(|x| x.parse().ok()),
 
             broker_from_name: env::var("BROKER_FROM_NAME").ok(),
             broker_from_address: env::var("BROKER_FROM_ADDRESS").ok(),

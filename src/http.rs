@@ -4,7 +4,7 @@ use futures::future::{self, Future, FutureResult};
 use futures::Stream;
 use gettext::Catalog;
 use handlers::return_to_relier;
-use hyper::{StatusCode, Error as HyperError};
+use hyper::{Body, Chunk, StatusCode, Error as HyperError};
 use hyper::header::{AcceptLanguage, ContentType, StrictTransportSecurity, CacheControl, CacheDirective};
 use hyper::server::{Request, Response, Service as HyperService};
 use hyper_staticfile::Static;
@@ -260,12 +260,23 @@ pub fn parse_query(req: &Request) -> HashMap<String, String> {
 }
 
 
+/// Read the request or response body up to a fixed size.
+pub fn read_body(body: Body) -> BoxFuture<Chunk, BrokerError> {
+    let f = body.fold(Chunk::default(), move |mut acc, chunk| {
+        if acc.len() + chunk.len() > 8096 {
+            future::err(HyperError::TooLarge)
+        } else {
+            acc.extend(chunk);
+            future::ok(acc)
+        }
+    });
+    Box::new(f.map_err(|err| err.into()))
+}
+
+
 /// Parse the request form-encoded body into a `HashMap`.
-pub fn parse_form_encoded_body(req: Request) -> BoxFuture<HashMap<String, String>, BrokerError> {
-    let f = req.body().concat2()
-        .map_err(|err| err.into())
-        .map(|chunk| parse_form_encoded(&chunk));
-    Box::new(f)
+pub fn parse_form_encoded_body(body: Body) -> BoxFuture<HashMap<String, String>, BrokerError> {
+    Box::new(read_body(body).map(|chunk| parse_form_encoded(&chunk)))
 }
 
 
