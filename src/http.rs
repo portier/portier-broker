@@ -262,7 +262,7 @@ pub fn parse_query(req: &Request) -> HashMap<String, String> {
 
 /// Read the request or response body up to a fixed size.
 pub fn read_body(body: Body) -> BoxFuture<Chunk, BrokerError> {
-    let f = body.fold(Chunk::default(), move |mut acc, chunk| {
+    let f = body.fold(Chunk::default(), |mut acc, chunk| {
         if acc.len() + chunk.len() > 8096 {
             future::err(HyperError::TooLarge)
         } else {

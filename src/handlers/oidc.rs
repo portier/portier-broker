@@ -101,7 +101,7 @@ pub fn auth(service: &Service, req: Request, ctx: ContextHandle) -> HandlerResul
         future::result(result)
     });
 
-    let f = f.and_then(move |vars| {
+    let f = f.and_then( |vars| {
         // Enforce ratelimit based on the login_hint
         let result = {
             let (ref app, _, _, _, _, ref login_hint, _) = vars;
@@ -114,7 +114,7 @@ pub fn auth(service: &Service, req: Request, ctx: ContextHandle) -> HandlerResul
         }
     });
 
-    let f = f.and_then(move |(app, ctx, client_id, redirect_uri, nonce, _, email_addr)|
+    let f = f.and_then(|(app, ctx, client_id, redirect_uri, nonce, _, email_addr)|
                        -> Box<Future<Item=Response, Error=BrokerError>> {
         if app.providers.contains_key(&email_addr.domain.to_lowercase()) {
             // OIDC authentication. Redirect to the identity provider.

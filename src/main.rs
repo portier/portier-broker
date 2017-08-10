@@ -130,7 +130,7 @@ fn main() {
     info!("Listening on http://{}", addr);
 
     let proto = Http::new();
-    let server = listener.incoming().for_each(move |(sock, addr)| {
+    let server = listener.incoming().for_each(|(sock, addr)| {
         let res_path = Path::new("./res/");
         let s = http::Service::new(&handle, &app, router, res_path);
         proto.bind_connection(&handle, sock, addr, s);
