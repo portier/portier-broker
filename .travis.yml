@@ -12,6 +12,8 @@ script:
 
 matrix:
     fast_finish: true
+    allow_failures:
+        - rust: nightly
     # I'd love to just use travis-cargo for all this, but it's broken:
     # https://github.com/huonw/travis-cargo/pull/58
     include:
