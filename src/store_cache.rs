@@ -65,6 +65,7 @@ pub fn fetch_json_url(app: &Rc<Config>, url: &str, key: &CacheKey)
 
             // Receive the body.
             http::read_body(res.body())
+                .map_err(|err| err.into())
                 .map(move |chunk| (app, chunk, max_age))
         });
 

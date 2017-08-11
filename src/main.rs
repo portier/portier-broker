@@ -60,7 +60,8 @@ fn router(req: &Request) -> Option<http::Handler> {
         (&Method::Get, "/auth") | (&Method::Post, "/auth") => handlers::oidc::auth,
 
         // OpenID Connect relying party endpoints
-        (&Method::Get, "/callback") | (&Method::Post, "/callback") => handlers::oauth2::callback,
+        (&Method::Get, "/callback") => handlers::oauth2::fragment_callback,
+        (&Method::Post, "/callback") => handlers::oauth2::callback,
 
         // Lastly, fall back to trying to serve static files out of ./res/
         _ => return None,

@@ -4,40 +4,31 @@ use email_bridge;
 use error::BrokerError;
 use futures::future::{self, Future};
 use handlers::return_to_relier;
-use http::{self, Service, ContextHandle, HandlerResult};
-use hyper::server::Request;
+use http::{ContextHandle, HandlerResult};
 
 
 /// Request handler for one-time pad email loop confirmation.
 ///
 /// Retrieves the session based session ID and the expected one-time pad.
 /// Verify the code and return the resulting token or error to the RP.
-pub fn confirmation(service: &Service, req: Request, shared_ctx: ContextHandle) -> HandlerResult {
-    let mut params = http::parse_query(&req);
+pub fn confirmation(ctx_handle: ContextHandle) -> HandlerResult {
+    let mut ctx = ctx_handle.borrow_mut();
 
-    let f = future::ok(());
+    let session_id = try_get_param!(ctx, "session");
+    let stored = match ctx.app.store.get_session("email", &session_id) {
+        Ok(stored) => stored,
+        Err(err) => return Box::new(future::err(err)),
+    };
+    let redirect_uri = stored["redirect"].parse().expect("unable to parse stored redirect uri");
+    ctx.redirect_uri = Some(redirect_uri);
 
-    let app = service.app.clone();
-    let f = f.and_then(move |_| {
-        let session_id = try_get_param!(params, "session");
-        let code = try_get_param!(params, "code");
+    let code = try_get_param!(ctx, "code");
+    let f = email_bridge::verify(ctx.app.clone(), &stored, &code);
 
-        let result = app.store.get_session("email", &session_id);
-        future::result(result.map(|stored| (app, stored, code)))
-    });
-
-    let ctx = shared_ctx.clone();
-    let f = f.and_then(move |(app, stored, code)| {
-        ctx.borrow_mut().redirect_uri = Some(
-            stored["redirect"].parse().expect("unable to parse stored redirect uri"));
-
-        email_bridge::verify(app.clone(), &stored, &code)
-            .map(move |jwt| (app, ctx, jwt))
-    });
-
-    let f = f.and_then(|(app, ctx, jwt)| {
-        let ctx = ctx.borrow();
-        return_to_relier(&*app, &ctx, &[("id_token", &jwt)])
+    let ctx_handle = ctx_handle.clone();
+    let f = f.and_then(move |jwt| {
+        let ctx = ctx_handle.borrow();
+        return_to_relier(&*ctx, &[("id_token", &jwt)])
     });
 
     Box::new(f)

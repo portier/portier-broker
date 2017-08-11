@@ -4,11 +4,11 @@ use futures::future::{self, Future, FutureResult};
 use futures::Stream;
 use gettext::Catalog;
 use handlers::return_to_relier;
-use hyper::{Body, Chunk, StatusCode, Error as HyperError};
+use hyper::{Method, Body, Chunk, StatusCode, Error as HyperError};
 use hyper::header::{AcceptLanguage, ContentType, StrictTransportSecurity, CacheControl, CacheDirective};
 use hyper::server::{Request, Response, Service as HyperService};
 use hyper_staticfile::Static;
-use std::cell::{RefCell, Ref};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
@@ -31,6 +31,10 @@ pub type BoxFuture<T, E> = Box<Future<Item=T, Error=E>>;
 
 /// Additional context for a request
 pub struct Context {
+    /// The application configuration
+    pub app: Rc<Config>,
+    /// Request parameters, from the query or body
+    pub params: HashMap<String, String>,
     /// Index into the config catalogs of the language to use
     pub catalog_idx: usize,
     /// Redirect URI of the relying party
@@ -39,8 +43,8 @@ pub struct Context {
 
 impl Context {
     /// Get a reference to the language catalog to use
-    pub fn catalog<'a>(&self, app: &'a Config) -> &'a Catalog {
-        &app.i18n.catalogs[self.catalog_idx].1
+    pub fn catalog(&self) -> &Catalog {
+        &self.app.i18n.catalogs[self.catalog_idx].1
     }
 }
 
@@ -50,7 +54,7 @@ pub type ContextHandle = Rc<RefCell<Context>>;
 /// Result type of handlers
 pub type HandlerResult = BoxFuture<Response, BrokerError>;
 /// Handler function type
-pub type Handler = fn(&Service, Request, ContextHandle) -> HandlerResult;
+pub type Handler = fn(ContextHandle) -> HandlerResult;
 /// Router function type
 pub type Router = fn(&Request) -> Option<Handler>;
 
@@ -58,7 +62,7 @@ pub type Router = fn(&Request) -> Option<Handler>;
 // HTTP service
 pub struct Service {
     /// The application configuration
-    pub app: Rc<Config>,
+    app: Rc<Config>,
     /// The routing function
     router: Router,
     /// The static file serving service
@@ -90,33 +94,45 @@ impl HyperService for Service {
             None => return self.static_.call(req),
         };
 
-        // Determine the language catalog to use.
-        let mut catalog_idx = 0;
-        if let Some(&AcceptLanguage(ref list)) = req.headers().get() {
-            for entry in list {
-                for (idx, &(ref tag, _)) in self.app.i18n.catalogs.iter().enumerate() {
-                    if tag.matches(&entry.item) {
-                        catalog_idx = idx;
-                        break;
+        // Parse request parameters.
+        let (method, uri, _, headers, body) = req.deconstruct();
+        let f = match method {
+            Method::Get => Box::new(future::ok(parse_query(uri.query()))),
+            Method::Post => parse_form_encoded_body(body),
+            _ => unreachable!(),
+        };
+
+        let app = self.app.clone();
+        let f = f.and_then(move |params| {
+            // Determine the language catalog to use.
+            let mut catalog_idx = 0;
+            if let Some(&AcceptLanguage(ref list)) = headers.get() {
+                for entry in list {
+                    for (idx, &(ref tag, _)) in app.i18n.catalogs.iter().enumerate() {
+                        if tag.matches(&entry.item) {
+                            catalog_idx = idx;
+                            break;
+                        }
                     }
                 }
             }
-        }
 
-        // Create the request context.
-        let ctx = Rc::new(RefCell::new(Context {
-            catalog_idx: catalog_idx,
-            redirect_uri: None,
-        }));
+            // Create the request context.
+            let ctx_handle = Rc::new(RefCell::new(Context {
+                app: app,
+                params: params,
+                catalog_idx: catalog_idx,
+                redirect_uri: None,
+            }));
 
-        // Call the route handler.
-        let f = handler(self, req, ctx.clone());
+            // Call the route handler.
+            let f = handler(ctx_handle.clone());
 
-        // Handle errors.
-        let app = self.app.clone();
-        let f = f.or_else(move |err| {
-            let ctx = ctx.borrow();
-            handle_error(&*app, &ctx, err)
+            // Handle errors.
+            f.or_else(move |err| {
+                let ctx = ctx_handle.borrow();
+                handle_error(&*ctx, err)
+            })
         });
 
         // Set common headers.
@@ -148,7 +164,7 @@ impl HyperService for Service {
 ///
 /// The large match-statement below handles all these scenario's properly, and
 /// sets proper response codes for each category.
-fn handle_error(app: &Config, ctx: &Ref<Context>, err: BrokerError) -> FutureResult<Response, HyperError> {
+fn handle_error(ctx: &Context, err: BrokerError) -> FutureResult<Response, HyperError> {
     match (err, ctx.redirect_uri.as_ref()) {
         (BrokerError::RateLimited, _) => {
             let res = Response::new()
@@ -158,7 +174,7 @@ fn handle_error(app: &Config, ctx: &Ref<Context>, err: BrokerError) -> FutureRes
             future::ok(res)
         },
         (err @ BrokerError::Input(_), Some(_)) => {
-            return_to_relier(app, ctx, &[
+            return_to_relier(ctx, &[
                 ("error", "invalid_request"),
                 ("error_description", err.description()),
             ])
@@ -167,14 +183,14 @@ fn handle_error(app: &Config, ctx: &Ref<Context>, err: BrokerError) -> FutureRes
             let res = Response::new()
                 .with_status(StatusCode::BadRequest)
                 .with_header(ContentType::html())
-                .with_body(app.templates.error.render(&[
+                .with_body(ctx.app.templates.error.render(&[
                     ("error", err.description()),
                 ]));
             future::ok(res)
         },
         (err @ BrokerError::Provider(_), Some(_)) => {
             error!("{}", err);
-            return_to_relier(app, ctx, &[
+            return_to_relier(ctx, &[
                 ("error", "temporarily_unavailable"),
                 ("error_description", &err.description().to_string()),
             ])
@@ -184,14 +200,14 @@ fn handle_error(app: &Config, ctx: &Ref<Context>, err: BrokerError) -> FutureRes
             let res = Response::new()
                 .with_status(StatusCode::ServiceUnavailable)
                 .with_header(ContentType::html())
-                .with_body(app.templates.error.render(&[
+                .with_body(ctx.app.templates.error.render(&[
                     ("error", &err.description().to_string()),
                 ]));
             future::ok(res)
         },
         (err, Some(_)) => {
             error!("{}", err);
-            return_to_relier(app, ctx, &[
+            return_to_relier(ctx, &[
                 ("error", "server_error"),
             ])
         },
@@ -200,7 +216,7 @@ fn handle_error(app: &Config, ctx: &Ref<Context>, err: BrokerError) -> FutureRes
             let res = Response::new()
                 .with_status(StatusCode::InternalServerError)
                 .with_header(ContentType::html())
-                .with_body(app.templates.error.render(&[
+                .with_body(ctx.app.templates.error.render(&[
                     ("error", "internal server error"),
                 ]));
             future::ok(res)
@@ -251,8 +267,8 @@ pub fn parse_form_encoded(input: &[u8]) -> HashMap<String, String> {
 
 
 /// Parse the request query string into a `HashMap`.
-pub fn parse_query(req: &Request) -> HashMap<String, String> {
-    if let Some(query) = req.query() {
+pub fn parse_query(query: Option<&str>) -> HashMap<String, String> {
+    if let Some(query) = query {
         parse_form_encoded(query.as_bytes())
     } else {
         HashMap::new()
@@ -261,21 +277,21 @@ pub fn parse_query(req: &Request) -> HashMap<String, String> {
 
 
 /// Read the request or response body up to a fixed size.
-pub fn read_body(body: Body) -> BoxFuture<Chunk, BrokerError> {
-    let f = body.fold(Chunk::default(), |mut acc, chunk| {
+pub fn read_body(body: Body) -> BoxFuture<Chunk, HyperError> {
+    Box::new(body.fold(Chunk::default(), |mut acc, chunk| {
         if acc.len() + chunk.len() > 8096 {
+            // TODO: Is this the right thing to do?
             future::err(HyperError::TooLarge)
         } else {
             acc.extend(chunk);
             future::ok(acc)
         }
-    });
-    Box::new(f.map_err(|err| err.into()))
+    }))
 }
 
 
 /// Parse the request form-encoded body into a `HashMap`.
-pub fn parse_form_encoded_body(body: Body) -> BoxFuture<HashMap<String, String>, BrokerError> {
+pub fn parse_form_encoded_body(body: Body) -> BoxFuture<HashMap<String, String>, HyperError> {
     Box::new(read_body(body).map(|chunk| parse_form_encoded(&chunk)))
 }
 

@@ -1,4 +1,3 @@
-use config::Config;
 use futures::future::{self, FutureResult};
 use http::Context;
 use hyper::header::{ContentType, CacheControl, CacheDirective};
@@ -6,7 +5,6 @@ use hyper::server::Response;
 use mustache;
 use serde_json::value::Value;
 use serde_json;
-use std::cell::Ref;
 
 
 /// Macro used to extract a parameter from a `QueryMap`.
@@ -15,20 +13,19 @@ use std::cell::Ref;
 /// the parameter is missing and has no default.
 ///
 /// ```
-/// let foo = try_get_param!(params, "foo");
-/// let foo = try_get_param!(params, "foo", "default");
+/// let foo = try_get_param!(ctx, "foo");
+/// let foo = try_get_param!(ctx, "foo", "default");
 /// ```
 macro_rules! try_get_param {
-    ( $params:expr , $key:tt ) => {
-        match $params.remove($key) {
+    ( $ctx:expr , $key:tt ) => {
+        match $ctx.params.remove($key) {
             Some(value) => value,
-            None => return future::err(
-                BrokerError::Input(concat!("missing request parameter ", $key).to_string())
-            ),
+            None => return Box::new(future::err(BrokerError::Input(
+                concat!("missing request parameter ", $key).to_string()))),
         }
     };
-    ( $params:expr , $key:tt, $default:expr ) => {
-        $params.remove($key).unwrap_or($default)
+    ( $ctx:expr , $key:tt , $default:expr ) => {
+        $ctx.params.remove($key).unwrap_or($default)
     };
 }
 
@@ -40,7 +37,7 @@ macro_rules! try_get_param {
 /// RP's `redirect_uri` as soon as the page has loaded.
 ///
 /// The return value is a tuple of response modifiers.
-pub fn return_to_relier<E>(app: &Config, ctx: &Ref<Context>, params: &[(&str, &str)]) -> FutureResult<Response, E> {
+pub fn return_to_relier<E>(ctx: &Context, params: &[(&str, &str)]) -> FutureResult<Response, E> {
     let redirect_uri = ctx.redirect_uri.as_ref()
         .expect("return_to_relier called without redirect_uri set");
 
@@ -59,7 +56,7 @@ pub fn return_to_relier<E>(app: &Config, ctx: &Ref<Context>, params: &[(&str, &s
 
     let res = Response::new()
         .with_header(ContentType::html())
-        .with_body(app.templates.forward.render_data(&data));
+        .with_body(ctx.app.templates.forward.render_data(&data));
     future::ok(res)
 }
 

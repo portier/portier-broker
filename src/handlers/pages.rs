@@ -1,13 +1,13 @@
 use futures::future;
-use http::{Service, ContextHandle, HandlerResult};
+use http::{ContextHandle, HandlerResult};
 use hyper::{StatusCode};
 use hyper::header::{ContentType, Location};
-use hyper::server::{Request, Response};
+use hyper::server::Response;
 use std::env;
 
 
 /// Handler for the root path, redirects to the Portier homepage.
-pub fn index(_: &Service, _: Request, _: ContextHandle) -> HandlerResult {
+pub fn index(_: ContextHandle) -> HandlerResult {
     let res = Response::new()
         .with_status(StatusCode::SeeOther)
         .with_header(Location::new("https://portier.github.io"));
@@ -16,7 +16,7 @@ pub fn index(_: &Service, _: Request, _: ContextHandle) -> HandlerResult {
 
 
 /// Version information for the broker
-pub fn version(_: &Service, _: Request, _: ContextHandle) -> HandlerResult {
+pub fn version(_: ContextHandle) -> HandlerResult {
     // TODO: Find a more robust way of detecting the git commit.
     // Maybe check/set it in build.rs? Fall back to HEROKU_SLUG_COMMIT?
     let version = env!("CARGO_PKG_VERSION");
