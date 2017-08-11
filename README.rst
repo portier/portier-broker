@@ -116,7 +116,6 @@ per_email       BROKER_LIMIT_PER_EMAIL "5/min"
 ``config.toml`` Environment Variable   Default
 =============== ====================== ==============================================================
 client_id       BROKER_GMAIL_CLIENT    (none)
-secret          BROKER_GMAIL_SECRET    (none)
 discovery_url   BROKER_GMAIL_DISCOVERY "https://accounts.google.com/.well-known/openid-configuration"
 issuer_domain   BROKER_GMAIL_ISSUER    "accounts.google.com"
 =============== ====================== ==============================================================
@@ -138,7 +137,6 @@ To support in-browser Google Authentication for Gmail users, you must also
 specify:
 
 * ``providers."gmail.com".client_id``: Your Google OAuth API Client ID
-* ``providers."gmail.com".secret``: Your Google OAuth API Secret Key
 
 You can create encryption keys with ``openssl genrsa 4096 > private.pem``
 

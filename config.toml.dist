@@ -58,8 +58,6 @@ per_email = "5/min"
 [providers."gmail.com"]
 # Google OAuth API Client ID - Default: (none)
 client_id =
-# Google OAuth API Secret Key - Default: (none)
-secret =
 # Google OpenID Connect discovery URL - Default: "https://accounts.google.com/.well-known/openid-configuration"
 discovery_url = "https://accounts.google.com/.well-known/openid-configuration"
 # Google OpenID Connect id_token issuer domain - Default: "accounts.google.com"

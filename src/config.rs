@@ -158,7 +158,6 @@ impl Default for I18n {
 
 pub struct Provider {
     pub client_id: String,
-    pub secret: String,
     pub discovery_url: String,
     pub issuer_domain: String,
 }
@@ -216,7 +215,6 @@ pub struct ConfigBuilder {
 #[derive(Clone, Debug, Default)]
 pub struct ProviderBuilder {
     pub client_id: Option<String>,
-    pub secret: Option<String>,
     pub discovery_url: Option<String>,
     pub issuer_domain: Option<String>,
 }
@@ -226,7 +224,6 @@ impl ProviderBuilder {
     pub fn new() -> ProviderBuilder {
         ProviderBuilder {
             client_id: None,
-            secret: None,
             discovery_url: None,
             issuer_domain: None,
         }
@@ -235,18 +232,16 @@ impl ProviderBuilder {
     pub fn new_gmail() -> ProviderBuilder {
         ProviderBuilder {
             client_id: None,
-            secret: None,
             discovery_url: Some("https://accounts.google.com/.well-known/openid-configuration".to_string()),
             issuer_domain: Some("accounts.google.com".to_string()),
         }
     }
 
     pub fn done(self) -> Option<Provider> {
-        match (self.client_id, self.secret, self.discovery_url, self.issuer_domain) {
-            (Some(id), Some(secret), Some(url), Some(iss)) => {
+        match (self.client_id, self.discovery_url, self.issuer_domain) {
+            (Some(id), Some(url), Some(iss)) => {
                 Some(Provider {
                     client_id: id,
-                    secret: secret,
                     discovery_url: url,
                     issuer_domain: iss,
                 })
@@ -337,7 +332,6 @@ impl ConfigBuilder {
                     });
 
                 if values.client_id.is_some() { provider.client_id = values.client_id; }
-                if values.secret.is_some() { provider.secret = values.secret; }
                 if values.discovery_url.is_some() { provider.discovery_url = values.discovery_url; }
                 if values.issuer_domain.is_some() { provider.issuer_domain = values.issuer_domain; }
             }
@@ -400,7 +394,6 @@ impl ConfigBuilder {
             let mut gmail_provider = self.providers.entry("gmail.com".to_string())
                 .or_insert_with(ProviderBuilder::new_gmail);
 
-            if let Some(val) = env_config.broker_gmail_secret { gmail_provider.secret = Some(val); }
             if let Some(val) = env_config.broker_gmail_client { gmail_provider.client_id = Some(val); }
             if let Some(val) = env_config.broker_gmail_discovery { gmail_provider.discovery_url = Some(val); }
             if let Some(val) = env_config.broker_gmail_issuer { gmail_provider.issuer_domain = Some(val); }
@@ -541,7 +534,6 @@ struct TomlLimitTable {
 #[derive(Clone,Debug,Deserialize)]
 struct TomlProviderTable {
     client_id: Option<String>,
-    secret: Option<String>,
     discovery_url: Option<String>,
     issuer_domain: Option<String>,
 }
@@ -573,7 +565,6 @@ struct EnvConfig {
     broker_smtp_password: Option<String>,
     broker_limit_per_email: Option<String>,
     broker_gmail_client: Option<String>,
-    broker_gmail_secret: Option<String>,
     broker_gmail_discovery: Option<String>,
     broker_gmail_issuer: Option<String>,
 }
@@ -610,7 +601,6 @@ impl EnvConfig {
             broker_limit_per_email: env::var("BROKER_LIMIT_PER_EMAIL").ok(),
 
             broker_gmail_client: env::var("BROKER_GMAIL_CLIENT").ok(),
-            broker_gmail_secret: env::var("BROKER_GMAIL_SECRET").ok(),
             broker_gmail_discovery: env::var("BROKER_GMAIL_DISCOVERY").ok(),
             broker_gmail_issuer: env::var("BROKER_GMAIL_ISSUER").ok(),
         }
