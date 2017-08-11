@@ -13,7 +13,7 @@ use oidc_bridge;
 /// After the user allows or denies the Authentication Request with the famous
 /// identity provider, they will be redirected back to the callback handler.
 ///
-/// For providers that don't support `response_type=form_post`, we capture the
+/// For providers that don't support `response_mode=form_post`, we capture the
 /// fragment parameters in javascript and emulate the POST request.
 ///
 /// Once we have a POST request, we can verify the callback data and return the
