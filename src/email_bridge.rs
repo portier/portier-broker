@@ -1,6 +1,6 @@
 use config::{Config};
 use crypto;
-use emailaddress::EmailAddress;
+use email_address::EmailAddress;
 use error::BrokerError;
 use futures::{Future, future};
 use gettext::Catalog;
@@ -45,11 +45,11 @@ pub fn request(app: Rc<Config>, email_addr: &EmailAddress, client_id: &str, nonc
     // the generated link.
     if let Err(err) = app.store.store_session(&session, &[
         ("type", "email"),
-        ("email", &email_addr.to_string()),
+        ("email", email_addr.as_str()),
         ("client_id", client_id),
         ("nonce", nonce),
         ("code", &chars),
-        ("redirect", &redirect_uri.to_string()),
+        ("redirect", redirect_uri.as_str()),
     ]) {
         return Box::new(future::err(err));
     }
@@ -70,7 +70,7 @@ pub fn request(app: Rc<Config>, email_addr: &EmailAddress, client_id: &str, nonc
         ("alternate", catalog.gettext("Alternatively, enter the following code on the login page:")),
     ];
     let email = EmailBuilder::new()
-        .to(email_addr.to_string().as_str())
+        .to(email_addr.as_str())
         .from((&*app.from_address, &*app.from_name))
         .alternative(&app.templates.email_html.render(params),
                      &app.templates.email_text.render(params))
@@ -107,8 +107,8 @@ pub fn verify(app: Rc<Config>, stored: &HashMap<String, String>, code: &str)
         return Box::new(future::err(BrokerError::Input("incorrect code".to_string())));
     }
 
-    let email = &stored["email"];
+    let email = EmailAddress::from_trusted(&stored["email"]);
     let client_id = &stored["client_id"];
     let nonce = &stored["nonce"];
-    Box::new(future::ok(crypto::create_jwt(&*app, email, client_id, nonce)))
+    Box::new(future::ok(crypto::create_jwt(&*app, &email, client_id, nonce)))
 }

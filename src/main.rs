@@ -1,5 +1,4 @@
 extern crate docopt;
-extern crate emailaddress;
 extern crate env_logger;
 extern crate futures;
 extern crate gettext;
@@ -7,6 +6,7 @@ extern crate gettext;
 extern crate hyper;
 extern crate hyper_staticfile;
 extern crate hyper_tls;
+extern crate idna;
 extern crate lettre;
 #[macro_use]
 extern crate log;
@@ -27,6 +27,7 @@ extern crate url;
 
 mod config;
 mod crypto;
+mod email_address;
 mod email_bridge;
 mod error;
 mod handlers;

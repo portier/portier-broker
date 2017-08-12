@@ -1,4 +1,3 @@
-use emailaddress;
 use hyper::Error as HyperError;
 use lettre::transport::smtp::error::Error as MailError;
 use redis::RedisError;
@@ -75,12 +74,6 @@ impl From<BrokerError> for String {
 impl From<ValidationError> for BrokerError {
     fn from(err: ValidationError) -> BrokerError {
         BrokerError::Input(format!("{}", err))
-    }
-}
-
-impl From<emailaddress::AddrError> for BrokerError {
-    fn from(err: emailaddress::AddrError) -> BrokerError {
-        BrokerError::Custom(format!("unable to parse email address: {}", err.description()).to_string())
     }
 }
 

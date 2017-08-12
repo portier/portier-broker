@@ -1,5 +1,5 @@
 use email_bridge;
-use emailaddress::EmailAddress;
+use email_address::EmailAddress;
 use error::BrokerError;
 use futures::future::{self, Future};
 use handlers::json_response;
@@ -98,20 +98,20 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
             "unsupported response_type, only id_token is supported".to_string())));
     }
 
-    let email_addr = match EmailAddress::new(&login_hint) {
+    let email_addr: EmailAddress = match login_hint.parse() {
         Ok(addr) => addr,
         Err(_) => return Box::new(future::err(BrokerError::Input(
             "login_hint is not a valid email address".to_string()))),
     };
 
     // Enforce ratelimit based on the login_hint
-    match addr_limiter(&ctx.app.store, &login_hint, &ctx.app.limit_per_email) {
+    match addr_limiter(&ctx.app.store, email_addr.as_str(), &ctx.app.limit_per_email) {
         Err(err) => return Box::new(future::err(err)),
         Ok(false) => return Box::new(future::err(BrokerError::RateLimited)),
         _ => {},
     }
 
-    if ctx.app.providers.contains_key(&email_addr.domain.to_lowercase()) {
+    if ctx.app.providers.contains_key(email_addr.domain()) {
         // OIDC authentication. Redirect to the identity provider.
         let f = oidc_bridge::request(ctx.app.clone(), email_addr, &client_id, &nonce, &redirect_uri)
             .map(|auth_url| {

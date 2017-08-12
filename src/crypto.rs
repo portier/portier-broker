@@ -1,5 +1,5 @@
 use config::Config;
-use emailaddress::EmailAddress;
+use email_address::EmailAddress;
 use openssl::bn::{BigNum, BigNumRef};
 use openssl::error::ErrorStack as SslErrorStack;
 use openssl::hash::{Hasher, MessageDigest};
@@ -138,7 +138,7 @@ pub fn session_id(email: &EmailAddress, client_id: &str) -> String {
 
     let mut hasher = Hasher::new(MessageDigest::sha256())
         .expect("couldn't initialize SHA256 hasher");
-    hasher.update(email.to_string().as_bytes())
+    hasher.update(email.as_str().as_bytes())
         .and_then(|_| hasher.update(client_id.as_bytes()))
         .and_then(|_| hasher.update(&rand_bytes))
         .and_then(|_| hasher.finish2())
@@ -217,16 +217,16 @@ pub fn verify_jws(jws: &str, key_set: &Value) -> Result<Value, ()> {
 ///
 /// Builds the JSON payload, then signs it using the last key provided in
 /// the configuration object.
-pub fn create_jwt(app: &Config, email: &str, origin: &str, nonce: &str) -> String {
+pub fn create_jwt(app: &Config, email: &EmailAddress, origin: &str, nonce: &str) -> String {
     let now = now_utc().to_timespec().sec;
     let payload = json!({
         "aud": origin,
-        "email": email,
-        "email_verified": email,
+        "email": email.as_str(),
+        "email_verified": email.as_str(),
         "exp": now + app.token_ttl as i64,
         "iat": now,
         "iss": &app.public_url,
-        "sub": email,
+        "sub": email.as_str(),
         "nonce": nonce,
     });
     let key = app.keys.last().expect("unable to locate signing key");

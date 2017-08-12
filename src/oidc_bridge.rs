@@ -1,6 +1,6 @@
 use config::Config;
 use crypto;
-use emailaddress::EmailAddress;
+use email_address::EmailAddress;
 use error::BrokerError;
 use futures::{Future, future};
 use std::collections::HashMap;
@@ -57,37 +57,39 @@ pub fn request(app: Rc<Config>, email_addr: EmailAddress, client_id: &str, nonce
     // callback handler.
     let f = future::result(app.store.store_session(&session, &[
         ("type", "oidc"),
-        ("email", &email_addr.to_string()),
+        ("email", email_addr.as_str()),
         ("client_id", client_id),
         ("nonce", nonce),
         ("provider_nonce", &provider_nonce),
-        ("redirect", &redirect_uri.to_string()),
+        ("redirect", redirect_uri.as_str()),
     ]));
 
     // Retrieve the provider's Discovery document and extract the
     // `authorization_endpoint` from it.
-    let app = app.clone();
+    let app2 = app.clone();
+    let email_addr = Rc::new(email_addr);
+    let email_addr2 = email_addr.clone();
+    let email_addr3 = email_addr.clone();
     let f = f.and_then(move |_| {
-        let domain = Rc::new(email_addr.domain.to_lowercase());
-        let domain2 = domain.clone();
         {
-            let provider = &app.providers[&*domain];
-            fetch_json_url(&app, &provider.discovery_url, &CacheKey::Discovery { domain: &*domain })
+            let domain = email_addr2.domain();
+            let provider = &app2.providers[domain];
+            fetch_json_url(&app2, &provider.discovery_url, &CacheKey::Discovery { domain })
         }
             .map_err(move |e| {
                 BrokerError::Provider(format!("could not fetch {}'s discovery document: {}",
-                                              domain2, e.description()))
+                                              email_addr3.domain(), e.description()))
             })
             .and_then(move |config_obj| {
-                let descr = format!("{}'s discovery document", domain);
+                let descr = format!("{}'s discovery document", email_addr2.domain());
                 let authz_base = try_get_json_field!(config_obj, "authorization_endpoint", descr);
-                future::ok((app, email_addr, domain, authz_base))
+                future::ok(authz_base)
             })
     });
 
     // Create the URL to redirect to, properly escaping all parameters.
-    let f = f.and_then(move |(app, email_addr, domain, authz_base)| {
-        let provider = &app.providers[&*domain];
+    let f = f.and_then(move |authz_base| {
+        let provider = &app.providers[email_addr.domain()];
         let result = Url::parse(&vec![
             authz_base.as_str(),
             "?",
@@ -104,44 +106,15 @@ pub fn request(app: Rc<Config>, email_addr: EmailAddress, client_id: &str, nonce
             "&nonce=",
             &utf8_percent_encode(&provider_nonce, QUERY_ENCODE_SET).to_string(),
             "&login_hint=",
-            &utf8_percent_encode(&email_addr.to_string(), QUERY_ENCODE_SET).to_string(),
+            &utf8_percent_encode(email_addr.as_str(), QUERY_ENCODE_SET).to_string(),
         ].join("")).map_err(|_| {
+            let domain = email_addr.domain();
             BrokerError::Provider(format!("failed to build valid authorization URL from {}'s 'authorization_endpoint'", domain))
         });
         future::result(result)
     });
 
     Box::new(f)
-}
-
-pub fn canonicalize_google(email: &str) -> String {
-    let at = email.find('@').expect("no @ sign in email address");
-    let (user, domain) = email.split_at(at);
-    let domain = &domain[1..];
-    let user = &user.replace(".", ""); // Ignore dots
-
-    // Trim plus addresses
-    let user = match user.find('+') {
-        Some(pos) => user.split_at(pos).0,
-        None => user,
-    };
-
-    // Normalize googlemail.com to gmail.com
-    let domain = if domain == "googlemail.com" {
-        "gmail.com"
-    } else {
-        domain
-    };
-    user.to_string() + "@" + domain
-}
-
-pub fn canonicalized(email: &str) -> String {
-    let normalized = email.to_lowercase();
-    if normalized.ends_with("@gmail.com") || normalized.ends_with("@googlemail.com") {
-        canonicalize_google(&normalized)
-    } else {
-        normalized
-    }
 }
 
 /// Helper method to verify OAuth authentication result.
@@ -152,49 +125,52 @@ pub fn canonicalized(email: &str) -> String {
 pub fn verify(app: Rc<Config>, stored: HashMap<String, String>, id_token: String)
               -> Box<Future<Item=String, Error=BrokerError>> {
 
-    let email_addr = match EmailAddress::new(&stored["email"]) {
-        Ok(addr) => addr,
-        Err(e) => return Box::new(future::err(e.into())),
-    };
+    let email_addr = Rc::new(EmailAddress::from_trusted(&stored["email"]));
 
     // Request the provider's Discovery document to get the `jwks_uri` values from it.
-    let app = app.clone();
-    let domain = Rc::new(email_addr.domain.to_lowercase());
-    let domain2 = domain.clone();
+    let app2 = app.clone();
+    let email_addr2 = email_addr.clone();
+    let email_addr3 = email_addr.clone();
     let f = {
-        let provider = &app.providers[&*domain];
-        fetch_json_url(&app, &provider.discovery_url, &CacheKey::Discovery { domain: &*domain })
+        let domain = email_addr2.domain();
+        let provider = &app2.providers[domain];
+        fetch_json_url(&app2, &provider.discovery_url, &CacheKey::Discovery { domain })
     }
         .map_err(move |e| {
             BrokerError::Provider(format!("could not fetch {}'s discovery document: {}",
-                                          domain2, e.description()))
+                                          email_addr3.domain(), e.description()))
         })
         .and_then(move |config_obj| {
-            let descr = format!("{}'s discovery document", domain);
+            let descr = format!("{}'s discovery document", email_addr2.domain());
             let jwks_url = try_get_json_field!(config_obj, "jwks_uri", descr);
-            future::ok((app, domain, jwks_url))
+            future::ok(jwks_url)
         });
 
     // Grab the keys from the provider, then verify the signature.
-    let f = f.and_then(|(app, domain, jwks_url)| {
-        let domain2 = domain.clone();
-        fetch_json_url(&app, &jwks_url, &CacheKey::KeySet { domain: &*domain })
+    let app2 = app.clone();
+    let email_addr2 = email_addr.clone();
+    let email_addr3 = email_addr.clone();
+    let f = f.and_then(move |jwks_url| {
+        {
+            let domain = email_addr2.domain();
+            fetch_json_url(&app2, &jwks_url, &CacheKey::KeySet { domain })
+        }
             .map_err(move |e| {
                 BrokerError::Provider(format!("could not fetch {}'s keys: {}",
-                                              domain2, e.description()))
+                                              email_addr3.domain(), e.description()))
             })
             .and_then(move |keys_obj| {
-                let result = crypto::verify_jws(&id_token, &keys_obj)
-                    .map_err(|_| BrokerError::Provider(
-                        format!("could not verify the token received from {}", domain)))
-                    .map(|jwt_payload| (app, domain, jwt_payload));
-                future::result(result)
+                match crypto::verify_jws(&id_token, &keys_obj) {
+                    Err(_) => future::err(BrokerError::Provider(
+                        format!("could not verify the token received from {}", email_addr2.domain()))),
+                    Ok(jwt_payload) => future::ok(jwt_payload),
+                }
             })
     });
 
-    let str_email_addr = email_addr.to_string();
-    let f = f.and_then(move |(app, domain, jwt_payload)| {
-        let provider = &app.providers[&*domain];
+    let f = f.and_then(move |jwt_payload| {
+        let domain = email_addr.domain();
+        let provider = &app.providers[domain];
 
         // Verify the claims contained in the token.
         let descr = format!("{}'s token payload", domain);
@@ -204,46 +180,22 @@ pub fn verify(app: Rc<Config>, stored: HashMap<String, String>, id_token: String
         let exp = try_get_json_field!(jwt_payload, "exp", |v| v.as_i64(), descr);
         let nonce = try_get_json_field!(jwt_payload, "nonce", descr);
         let issuer_origin = vec!["https://", &provider.issuer_domain].join("");
+        // TODO: Turn these into provider errors.
+        let token_addr: EmailAddress = token_addr.parse()
+            .expect("failed to parse provider token email address");
         assert!(iss == provider.issuer_domain || iss == issuer_origin);
         assert_eq!(aud, provider.client_id);
-        assert_eq!(canonicalized(&token_addr), canonicalized(&str_email_addr));
+        // TODO: This normalization is here because we currently support only Google.
+        // Eventually, we'd only do this when Google is explicitely selected.
+        assert_eq!(token_addr.normalize_google(), email_addr.normalize_google());
         let now = now_utc().to_timespec().sec;
         assert!(now < exp);
         assert_eq!(nonce, stored["provider_nonce"]);
 
         // If everything is okay, build a new identity token and send it
         // to the relying party.
-        future::ok(crypto::create_jwt(&*app, &str_email_addr, &stored["client_id"], &stored["nonce"]))
+        future::ok(crypto::create_jwt(&*app, &*email_addr, &stored["client_id"], &stored["nonce"]))
     });
 
     Box::new(f)
-}
-
-
-#[cfg(test)]
-mod tests {
-    use super::canonicalized;
-    #[test]
-    fn test_canonicalized_google() {
-        assert_eq!(canonicalized("example.foo+bar@example.com"),
-                   "example.foo+bar@example.com");
-        assert_eq!(canonicalized("example@gmail.com"),
-                   "example@gmail.com");
-        assert_eq!(canonicalized("example@googlemail.com"),
-                   "example@gmail.com");
-        assert_eq!(canonicalized("example.foo@gmail.com"),
-                   "examplefoo@gmail.com");
-        assert_eq!(canonicalized("example+bar@gmail.com"),
-                   "example@gmail.com");
-        assert_eq!(canonicalized("example.foo+bar@googlemail.com"),
-                   "examplefoo@gmail.com");
-    }
-
-    #[test]
-    fn test_canonicalized_casing() {
-        assert_eq!(canonicalized("EXAMPLE.FOO+BAR@EXAMPLE.COM"),
-                   "example.foo+bar@example.com");
-        assert_eq!(canonicalized("EXAMPLE@GOOGLEMAIL.COM"),
-                   "example@gmail.com");
-    }
 }

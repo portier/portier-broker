@@ -3,7 +3,6 @@ name = "portier_broker"
 version = "0.1.0"
 dependencies = [
  "docopt 0.6.86 (registry+https://github.com/rust-lang/crates.io-index)",
- "emailaddress 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "gettext 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -11,6 +10,7 @@ dependencies = [
  "hyper 0.11.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "hyper-staticfile 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "hyper-tls 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "idna 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "lettre 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "mustache 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -177,11 +177,6 @@ dependencies = [
  "rustc_version 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "time 0.1.38 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
-
-[[package]]
-name = "emailaddress"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "encoding"
@@ -992,7 +987,6 @@ dependencies = [
 "checksum docopt 0.6.86 (registry+https://github.com/rust-lang/crates.io-index)" = "4a7ef30445607f6fc8720f0a0a2c7442284b629cf0d049286860fae23e71c4d9"
 "checksum dtoa 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)" = "80c8b71fd71146990a9742fc06dcbbde19161a267e0ad4e572c35162f4578c90"
 "checksum email 0.0.17 (registry+https://github.com/rust-lang/crates.io-index)" = "88560dfb4e8eb3403e6402dfed790d0ef1c16f6d9f80028243a4f09826772f4f"
-"checksum emailaddress 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "9a621dc14b6dc6f847ef83ee630672d4b46c2d6df96d2e108b27343329684a44"
 "checksum encoding 0.2.33 (registry+https://github.com/rust-lang/crates.io-index)" = "6b0d943856b990d12d3b55b359144ff341533e516d94098b1d3fc1ac666d36ec"
 "checksum encoding-index-japanese 1.20141219.5 (registry+https://github.com/rust-lang/crates.io-index)" = "04e8b2ff42e9a05335dbf8b5c6f7567e5591d0d916ccef4e0b1710d32a0d0c91"
 "checksum encoding-index-korean 1.20141219.5 (registry+https://github.com/rust-lang/crates.io-index)" = "4dc33fb8e6bcba213fe2f14275f0963fd16f0a02c878e3095ecfdf5bee529d81"
