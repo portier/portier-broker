@@ -8,8 +8,7 @@ use openssl::pkey::PKey;
 use openssl::sign::{Signer, Verifier};
 use rand::{OsRng, Rng};
 use rustc_serialize::base64::{self, FromBase64, ToBase64};
-use serde_json::de::from_slice;
-use serde_json::value::Value;
+use serde_json as json;
 use std::fs::File;
 use std::io::{Read, Error as IoError};
 use time::now_utc;
@@ -83,7 +82,7 @@ impl NamedKey {
     }
 
     /// Create a JSON Web Signature (JWS) for the given JSON structure.
-    pub fn sign_jws(&self, payload: &Value) -> String {
+    pub fn sign_jws(&self, payload: &json::Value) -> String {
         let header = json!({
             "kid": &self.id,
             "alg": "RS256",
@@ -107,7 +106,7 @@ impl NamedKey {
     }
 
     /// Return JSON represenation of the public key for use in JWK key sets.
-    pub fn public_jwk(&self) -> Value {
+    pub fn public_jwk(&self) -> json::Value {
         fn json_big_num(n: &BigNumRef) -> String {
             n.to_vec().to_base64(base64::URL_SAFE)
         }
@@ -158,14 +157,14 @@ pub fn nonce() -> String {
 ///
 /// Searches the provided JWK Key Set Value for the key matching the given
 /// id. Returns a usable public key if exactly one key is found.
-pub fn jwk_key_set_find(set: &Value, kid: &str) -> Result<PKey, ()> {
+pub fn jwk_key_set_find(set: &json::Value, kid: &str) -> Result<PKey, ()> {
     let key_objs = set.get("keys").and_then(|v| v.as_array()).ok_or(())?;
     let matching = key_objs.iter()
         .filter(|key_obj| {
             key_obj.get("kid").and_then(|v| v.as_str()) == Some(kid) &&
             key_obj.get("use").and_then(|v| v.as_str()) == Some("sig")
         })
-        .collect::<Vec<&Value>>();
+        .collect::<Vec<&json::Value>>();
 
     // Verify that we found exactly one key matching the key ID.
     if matching.len() != 1 {
@@ -185,7 +184,7 @@ pub fn jwk_key_set_find(set: &Value, kid: &str) -> Result<PKey, ()> {
 
 
 /// Verify a JWS signature, returning the payload as Value if successful.
-pub fn verify_jws(jws: &str, key_set: &Value) -> Result<Value, ()> {
+pub fn verify_jws(jws: &str, key_set: &json::Value) -> Result<json::Value, ()> {
     // Extract the header from the JWT structure. Determine what key was used
     // to sign the token, so we can then verify the signature.
     let parts: Vec<&str> = jws.split('.').collect();
@@ -193,8 +192,8 @@ pub fn verify_jws(jws: &str, key_set: &Value) -> Result<Value, ()> {
         return Err(());
     }
     let decoded = parts.iter().map(|s| s.from_base64())
-                    .collect::<Result<Vec<_>, _>>().map_err(|_| ())?;
-    let jwt_header: Value = from_slice(&decoded[0]).map_err(|_| ())?;
+        .collect::<Result<Vec<_>, _>>().map_err(|_| ())?;
+    let jwt_header: json::Value = json::from_slice(&decoded[0]).map_err(|_| ())?;
     let kid = jwt_header.get("kid").and_then(|v| v.as_str()).ok_or(())?;
     let pub_key = jwk_key_set_find(key_set, kid)?;
 
@@ -206,7 +205,7 @@ pub fn verify_jws(jws: &str, key_set: &Value) -> Result<Value, ()> {
         .map_err(|_| ())
         .and_then(|ok| {
             if ok {
-                Ok(from_slice(&decoded[1]).map_err(|_| ())?)
+                Ok(json::from_slice(&decoded[1]).map_err(|_| ())?)
             } else {
                 Err(())
             }

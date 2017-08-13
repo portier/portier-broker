@@ -16,7 +16,6 @@ use std;
 use store;
 use store_limits::Ratelimit;
 use tokio_core::reactor::Handle;
-
 use toml;
 
 
@@ -282,7 +281,7 @@ impl ConfigBuilder {
         let mut file = File::open(path)?;
         let mut file_contents = String::new();
         file.read_to_string(&mut file_contents)?;
-        let toml_config = toml::from_str::<TomlConfig>(&file_contents)?;
+        let toml_config: TomlConfig = toml::from_str(&file_contents)?;
 
         if let Some(table) = toml_config.server {
             if let Some(val) = table.listen_ip { self.listen_ip = val; }

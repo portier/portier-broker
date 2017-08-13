@@ -3,8 +3,7 @@ use http::Context;
 use hyper::header::{ContentType, CacheControl, CacheDirective};
 use hyper::server::Response;
 use mustache;
-use serde_json::value::Value;
-use serde_json;
+use serde_json as json;
 
 
 /// Macro used to extract a parameter from a `QueryMap`.
@@ -65,8 +64,8 @@ pub fn return_to_relier<E>(ctx: &Context, params: &[(&str, &str)]) -> FutureResu
 ///
 /// Serializes the argument value to JSON and returns a HTTP 200 response
 /// code with the serialized JSON as the body.
-pub fn json_response<E>(obj: &Value, max_age: u32) -> FutureResult<Response, E> {
-    let body = serde_json::to_string(&obj).expect("unable to coerce JSON Value into string");
+pub fn json_response<E>(obj: &json::Value, max_age: u32) -> FutureResult<Response, E> {
+    let body = json::to_string(&obj).expect("unable to coerce JSON Value into string");
     let res = Response::new()
         .with_header(ContentType::json())
         .with_header(CacheControl(vec![

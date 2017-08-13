@@ -4,8 +4,7 @@ use config::Config;
 use http;
 use hyper::header::{CacheControl, CacheDirective};
 use redis::Commands;
-use serde_json::de::from_str;
-use serde_json::value::Value;
+use serde_json as json;
 use std::cmp::max;
 use std::rc::Rc;
 use std::str::from_utf8;
@@ -35,7 +34,7 @@ impl<'a> CacheKey<'a> {
 /// cache is stored in `app.store` with `key`. The `client` is used to make the HTTP GET request,
 /// if necessary.
 pub fn fetch_json_url(app: &Rc<Config>, url: &str, key: &CacheKey)
-                      -> Box<Future<Item=Value, Error=BrokerError>> {
+                      -> Box<Future<Item=json::Value, Error=BrokerError>> {
 
     // Try to retrieve the result from cache.
     let key_str = key.to_string();
@@ -87,7 +86,7 @@ pub fn fetch_json_url(app: &Rc<Config>, url: &str, key: &CacheKey)
     };
 
     let f = f.and_then(|data| {
-        future::result(from_str(&data).map_err(|_| {
+        future::result(json::from_str(&data).map_err(|_| {
             BrokerError::Custom("failed to parse response as JSON".to_string())
         }))
     });
