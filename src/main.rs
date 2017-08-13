@@ -1,3 +1,4 @@
+extern crate base64;
 extern crate docopt;
 extern crate env_logger;
 extern crate futures;
@@ -14,7 +15,6 @@ extern crate mustache;
 extern crate openssl;
 extern crate rand;
 extern crate redis;
-extern crate rustc_serialize;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
@@ -38,7 +38,6 @@ mod store_cache;
 mod store_limits;
 mod validation;
 
-use docopt::Docopt;
 use futures::Stream;
 use hyper::Method;
 use hyper::server::{Http, Request};
@@ -92,7 +91,7 @@ Options:
 
 
 /// Holds parsed command line parameters.
-#[derive(RustcDecodable)]
+#[derive(Deserialize)]
 #[allow(non_snake_case)]
 struct Args {
     arg_CONFIG: Option<String>,
@@ -104,17 +103,18 @@ fn main() {
     if let Err(err) = env_logger::init() {
         panic!(format!("failed to initialize logger: {}", err));
     }
-    let args: Args = Docopt::new(USAGE)
-                         .and_then(|d| d.version(Some(VERSION.to_string())).decode())
-                         .unwrap_or_else(|e| e.exit());
+    let args: Args = docopt::Docopt::new(USAGE)
+        .map(|docopt| docopt.version(Some(VERSION.to_owned())))
+        .and_then(|docopt| docopt.deserialize())
+        .unwrap_or_else(|e| e.exit());
 
     let mut core = tokio_core::reactor::Core::new()
         .expect("Could not start the event loop");
     let handle = core.handle();
 
     let mut builder = config::ConfigBuilder::new();
-    if let Some(path) = args.arg_CONFIG {
-        builder.update_from_file(&path).unwrap_or_else(|err| {
+    if let Some(ref path) = args.arg_CONFIG {
+        builder.update_from_file(path).unwrap_or_else(|err| {
             panic!(format!("failed to read config file: {}", err))
         });
     }

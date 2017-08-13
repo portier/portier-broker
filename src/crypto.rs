@@ -1,3 +1,4 @@
+use base64;
 use config::Config;
 use email_address::EmailAddress;
 use openssl::bn::{BigNum, BigNumRef};
@@ -7,7 +8,6 @@ use openssl::rsa::Rsa;
 use openssl::pkey::PKey;
 use openssl::sign::{Signer, Verifier};
 use rand::{OsRng, Rng};
-use rustc_serialize::base64::{self, FromBase64, ToBase64};
 use serde_json as json;
 use std::fs::File;
 use std::io::{Read, Error as IoError};
@@ -71,11 +71,11 @@ impl NamedKey {
             let e = rsa.e().ok_or(CryptoError::Custom("unable to retrieve key's e value"))?;
             let n = rsa.n().ok_or(CryptoError::Custom("unable to retrieve key's n value"))?;
             let mut hasher = Hasher::new(MessageDigest::sha256())?;
-            hasher.update(&e.to_vec())
+            let hash = hasher.update(&e.to_vec())
                 .and_then(|_| hasher.update(b"."))
                 .and_then(|_| hasher.update(&n.to_vec()))
-                .and_then(|_| hasher.finish2())?
-                .to_base64(base64::URL_SAFE)
+                .and_then(|_| hasher.finish2())?;
+            base64url_encode(&hash)
         };
         let key = PKey::from_rsa(rsa)?;
         Ok(NamedKey { id, key })
@@ -90,9 +90,9 @@ impl NamedKey {
 
         let payload = payload.to_string();
         let mut input = Vec::<u8>::new();
-        input.extend(header.as_bytes().to_base64(base64::URL_SAFE).into_bytes());
+        input.extend(base64url_encode(&header).into_bytes());
         input.push(b'.');
-        input.extend(payload.as_bytes().to_base64(base64::URL_SAFE).into_bytes());
+        input.extend(base64url_encode(&payload).into_bytes());
 
         let mut signer = Signer::new(MessageDigest::sha256(), &self.key)
             .expect("could not initialize signer");
@@ -101,14 +101,14 @@ impl NamedKey {
             .expect("failed to sign jwt");
 
         input.push(b'.');
-        input.extend(sig.to_base64(base64::URL_SAFE).into_bytes());
+        input.extend(base64url_encode(&sig).into_bytes());
         String::from_utf8(input).expect("unable to coerce jwt into string")
     }
 
     /// Return JSON represenation of the public key for use in JWK key sets.
     pub fn public_jwk(&self) -> json::Value {
         fn json_big_num(n: &BigNumRef) -> String {
-            n.to_vec().to_base64(base64::URL_SAFE)
+            base64url_encode(&n.to_vec())
         }
 
         let rsa = self.key.rsa().expect("unable to retrieve rsa key");
@@ -137,19 +137,19 @@ pub fn session_id(email: &EmailAddress, client_id: &str) -> String {
 
     let mut hasher = Hasher::new(MessageDigest::sha256())
         .expect("couldn't initialize SHA256 hasher");
-    hasher.update(email.as_str().as_bytes())
+    let hash = hasher.update(email.as_str().as_bytes())
         .and_then(|_| hasher.update(client_id.as_bytes()))
         .and_then(|_| hasher.update(&rand_bytes))
         .and_then(|_| hasher.finish2())
-        .expect("session hashing failed")
-        .to_base64(base64::URL_SAFE)
+        .expect("session hashing failed");
+    base64url_encode(&hash)
 }
 
 
 pub fn nonce() -> String {
     let mut rng = OsRng::new().expect("unable to create rng");
     let rand_bytes: Vec<u8> = (0..16).map(|_| rng.gen()).collect();
-    rand_bytes.to_base64(base64::URL_SAFE)
+    base64url_encode(&rand_bytes)
 }
 
 
@@ -173,10 +173,10 @@ pub fn jwk_key_set_find(set: &json::Value, kid: &str) -> Result<PKey, ()> {
 
     // Then, use the data to build a public key object for verification.
     let n = matching[0].get("n").and_then(|v| v.as_str()).ok_or(())
-                .and_then(|data| data.from_base64().map_err(|_| ()))
+                .and_then(|data| base64url_decode(data))
                 .and_then(|data| BigNum::from_slice(&data).map_err(|_| ()))?;
     let e = matching[0].get("e").and_then(|v| v.as_str()).ok_or(())
-                .and_then(|data| data.from_base64().map_err(|_| ()))
+                .and_then(|data| base64url_decode(data))
                 .and_then(|data| BigNum::from_slice(&data).map_err(|_| ()))?;
     let rsa = Rsa::from_public_components(n, e).map_err(|_| ())?;
     Ok(PKey::from_rsa(rsa).map_err(|_| ())?)
@@ -191,8 +191,8 @@ pub fn verify_jws(jws: &str, key_set: &json::Value) -> Result<json::Value, ()> {
     if parts.len() != 3 {
         return Err(());
     }
-    let decoded = parts.iter().map(|s| s.from_base64())
-        .collect::<Result<Vec<_>, _>>().map_err(|_| ())?;
+    let decoded = parts.iter().map(|s| base64url_decode(s))
+        .collect::<Result<Vec<_>, _>>()?;
     let jwt_header: json::Value = json::from_slice(&decoded[0]).map_err(|_| ())?;
     let kid = jwt_header.get("kid").and_then(|v| v.as_str()).ok_or(())?;
     let pub_key = jwk_key_set_find(key_set, kid)?;
@@ -232,3 +232,13 @@ pub fn create_jwt(app: &Config, email: &EmailAddress, origin: &str, nonce: &str)
     key.sign_jws(&payload)
 }
 
+
+#[inline]
+fn base64url_encode<T: ?Sized + AsRef<[u8]>>(data: &T) -> String {
+    base64::encode_config(data, base64::URL_SAFE_NO_PAD)
+}
+
+#[inline]
+fn base64url_decode<T: ?Sized + AsRef<[u8]>>(data: &T) -> Result<Vec<u8>, ()> {
+    base64::decode_config(data, base64::URL_SAFE_NO_PAD).map_err(|_| ())
+}
