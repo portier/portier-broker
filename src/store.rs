@@ -35,15 +35,12 @@ impl Store {
         Ok(())
     }
 
-    pub fn get_session(&self, type_value: &str, session_id: &str)
+    pub fn get_session(&self, session_id: &str)
                        -> BrokerResult<HashMap<String, String>> {
         let key = Self::format_session_key(session_id);
         let stored: HashMap<String, String> = self.client.hgetall(&key)?;
         if stored.is_empty() {
             return Err(BrokerError::Input("session not found".to_string()));
-        }
-        if stored["type"] != type_value {
-            return Err(BrokerError::Input("invalid session".to_string()));
         }
         Ok(stored)
     }

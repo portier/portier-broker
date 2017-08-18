@@ -1,12 +1,14 @@
-use config::Config;
+use bridges::{GOOGLE_IDP_ORIGIN, Provider};
 use crypto;
 use email_address::EmailAddress;
 use error::BrokerError;
 use futures::{Future, future};
-use std::collections::HashMap;
+use http::{ContextHandle, HandlerResult};
+use hyper::{Response, StatusCode};
+use hyper::header::Location;
 use std::error::Error;
 use std::rc::Rc;
-use super::store_cache::{CacheKey, fetch_json_url};
+use store_cache::{CacheKey, fetch_json_url};
 use time::now_utc;
 use url::Url;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
@@ -45,64 +47,69 @@ macro_rules! try_get_json_field {
 /// user will be redirected back to after confirming (or denying) the
 /// Authentication Request. Included in the request is a nonce which we can
 /// later use to definitively match the callback to this request.
-pub fn request(app: Rc<Config>, email_addr: EmailAddress, client_id: &str, nonce: &str, redirect_uri: &Url)
-               -> Box<Future<Item=Url, Error=BrokerError>> {
+pub fn request(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>, provider: &Rc<Provider>)
+    -> HandlerResult {
 
-    let session = crypto::session_id(&email_addr, client_id);
+    let mut ctx = ctx_handle.borrow_mut();
+
+    // Determine the parameters to use with provider.
+    let (origin, client_id) = match **provider {
+        Provider::Portier { ref origin } => {
+            (origin.clone(), ctx.app.public_url.clone())
+        },
+        Provider::Google { ref client_id } => {
+            (GOOGLE_IDP_ORIGIN.to_owned(), client_id.clone())
+        },
+    };
 
     // Generate a nonce for the provider.
     let provider_nonce = crypto::nonce();
 
-    // Store the nonce and the RP's `redirect_uri` in Redis for use in the
-    // callback handler.
-    let f = future::result(app.store.store_session(&session, &[
-        ("type", "oidc"),
-        ("email", email_addr.as_str()),
-        ("client_id", client_id),
-        ("nonce", nonce),
-        ("provider_nonce", &provider_nonce),
-        ("redirect", redirect_uri.as_str()),
-    ]));
+    // Store the nonce in the session for use in the verify handler,
+    // and set the session type.
+    ctx.session.set("type", "oidc".to_owned());
+    ctx.session.set("provider_origin", origin);
+    ctx.session.set("provider_client_id", client_id);
+    ctx.session.set("provider_nonce", provider_nonce.clone());
 
     // Retrieve the provider's Discovery document and extract the
     // `authorization_endpoint` from it.
-    let app2 = app.clone();
-    let email_addr = Rc::new(email_addr);
+    let email_addr = email_addr.clone();
     let email_addr2 = email_addr.clone();
     let email_addr3 = email_addr.clone();
-    let f = f.and_then(move |_| {
-        {
-            let domain = email_addr2.domain();
-            let provider = &app2.providers[domain];
-            fetch_json_url(&app2, &provider.discovery_url, &CacheKey::Discovery { domain })
-        }
-            .map_err(move |e| {
-                BrokerError::Provider(format!("could not fetch {}'s discovery document: {}",
-                                              email_addr3.domain(), e.description()))
-            })
-            .and_then(move |config_obj| {
-                let descr = format!("{}'s discovery document", email_addr2.domain());
-                let authz_base = try_get_json_field!(config_obj, "authorization_endpoint", descr);
-                future::ok(authz_base)
-            })
-    });
+    let f = {
+        let origin = &ctx.session["provider_origin"];
+        let config_url = build_config_url(origin);
+        fetch_json_url(&ctx.app, &config_url, &CacheKey::OidcConfig { origin })
+    }
+        .map_err(move |e| {
+            BrokerError::Provider(format!("could not fetch {}'s discovery document: {}",
+                                            email_addr3.domain(), e.description()))
+        })
+        .and_then(move |config_obj| {
+            let descr = format!("{}'s discovery document", email_addr2.domain());
+            let authz_base = try_get_json_field!(config_obj, "authorization_endpoint", descr);
+            future::ok(authz_base)
+        });
 
     // Create the URL to redirect to, properly escaping all parameters.
+    let ctx_handle2 = ctx_handle.clone();
     let f = f.and_then(move |authz_base| {
-        let provider = &app.providers[email_addr.domain()];
+        let ctx = ctx_handle2.borrow();
+
         let result = Url::parse(&vec![
             authz_base.as_str(),
             "?",
             "client_id=",
-            &utf8_percent_encode(&provider.client_id, QUERY_ENCODE_SET).to_string(),
+            &utf8_percent_encode(&ctx.session["provider_client_id"], QUERY_ENCODE_SET).to_string(),
             "&response_type=id_token",
             "&scope=",
             &utf8_percent_encode("openid email", QUERY_ENCODE_SET).to_string(),
             "&redirect_uri=",
-            &utf8_percent_encode(&format!("{}/callback", &app.public_url),
+            &utf8_percent_encode(&format!("{}/callback", &ctx.app.public_url),
                                  QUERY_ENCODE_SET).to_string(),
             "&state=",
-            &utf8_percent_encode(&session, QUERY_ENCODE_SET).to_string(),
+            &utf8_percent_encode(&ctx.session.id, QUERY_ENCODE_SET).to_string(),
             "&nonce=",
             &utf8_percent_encode(&provider_nonce, QUERY_ENCODE_SET).to_string(),
             "&login_hint=",
@@ -114,6 +121,19 @@ pub fn request(app: Rc<Config>, email_addr: EmailAddress, client_id: &str, nonce
         future::result(result)
     });
 
+    let ctx_handle = ctx_handle.clone();
+    let f = f.and_then(move |auth_url| {
+        let ctx = ctx_handle.borrow();
+        if let Err(err) = ctx.save_session() {
+            return future::err(err);
+        }
+
+        let res = Response::new()
+            .with_status(StatusCode::SeeOther)
+            .with_header(Location::new(auth_url.into_string()));
+        future::ok(res)
+    });
+
     Box::new(f)
 }
 
@@ -122,19 +142,19 @@ pub fn request(app: Rc<Config>, email_addr: EmailAddress, client_id: &str, nonce
 /// Match the returned email address and nonce against our Redis data, then
 /// extract the identity token returned by the provider and verify it. Return
 /// an identity token for the RP if successful, or an error message otherwise.
-pub fn verify(app: Rc<Config>, stored: HashMap<String, String>, id_token: String)
+pub fn verify(ctx_handle: &ContextHandle, id_token: String)
               -> Box<Future<Item=String, Error=BrokerError>> {
 
-    let email_addr = Rc::new(EmailAddress::from_trusted(&stored["email"]));
+    let ctx = ctx_handle.borrow();
+    let email_addr = Rc::new(EmailAddress::from_trusted(&ctx.session["email"]));
 
     // Request the provider's Discovery document to get the `jwks_uri` values from it.
-    let app2 = app.clone();
     let email_addr2 = email_addr.clone();
     let email_addr3 = email_addr.clone();
     let f = {
-        let domain = email_addr2.domain();
-        let provider = &app2.providers[domain];
-        fetch_json_url(&app2, &provider.discovery_url, &CacheKey::Discovery { domain })
+        let origin = &ctx.session["provider_origin"];
+        let config_url = build_config_url(origin);
+        fetch_json_url(&ctx.app, &config_url, &CacheKey::OidcConfig { origin })
     }
         .map_err(move |e| {
             BrokerError::Provider(format!("could not fetch {}'s discovery document: {}",
@@ -143,17 +163,22 @@ pub fn verify(app: Rc<Config>, stored: HashMap<String, String>, id_token: String
         .and_then(move |config_obj| {
             let descr = format!("{}'s discovery document", email_addr2.domain());
             let jwks_url = try_get_json_field!(config_obj, "jwks_uri", descr);
-            future::ok(jwks_url)
+            match jwks_url.parse::<Url>() {
+                Ok(url) => future::ok(url),
+                Err(e) => future::err(BrokerError::Provider(
+                    format!("could not parse {}'s JWKs URI: {}", email_addr2.domain(), e.description()))),
+            }
         });
 
     // Grab the keys from the provider, then verify the signature.
-    let app2 = app.clone();
+    let ctx_handle2 = ctx_handle.clone();
     let email_addr2 = email_addr.clone();
     let email_addr3 = email_addr.clone();
     let f = f.and_then(move |jwks_url| {
+        let ctx = ctx_handle2.borrow();
         {
-            let domain = email_addr2.domain();
-            fetch_json_url(&app2, &jwks_url, &CacheKey::KeySet { domain })
+            let origin = &ctx.session["provider_origin"];
+            fetch_json_url(&ctx.app, &jwks_url, &CacheKey::OidcKeySet { origin })
         }
             .map_err(move |e| {
                 BrokerError::Provider(format!("could not fetch {}'s keys: {}",
@@ -168,9 +193,10 @@ pub fn verify(app: Rc<Config>, stored: HashMap<String, String>, id_token: String
             })
     });
 
+    let ctx_handle = ctx_handle.clone();
     let f = f.and_then(move |jwt_payload| {
+        let ctx = ctx_handle.borrow();
         let domain = email_addr.domain();
-        let provider = &app.providers[domain];
 
         // Verify the claims contained in the token.
         let descr = format!("{}'s token payload", domain);
@@ -179,23 +205,28 @@ pub fn verify(app: Rc<Config>, stored: HashMap<String, String>, id_token: String
         let token_addr = try_get_json_field!(jwt_payload, "email", descr);
         let exp = try_get_json_field!(jwt_payload, "exp", |v| v.as_i64(), descr);
         let nonce = try_get_json_field!(jwt_payload, "nonce", descr);
-        let issuer_origin = vec!["https://", &provider.issuer_domain].join("");
         // TODO: Turn these into provider errors.
         let token_addr: EmailAddress = token_addr.parse()
             .expect("failed to parse provider token email address");
-        assert!(iss == provider.issuer_domain || iss == issuer_origin);
-        assert_eq!(aud, provider.client_id);
+        assert_eq!(iss, ctx.session["provider_origin"]);
+        assert_eq!(aud, ctx.session["provider_client_id"]);
         // TODO: This normalization is here because we currently support only Google.
         // Eventually, we'd only do this when Google is explicitely selected.
         assert_eq!(token_addr.normalize_google(), email_addr.normalize_google());
         let now = now_utc().to_timespec().sec;
         assert!(now < exp);
-        assert_eq!(nonce, stored["provider_nonce"]);
+        assert_eq!(nonce, ctx.session["provider_nonce"]);
 
         // If everything is okay, build a new identity token and send it
         // to the relying party.
-        future::ok(crypto::create_jwt(&*app, &*email_addr, &stored["client_id"], &stored["nonce"]))
+        future::ok(crypto::create_jwt(&ctx.app, &*email_addr, &ctx.session["client_id"], &ctx.session["nonce"]))
     });
 
     Box::new(f)
+}
+
+/// Build the URL to the OpenID Connect configuration for an origin.
+fn build_config_url(origin: &str) -> Url {
+    format!("{}/.well-known/openid-configuration", origin).parse()
+        .expect("could not build the OpenID Connect configuration URL")
 }

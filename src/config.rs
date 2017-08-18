@@ -1,5 +1,6 @@
 #![allow(unknown_lints, cyclomatic_complexity)]
 
+use bridges::{GOOGLE_IDP_ENDPOINT, Provider};
 use crypto;
 use gettext::Catalog;
 use hyper;
@@ -13,10 +14,12 @@ use std::fmt::{self, Display};
 use std::fs::File;
 use std::io::Read;
 use std;
+use std::rc::Rc;
 use store;
 use store_limits::Ratelimit;
 use tokio_core::reactor::Handle;
 use toml;
+use url::Url;
 
 
 /// The type of HTTP client we use, with TLS enabled.
@@ -155,13 +158,6 @@ impl Default for I18n {
 }
 
 
-pub struct Provider {
-    pub client_id: String,
-    pub discovery_url: String,
-    pub issuer_domain: String,
-}
-
-
 pub struct Config {
     pub listen_ip: String,
     pub listen_port: u16,
@@ -180,13 +176,13 @@ pub struct Config {
     pub smtp_username: Option<String>,
     pub smtp_password: Option<String>,
     pub limit_per_email: Ratelimit,
-    pub providers: HashMap<String, Provider>,
+    pub domain_overrides: HashMap<String, Url>,
+    pub providers: HashMap<Url, Rc<Provider>>,
     pub templates: Templates,
     pub i18n: I18n,
 }
 
 
-#[derive(Clone, Debug, Default)]
 pub struct ConfigBuilder {
     pub listen_ip: String,
     pub listen_port: u16,
@@ -207,47 +203,8 @@ pub struct ConfigBuilder {
     pub smtp_username: Option<String>,
     pub smtp_password: Option<String>,
     pub limit_per_email: String,
-    pub providers: HashMap<String, ProviderBuilder>,
-}
-
-
-#[derive(Clone, Debug, Default)]
-pub struct ProviderBuilder {
-    pub client_id: Option<String>,
-    pub discovery_url: Option<String>,
-    pub issuer_domain: Option<String>,
-}
-
-
-impl ProviderBuilder {
-    pub fn new() -> ProviderBuilder {
-        ProviderBuilder {
-            client_id: None,
-            discovery_url: None,
-            issuer_domain: None,
-        }
-    }
-
-    pub fn new_gmail() -> ProviderBuilder {
-        ProviderBuilder {
-            client_id: None,
-            discovery_url: Some("https://accounts.google.com/.well-known/openid-configuration".to_string()),
-            issuer_domain: Some("accounts.google.com".to_string()),
-        }
-    }
-
-    pub fn done(self) -> Option<Provider> {
-        match (self.client_id, self.discovery_url, self.issuer_domain) {
-            (Some(id), Some(url), Some(iss)) => {
-                Some(Provider {
-                    client_id: id,
-                    discovery_url: url,
-                    issuer_domain: iss,
-                })
-            }
-            _ => None
-        }
-    }
+    pub domain_overrides: HashMap<String, String>,
+    pub providers: HashMap<String, Provider>,
 }
 
 
@@ -273,6 +230,7 @@ impl ConfigBuilder {
             smtp_password: None,
             smtp_server: None,
             limit_per_email: "5/min".to_string(),
+            domain_overrides: HashMap::new(),
             providers: HashMap::new(),
         }
     }
@@ -322,18 +280,16 @@ impl ConfigBuilder {
             if let Some(val) = table.per_email { self.limit_per_email = val; }
         }
 
-        if let Some(table) = toml_config.providers {
-            for (domain, values) in table {
-                let provider = self.providers.entry(domain.clone())
-                    .or_insert(match domain.as_str() {
-                        "gmail.com" => ProviderBuilder::new_gmail(),
-                        _ => ProviderBuilder::new(),
-                    });
-
-                if values.client_id.is_some() { provider.client_id = values.client_id; }
-                if values.discovery_url.is_some() { provider.discovery_url = values.discovery_url; }
-                if values.issuer_domain.is_some() { provider.issuer_domain = values.issuer_domain; }
+        if let Some(table) = toml_config.domain_overrides {
+            for (domain, endpoint) in table {
+                self.domain_overrides.insert(domain, endpoint);
             }
+        }
+
+        if let Some(table) = toml_config.google {
+            self.providers.insert(GOOGLE_IDP_ENDPOINT.to_owned(), Provider::Google {
+                client_id: table.client_id
+            });
         }
 
         Ok(self)
@@ -388,20 +344,14 @@ impl ConfigBuilder {
 
         if let Some(val) = env_config.broker_limit_per_email { self.limit_per_email = val; }
 
-        // New scope to avoid mutably borrowing `self` twice
-        {
-            let mut gmail_provider = self.providers.entry("gmail.com".to_string())
-                .or_insert_with(ProviderBuilder::new_gmail);
-
-            if let Some(val) = env_config.broker_gmail_client { gmail_provider.client_id = Some(val); }
-            if let Some(val) = env_config.broker_gmail_discovery { gmail_provider.discovery_url = Some(val); }
-            if let Some(val) = env_config.broker_gmail_issuer { gmail_provider.issuer_domain = Some(val); }
+        if let Some(client_id) = env_config.broker_google_client_id {
+            self.providers.insert(GOOGLE_IDP_ENDPOINT.to_owned(), Provider::Google { client_id });
         }
 
         self
     }
 
-    pub fn done(self, handle: &Handle) -> Result<Config, ConfigError> {
+    pub fn done(mut self, handle: &Handle) -> Result<Config, ConfigError> {
         // Additional validations
         if self.smtp_username.is_none() != self.smtp_password.is_none() {
             return Err(ConfigError::Custom(
@@ -442,11 +392,22 @@ impl ConfigBuilder {
             }
         };
 
+        // Configure default domain mappings for hosted Google
+        let mut domain_overrides = HashMap::new();
+        if self.providers.contains_key(GOOGLE_IDP_ENDPOINT) {
+            self.domain_overrides.insert("gmail.com".to_owned(), GOOGLE_IDP_ENDPOINT.to_owned());
+            self.domain_overrides.insert("googlemail.com".to_owned(), GOOGLE_IDP_ENDPOINT.to_owned());
+        }
+
         let mut providers = HashMap::new();
-        for (domain, builder) in self.providers {
-            if let Some(provider) = builder.done() {
-                providers.insert(domain.clone(), provider);
-            }
+        for (endpoint, provider) in self.providers {
+            let endpoint = endpoint.parse().expect("could not parse provider URL");
+            providers.insert(endpoint, Rc::new(provider));
+        }
+
+        for (domain, endpoint) in self.domain_overrides {
+            domain_overrides.insert(domain, endpoint.parse()
+                .expect("could not parse domain mapping URL"));
         }
 
         Ok(Config {
@@ -467,6 +428,7 @@ impl ConfigBuilder {
             smtp_username: self.smtp_username,
             smtp_password: self.smtp_password,
             limit_per_email: ratelimit,
+            domain_overrides: domain_overrides,
             providers: providers,
             templates: Templates::default(),
             i18n: I18n::default(),
@@ -484,7 +446,8 @@ struct TomlConfig {
     redis: Option<TomlRedisTable>,
     smtp: Option<TomlSmtpTable>,
     limit: Option<TomlLimitTable>,
-    providers: Option<HashMap<String, TomlProviderTable>>,
+    domain_overrides: Option<HashMap<String, String>>,
+    google: Option<TomlGoogleTable>,
 }
 
 #[derive(Clone,Debug,Deserialize)]
@@ -531,10 +494,8 @@ struct TomlLimitTable {
 }
 
 #[derive(Clone,Debug,Deserialize)]
-struct TomlProviderTable {
-    client_id: Option<String>,
-    discovery_url: Option<String>,
-    issuer_domain: Option<String>,
+struct TomlGoogleTable {
+    client_id: String,
 }
 
 
@@ -563,9 +524,7 @@ struct EnvConfig {
     broker_smtp_username: Option<String>,
     broker_smtp_password: Option<String>,
     broker_limit_per_email: Option<String>,
-    broker_gmail_client: Option<String>,
-    broker_gmail_discovery: Option<String>,
-    broker_gmail_issuer: Option<String>,
+    broker_google_client_id: Option<String>,
 }
 
 impl EnvConfig {
@@ -599,9 +558,7 @@ impl EnvConfig {
 
             broker_limit_per_email: env::var("BROKER_LIMIT_PER_EMAIL").ok(),
 
-            broker_gmail_client: env::var("BROKER_GMAIL_CLIENT").ok(),
-            broker_gmail_discovery: env::var("BROKER_GMAIL_DISCOVERY").ok(),
-            broker_gmail_issuer: env::var("BROKER_GMAIL_ISSUER").ok(),
+            broker_google_client_id: env::var("BROKER_GOOGLE_CLIENT_ID").ok(),
         }
     }
 }

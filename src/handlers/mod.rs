@@ -77,8 +77,7 @@ pub fn json_response<E>(obj: &json::Value, max_age: u32) -> FutureResult<Respons
 }
 
 
-pub mod pages;
-pub mod oidc;
-pub mod oauth2;
+pub mod auth;
 pub mod email;
-
+pub mod oidc;
+pub mod pages;

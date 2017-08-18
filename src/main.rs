@@ -25,18 +25,18 @@ extern crate tokio_core;
 extern crate toml;
 extern crate url;
 
+mod bridges;
 mod config;
 mod crypto;
 mod email_address;
-mod email_bridge;
 mod error;
 mod handlers;
 mod http;
-mod oidc_bridge;
 mod store;
 mod store_cache;
 mod store_limits;
 mod validation;
+mod webfinger;
 
 use futures::Stream;
 use hyper::Method;
@@ -49,19 +49,21 @@ use std::rc::Rc;
 /// Route the request, returning a handler
 fn router(req: &Request) -> Option<http::Handler> {
     Some(match (req.method(), req.path()) {
-        // Human-targeted endpoints
-        (&Method::Get, "/") => handlers::pages::index,
-        (&Method::Get, "/ver.txt") => handlers::pages::version,
+        // Relying party endpoints
+        (&Method::Get, "/.well-known/openid-configuration") => handlers::auth::discovery,
+        (&Method::Get, "/keys.json") => handlers::auth::key_set,
+        (&Method::Get, "/auth") | (&Method::Post, "/auth") => handlers::auth::auth,
+
+        // Identity provider endpoints
+        (&Method::Get, "/callback") => handlers::oidc::fragment_callback,
+        (&Method::Post, "/callback") => handlers::oidc::callback,
+
+        // Email loop endpoints
         (&Method::Get, "/confirm") => handlers::email::confirmation,
 
-        // OpenID Connect provider endpoints
-        (&Method::Get, "/.well-known/openid-configuration") => handlers::oidc::discovery,
-        (&Method::Get, "/keys.json") => handlers::oidc::key_set,
-        (&Method::Get, "/auth") | (&Method::Post, "/auth") => handlers::oidc::auth,
-
-        // OpenID Connect relying party endpoints
-        (&Method::Get, "/callback") => handlers::oauth2::fragment_callback,
-        (&Method::Post, "/callback") => handlers::oauth2::callback,
+        // Misc endpoints
+        (&Method::Get, "/") => handlers::pages::index,
+        (&Method::Get, "/ver.txt") => handlers::pages::version,
 
         // Lastly, fall back to trying to serve static files out of ./res/
         _ => return None,

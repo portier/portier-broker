@@ -1,5 +1,5 @@
 use config::Config;
-use error::BrokerError;
+use error::{BrokerError, BrokerResult};
 use futures::future::{self, Future, FutureResult};
 use futures::Stream;
 use gettext::Catalog;
@@ -11,6 +11,7 @@ use hyper_staticfile::Static;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::error::Error;
+use std::ops::Index;
 use std::path::PathBuf;
 use std::rc::Rc;
 use tokio_core::reactor::Handle;
@@ -29,12 +30,35 @@ header! { (XFrameOptions, "X-Frame-Options") => [String] }
 pub type BoxFuture<T, E> = Box<Future<Item=T, Error=E>>;
 
 
-/// Additional context for a request
+/// Generic session storage
+#[derive(Default)]
+pub struct Session {
+    pub id: String,
+    pub data: HashMap<String, String>,
+}
+
+impl Session {
+    pub fn set(&mut self, key: &str, value: String) {
+        self.data.insert(key.to_owned(), value);
+    }
+}
+
+impl<'a> Index<&'a str> for Session {
+    type Output = String;
+    fn index(&self, index: &str) -> &String {
+        &self.data[index]
+    }
+}
+
+
+/// Context for a request
 pub struct Context {
     /// The application configuration
     pub app: Rc<Config>,
     /// Request parameters, from the query or body
     pub params: HashMap<String, String>,
+    /// Session data (must be explicitely loaded)
+    pub session: Session,
     /// Index into the config catalogs of the language to use
     pub catalog_idx: usize,
     /// Redirect URI of the relying party
@@ -45,6 +69,25 @@ impl Context {
     /// Get a reference to the language catalog to use
     pub fn catalog(&self) -> &Catalog {
         &self.app.i18n.catalogs[self.catalog_idx].1
+    }
+
+    pub fn save_session(&self) -> BrokerResult<()> {
+        debug_assert_ne!(&self.session.id, "");
+        debug_assert!(self.session.data.contains_key("type"));
+        let data = self.session.data.iter()
+            .map(|(k, v)| -> (&str, &str) { (k, v) })
+            .collect::<Vec<(&str, &str)>>();
+        self.app.store.store_session(&self.session.id, &data)
+    }
+
+    pub fn load_session(&mut self, id: &str, type_value: &str) -> BrokerResult<()> {
+        let data = self.app.store.get_session(id)?;
+        if data["type"] != type_value {
+            return Err(BrokerError::Input("invalid session".to_owned()));
+        }
+        self.session.id = id.to_owned();
+        self.session.data = data;
+        Ok(())
     }
 }
 
@@ -121,6 +164,7 @@ impl HyperService for Service {
             let ctx_handle = Rc::new(RefCell::new(Context {
                 app: app,
                 params: params,
+                session: Session::default(),
                 catalog_idx: catalog_idx,
                 redirect_uri: None,
             }));
