@@ -1,15 +1,14 @@
-use std::cmp::max;
-use std::io::Read;
-use super::hyper::client::Client as HttpClient;
-use super::hyper::header::{
-    CacheControl as HyCacheControl,
-    CacheDirective as HyCacheDirective
-};
-use super::redis::Commands;
-use super::error::{BrokerError, BrokerResult};
-use super::store::Store;
+use error::BrokerError;
+use futures::{Future, future};
+use config::Config;
+use http;
+use hyper::header::{CacheControl, CacheDirective};
+use redis::Commands;
 use serde_json::de::from_str;
 use serde_json::value::Value;
+use std::cmp::max;
+use std::rc::Rc;
+use std::str::from_utf8;
 
 
 /// Represents a Redis key.
@@ -33,51 +32,65 @@ impl<'a> CacheKey<'a> {
 
 
 /// Fetch `url` from cache or using a HTTP GET request, and parse the response as JSON. The
-/// cache is stored in `store` with `key`. The `session` is used to make the HTTP GET request,
+/// cache is stored in `app.store` with `key`. The `client` is used to make the HTTP GET request,
 /// if necessary.
-pub fn fetch_json_url(store: &Store, key: &CacheKey, session: &HttpClient, url: &str)
-                      -> BrokerResult<Value> {
+pub fn fetch_json_url(app: &Rc<Config>, url: &str, key: &CacheKey)
+                      -> Box<Future<Item=Value, Error=BrokerError>> {
 
     // Try to retrieve the result from cache.
     let key_str = key.to_string();
-    let stored: Option<String> = store.client.get(&key_str)?;
-    stored.map_or_else(|| {
+    let data: Option<String> = match app.store.client.get(&key_str) {
+        Ok(data) => data,
+        Err(e) => return Box::new(future::err(e.into())),
+    };
 
+    let f: Box<Future<Item=String, Error=BrokerError>> = if let Some(data) = data {
+        Box::new(future::ok(data))
+    } else {
         // Cache miss, make a request.
-        let rsp = session.get(url).send()?;
+        let url = url.parse().expect("could not parse request url");
+        let f = app.http_client.get(url).map_err(|err| err.into());
 
-        // Grab the max-age directive from the Cache-Control header.
-        let max_age = rsp.headers.get().map_or(0, |header: &HyCacheControl| {
-            for dir in header.iter() {
-                if let HyCacheDirective::MaxAge(seconds) = *dir {
-                    return seconds;
+        let app = app.clone();
+        let f = f.and_then(move |res| {
+            // Grab the max-age directive from the Cache-Control header.
+            let max_age = res.headers().get().map_or(0, |header: &CacheControl| {
+                for dir in header.iter() {
+                    if let CacheDirective::MaxAge(seconds) = *dir {
+                        return seconds;
+                    }
                 }
-            }
-            0
+                0
+            });
+
+            // Receive the body.
+            http::read_body(res.body())
+                .map_err(|err| err.into())
+                .map(move |chunk| (app, chunk, max_age))
         });
 
-        // We read up to size+1, because we use the extra byte as a
-        // sentinel to detect responses that exceed our maximum size.
-        let mut data = String::new();
-        let bytes_read = rsp.take(store.max_response_size + 1).read_to_string(&mut data)?;
-        if bytes_read as u64 > store.max_response_size {
-            return Err(BrokerError::Custom("response exceeded the size limit".to_string()))
-        }
+        let f = f.and_then(|(app, chunk, max_age)| {
+            let result = from_utf8(&chunk)
+                .map_err(|_| BrokerError::Custom("response contained invalid utf-8".to_string()))
+                .map(|data| data.to_owned())
+                .and_then(move |data| {
+                    // Cache the response for at least `expire_cache`, but honor longer `max-age`.
+                    let seconds = max(app.store.expire_cache, max_age as usize);
+                    app.store.client.set_ex::<_, _, ()>(&key_str, &data, seconds)
+                        .map_err(|err| err.into())
+                        .map(|_| data)
+                });
+            future::result(result)
+        });
 
-        // Cache the response for at least `expire_cache`, but honor longer `max-age`.
-        let seconds = max(store.expire_cache, max_age as usize);
-        store.client.set_ex::<_, _, ()>(&key_str, &data, seconds)?;
+        Box::new(f)
+    };
 
-        Ok(data)
-
-    }, |data| {
-        Ok(data)
-    }).and_then(|data| {
-
-        from_str(&data).map_err(|_| {
+    let f = f.and_then(|data| {
+        future::result(from_str(&data).map_err(|_| {
             BrokerError::Custom("failed to parse response as JSON".to_string())
-        })
+        }))
+    });
 
-    })
-
+    Box::new(f)
 }

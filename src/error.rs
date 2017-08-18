@@ -1,26 +1,32 @@
 use emailaddress;
-use std::fmt;
+use hyper::Error as HyperError;
+use lettre::transport::smtp::error::Error as MailError;
+use redis::RedisError;
 use std::convert::From;
 use std::error::Error;
+use std::fmt;
 use std::io::Error as IoError;
-use super::hyper::Error as HttpError;
-use super::redis::RedisError;
-use super::lettre::transport::smtp::error::Error as MailError;
 use validation::ValidationError;
 
 
 /// Union of all possible runtime error types.
 #[derive(Debug)]
 pub enum BrokerError {
-    // User input error, which results in 400
+    /// User input error, which results in 400
     Input(String),
-    // Identity provider error, which we report in the RP redirect
+    /// Identity provider error, which we report in the RP redirect
     Provider(String),
-    // Internal errors, which we hide from the user
+    /// Internal errors, which we hide from the user
     Custom(String),
+    /// User was rate limited, results in 413
+    RateLimited,
+    /// Internal IO error
     Io(IoError),
+    /// Internal Redis error
     Redis(RedisError),
-    Http(HttpError),
+    /// Internal Hyper error
+    Hyper(HyperError),
+    /// Internal Mail error
     Mail(MailError),
 }
 
@@ -32,9 +38,10 @@ impl Error for BrokerError {
             BrokerError::Input(ref description) |
             BrokerError::Provider(ref description) |
             BrokerError::Custom(ref description) => description,
+            BrokerError::RateLimited => "rate limited",
             BrokerError::Io(ref err) => err.description(),
             BrokerError::Redis(ref err) => err.description(),
-            BrokerError::Http(ref err) => err.description(),
+            BrokerError::Hyper(ref err) => err.description(),
             BrokerError::Mail(ref err) => err.description(),
         }
     }
@@ -43,10 +50,11 @@ impl Error for BrokerError {
         match *self {
             BrokerError::Input(_) |
             BrokerError::Provider(_) |
-            BrokerError::Custom(_) => None,
+            BrokerError::Custom(_) |
+            BrokerError::RateLimited => None,
             BrokerError::Io(ref e) => Some(e),
             BrokerError::Redis(ref e) => Some(e),
-            BrokerError::Http(ref e) => Some(e),
+            BrokerError::Hyper(ref e) => Some(e),
             BrokerError::Mail(ref e) => Some(e),
         }
     }
@@ -88,6 +96,6 @@ macro_rules! from_error {
 }
 
 from_error!(IoError, Io);
-from_error!(HttpError, Http);
+from_error!(HyperError, Hyper);
 from_error!(RedisError, Redis);
 from_error!(MailError, Mail);

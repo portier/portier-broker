@@ -1,21 +1,72 @@
 extern crate docopt;
+extern crate emailaddress;
 extern crate env_logger;
-extern crate iron;
+extern crate futures;
+extern crate gettext;
+#[macro_use]
+extern crate hyper;
+extern crate hyper_staticfile;
+extern crate hyper_tls;
+extern crate lettre;
 #[macro_use]
 extern crate log;
-extern crate portier_broker;
-#[macro_use(router)]
-extern crate router;
-extern crate staticfile;
+extern crate mustache;
+extern crate openssl;
+extern crate rand;
+extern crate redis;
 extern crate rustc_serialize;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+#[macro_use]
+extern crate serde_json;
+extern crate time;
+extern crate tokio_core;
+extern crate toml;
+extern crate url;
 
-use portier_broker as broker;
+mod config;
+mod crypto;
+mod email_bridge;
+mod error;
+mod handlers;
+mod http;
+mod oidc_bridge;
+mod store;
+mod store_cache;
+mod store_limits;
+mod validation;
+
 use docopt::Docopt;
-use iron::{Iron, Chain};
-use std::str::FromStr;
-use std::sync::Arc;
+use futures::Stream;
+use hyper::Method;
+use hyper::server::{Http, Request};
+use std::net::SocketAddr;
 use std::path::Path;
-use std::time::Duration;
+use std::rc::Rc;
+
+
+/// Route the request, returning a handler
+fn router(req: &Request) -> Option<http::Handler> {
+    Some(match (req.method(), req.path()) {
+        // Human-targeted endpoints
+        (&Method::Get, "/") => handlers::pages::index,
+        (&Method::Get, "/ver.txt") => handlers::pages::version,
+        (&Method::Get, "/confirm") => handlers::email::confirmation,
+
+        // OpenID Connect provider endpoints
+        (&Method::Get, "/.well-known/openid-configuration") => handlers::oidc::discovery,
+        (&Method::Get, "/keys.json") => handlers::oidc::key_set,
+        (&Method::Get, "/auth") | (&Method::Post, "/auth") => handlers::oidc::auth,
+
+        // OpenID Connect relying party endpoints
+        (&Method::Get, "/callback") => handlers::oauth2::fragment_callback,
+        (&Method::Post, "/callback") => handlers::oauth2::callback,
+
+        // Lastly, fall back to trying to serve static files out of ./res/
+        _ => return None,
+    })
+}
 
 
 /// Defines the program's version, as set by Cargo at compile time.
@@ -56,7 +107,11 @@ fn main() {
                          .and_then(|d| d.version(Some(VERSION.to_string())).decode())
                          .unwrap_or_else(|e| e.exit());
 
-    let mut builder = broker::config::ConfigBuilder::new();
+    let mut core = tokio_core::reactor::Core::new()
+        .expect("Could not start the event loop");
+    let handle = core.handle();
+
+    let mut builder = config::ConfigBuilder::new();
     if let Some(path) = args.arg_CONFIG {
         builder.update_from_file(&path).unwrap_or_else(|err| {
             panic!(format!("failed to read config file: {}", err))
@@ -64,39 +119,23 @@ fn main() {
     }
     builder.update_from_common_env();
     builder.update_from_broker_env();
-    let app = Arc::new(builder.done().unwrap_or_else(|err| {
+    let app = Rc::new(builder.done(&handle).unwrap_or_else(|err| {
         panic!(format!("failed to build configuration: {}", err))
     }));
 
-    let router = router!{
-        // Human-targeted endpoints
-        index:     get  "/" => broker::handlers::pages::Index,
-        version:   get  "/ver.txt" => broker::handlers::pages::Version,
-        confirm:   get  "/confirm" => broker::handlers::email::Confirmation::new(&app),
+    let ip_addr = app.listen_ip.parse()
+        .expect("Unable to parse listen address");
+    let addr = SocketAddr::new(ip_addr, app.listen_port);
+    let listener = tokio_core::net::TcpListener::bind(&addr, &handle)
+        .expect("Unable to bind listen address");
+    info!("Listening on http://{}", addr);
 
-        // OpenID Connect provider endpoints
-        config:    get  "/.well-known/openid-configuration" =>
-                            broker::handlers::oidc::Discovery::new(&app),
-        keys:      get  "/keys.json" => broker::handlers::oidc::KeySet::new(&app),
-        get_auth:  get  "/auth" => broker::handlers::oidc::Auth::new(&app),
-        post_auth: post "/auth" => broker::handlers::oidc::Auth::new(&app),
-
-        // OpenID Connect relying party endpoints
-        get_cb:    get  "/callback" => broker::handlers::oauth2::Callback::new(&app),
-        post_cb:   post "/callback" => broker::handlers::oauth2::Callback::new(&app),
-
-        // Lastly, fall back to trying to serve static files out of ./res/
-        static:    get  "/*" => staticfile::Static::new(Path::new("./res/"))
-                                    .cache(Duration::from_secs(app.static_ttl as u64)),
-    };
-
-    let mut chain = Chain::new(router);
-    chain.link_before(broker::middleware::LogRequest);
-    chain.link_after(broker::middleware::CommonHeaders);
-
-    let ipaddr = std::net::IpAddr::from_str(&app.listen_ip).expect("Unable to parse listen IP address");
-    let socket = std::net::SocketAddr::new(ipaddr, app.listen_port);
-    info!("listening on http://{}", socket);
-
-    Iron::new(chain).http(socket).expect("Unable to start http server");
+    let proto = Http::new();
+    let server = listener.incoming().for_each(|(sock, addr)| {
+        let res_path = Path::new("./res/");
+        let s = http::Service::new(&handle, &app, router, res_path);
+        proto.bind_connection(&handle, sock, addr, s);
+        Ok(())
+    });
+    core.run(server).expect("error while running the event loop");
 }

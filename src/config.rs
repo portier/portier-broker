@@ -1,20 +1,27 @@
 #![allow(unknown_lints, cyclomatic_complexity)]
 
-extern crate serde;
-extern crate toml;
-
-use std;
+use crypto;
+use gettext::Catalog;
+use hyper;
+use hyper::header::LanguageTag;
+use hyper_tls::HttpsConnector;
+use mustache;
 use std::collections::HashMap;
 use std::env;
-use std::fmt::{self, Display};
 use std::error::Error;
+use std::fmt::{self, Display};
 use std::fs::File;
 use std::io::Read;
+use std;
+use store;
+use store_limits::Ratelimit;
+use tokio_core::reactor::Handle;
 
-use super::{crypto, store, mustache};
-use super::gettext::Catalog;
-use super::hyper::LanguageTag;
-use super::store_limits::Ratelimit;
+use toml;
+
+
+/// The type of HTTP client we use, with TLS enabled.
+pub type HttpClient = hyper::Client<HttpsConnector<hyper::client::HttpConnector>>;
 
 
 /// Union of all possible error types seen while parsing.
@@ -151,7 +158,6 @@ impl Default for I18n {
 
 pub struct Provider {
     pub client_id: String,
-    pub secret: String,
     pub discovery_url: String,
     pub issuer_domain: String,
 }
@@ -168,6 +174,7 @@ pub struct Config {
     pub token_ttl: u16,
     pub keys: Vec<crypto::NamedKey>,
     pub store: store::Store,
+    pub http_client: HttpClient,
     pub from_name: String,
     pub from_address: String,
     pub smtp_server: String,
@@ -195,7 +202,6 @@ pub struct ConfigBuilder {
     pub redis_url: Option<String>,
     pub redis_session_ttl: u16,
     pub redis_cache_ttl: u16,
-    pub redis_cache_max_doc_size: u16,
     pub from_name: String,
     pub from_address: Option<String>,
     pub smtp_server: Option<String>,
@@ -209,7 +215,6 @@ pub struct ConfigBuilder {
 #[derive(Clone, Debug, Default)]
 pub struct ProviderBuilder {
     pub client_id: Option<String>,
-    pub secret: Option<String>,
     pub discovery_url: Option<String>,
     pub issuer_domain: Option<String>,
 }
@@ -219,7 +224,6 @@ impl ProviderBuilder {
     pub fn new() -> ProviderBuilder {
         ProviderBuilder {
             client_id: None,
-            secret: None,
             discovery_url: None,
             issuer_domain: None,
         }
@@ -228,18 +232,16 @@ impl ProviderBuilder {
     pub fn new_gmail() -> ProviderBuilder {
         ProviderBuilder {
             client_id: None,
-            secret: None,
             discovery_url: Some("https://accounts.google.com/.well-known/openid-configuration".to_string()),
             issuer_domain: Some("accounts.google.com".to_string()),
         }
     }
 
     pub fn done(self) -> Option<Provider> {
-        match (self.client_id, self.secret, self.discovery_url, self.issuer_domain) {
-            (Some(id), Some(secret), Some(url), Some(iss)) => {
+        match (self.client_id, self.discovery_url, self.issuer_domain) {
+            (Some(id), Some(url), Some(iss)) => {
                 Some(Provider {
                     client_id: id,
-                    secret: secret,
                     discovery_url: url,
                     issuer_domain: iss,
                 })
@@ -266,7 +268,6 @@ impl ConfigBuilder {
             redis_url: None,
             redis_session_ttl: 900,
             redis_cache_ttl: 3600,
-            redis_cache_max_doc_size: 8096,
             from_name: "Portier".to_string(),
             from_address: None,
             smtp_username: None,
@@ -308,7 +309,6 @@ impl ConfigBuilder {
             self.redis_url = table.url.or_else(|| self.redis_url.clone());
             if let Some(val) = table.session_ttl { self.redis_session_ttl = val; }
             if let Some(val) = table.cache_ttl { self.redis_cache_ttl = val; }
-            if let Some(val) = table.cache_max_doc_size { self.redis_cache_max_doc_size = val; }
         }
 
         if let Some(table) = toml_config.smtp {
@@ -332,7 +332,6 @@ impl ConfigBuilder {
                     });
 
                 if values.client_id.is_some() { provider.client_id = values.client_id; }
-                if values.secret.is_some() { provider.secret = values.secret; }
                 if values.discovery_url.is_some() { provider.discovery_url = values.discovery_url; }
                 if values.issuer_domain.is_some() { provider.issuer_domain = values.issuer_domain; }
             }
@@ -381,7 +380,6 @@ impl ConfigBuilder {
         if let Some(val) = env_config.broker_redis_url { self.redis_url = Some(val); }
         if let Some(val) = env_config.broker_session_ttl { self.redis_session_ttl = val; }
         if let Some(val) = env_config.broker_cache_ttl { self.redis_cache_ttl = val; }
-        if let Some(val) = env_config.broker_cache_max_doc_size { self.redis_cache_max_doc_size = val; }
 
         if let Some(val) = env_config.broker_from_name { self.from_name = val; }
         if let Some(val) = env_config.broker_from_address { self.from_address = Some(val); }
@@ -396,7 +394,6 @@ impl ConfigBuilder {
             let mut gmail_provider = self.providers.entry("gmail.com".to_string())
                 .or_insert_with(ProviderBuilder::new_gmail);
 
-            if let Some(val) = env_config.broker_gmail_secret { gmail_provider.secret = Some(val); }
             if let Some(val) = env_config.broker_gmail_client { gmail_provider.client_id = Some(val); }
             if let Some(val) = env_config.broker_gmail_discovery { gmail_provider.discovery_url = Some(val); }
             if let Some(val) = env_config.broker_gmail_issuer { gmail_provider.issuer_domain = Some(val); }
@@ -405,7 +402,7 @@ impl ConfigBuilder {
         self
     }
 
-    pub fn done(self) -> Result<Config, ConfigError> {
+    pub fn done(self, handle: &Handle) -> Result<Config, ConfigError> {
         // Additional validations
         if self.smtp_username.is_none() != self.smtp_password.is_none() {
             return Err(ConfigError::Custom(
@@ -428,8 +425,12 @@ impl ConfigBuilder {
             &self.redis_url.expect("no redis url configured"),
             self.redis_cache_ttl as usize,
             self.redis_session_ttl as usize,
-            self.redis_cache_max_doc_size as u64,
         ).expect("unable to instantiate new redis store");
+
+        let http_connector = HttpsConnector::new(4, handle)
+            .expect("could not initialize https connector");
+        let http_client = hyper::Client::configure()
+            .connector(http_connector).build(handle);
 
         let idx = self.limit_per_email.find('/')
             .expect("unable to parse limit.per_email format");
@@ -460,6 +461,7 @@ impl ConfigBuilder {
             token_ttl: self.token_ttl,
             keys: keys,
             store: store,
+            http_client: http_client,
             from_name: self.from_name,
             from_address: self.from_address.expect("no smtp from address configured"),
             smtp_server: self.smtp_server.expect("no smtp outserver address configured"),
@@ -513,7 +515,6 @@ struct TomlRedisTable {
     url: Option<String>,
     session_ttl: Option<u16>,
     cache_ttl: Option<u16>,
-    cache_max_doc_size: Option<u16>,
 }
 
 #[derive(Clone,Debug,Deserialize)]
@@ -533,7 +534,6 @@ struct TomlLimitTable {
 #[derive(Clone,Debug,Deserialize)]
 struct TomlProviderTable {
     client_id: Option<String>,
-    secret: Option<String>,
     discovery_url: Option<String>,
     issuer_domain: Option<String>,
 }
@@ -558,7 +558,6 @@ struct EnvConfig {
     broker_redis_url: Option<String>,
     broker_session_ttl: Option<u16>,
     broker_cache_ttl: Option<u16>,
-    broker_cache_max_doc_size: Option<u16>,
     broker_from_name: Option<String>,
     broker_from_address: Option<String>,
     broker_smtp_server: Option<String>,
@@ -566,7 +565,6 @@ struct EnvConfig {
     broker_smtp_password: Option<String>,
     broker_limit_per_email: Option<String>,
     broker_gmail_client: Option<String>,
-    broker_gmail_secret: Option<String>,
     broker_gmail_discovery: Option<String>,
     broker_gmail_issuer: Option<String>,
 }
@@ -593,7 +591,6 @@ impl EnvConfig {
             broker_redis_url: env::var("BROKER_REDIS_URL").ok(),
             broker_session_ttl: env::var("BROKER_SESSION_TTL").ok().and_then(|x| x.parse().ok()),
             broker_cache_ttl: env::var("BROKER_CACHE_TTL").ok().and_then(|x| x.parse().ok()),
-            broker_cache_max_doc_size: env::var("BROKER_CACHE_MAX_DOC_SIZE").ok().and_then(|x| x.parse().ok()),
 
             broker_from_name: env::var("BROKER_FROM_NAME").ok(),
             broker_from_address: env::var("BROKER_FROM_ADDRESS").ok(),
@@ -604,7 +601,6 @@ impl EnvConfig {
             broker_limit_per_email: env::var("BROKER_LIMIT_PER_EMAIL").ok(),
 
             broker_gmail_client: env::var("BROKER_GMAIL_CLIENT").ok(),
-            broker_gmail_secret: env::var("BROKER_GMAIL_SECRET").ok(),
             broker_gmail_discovery: env::var("BROKER_GMAIL_DISCOVERY").ok(),
             broker_gmail_issuer: env::var("BROKER_GMAIL_ISSUER").ok(),
         }

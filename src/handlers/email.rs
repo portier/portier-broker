@@ -1,25 +1,35 @@
-use config::Config;
+#![allow(unknown_lints,needless_pass_by_value)]
+
 use email_bridge;
-use error::{BrokerResult, BrokerError};
-use iron::{IronResult, Plugin, Request, Response, Url};
-use iron::middleware::Handler;
-use std::sync::Arc;
-use super::{RedirectUri, handle_error, return_to_relier};
-use urlencoded::UrlEncodedQuery;
+use error::BrokerError;
+use futures::future::{self, Future};
+use handlers::return_to_relier;
+use http::{ContextHandle, HandlerResult};
 
 
-/// Iron handler for one-time pad email loop confirmation.
+/// Request handler for one-time pad email loop confirmation.
 ///
 /// Retrieves the session based session ID and the expected one-time pad.
 /// Verify the code and return the resulting token or error to the RP.
-broker_handler!(Confirmation, |app, req| {
-    let params = req.compute::<UrlEncodedQuery>()
-            .map_err(|_| BrokerError::Input("no query string in GET request".to_string()))?;
+pub fn confirmation(ctx_handle: ContextHandle) -> HandlerResult {
+    let mut ctx = ctx_handle.borrow_mut();
 
-    let stored = app.store.get_session("email", try_get_param!(params, "session"))?;
-    req.extensions.insert::<RedirectUri>(Url::parse(&stored["redirect"]).expect("unable to parse stored redirect uri"));
+    let session_id = try_get_param!(ctx, "session");
+    let stored = match ctx.app.store.get_session("email", &session_id) {
+        Ok(stored) => stored,
+        Err(err) => return Box::new(future::err(err)),
+    };
+    let redirect_uri = stored["redirect"].parse().expect("unable to parse stored redirect uri");
+    ctx.redirect_uri = Some(redirect_uri);
 
-    let code = try_get_param!(params, "code");
-    let (jwt, redirect_uri) = email_bridge::verify(app, &stored, code)?;
-    Ok(Response::with(return_to_relier(app, &redirect_uri, &[("id_token", &jwt)])))
-});
+    let code = try_get_param!(ctx, "code");
+    let f = email_bridge::verify(ctx.app.clone(), &stored, &code);
+
+    let ctx_handle = ctx_handle.clone();
+    let f = f.and_then(move |jwt| {
+        let ctx = ctx_handle.borrow();
+        return_to_relier(&*ctx, &[("id_token", &jwt)])
+    });
+
+    Box::new(f)
+}
