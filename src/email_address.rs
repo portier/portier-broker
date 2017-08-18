@@ -69,9 +69,9 @@ impl EmailAddress {
         (self.local(), self.domain())
     }
 
-    /// Normalize a Google-hosted email address.
+    /// Normalize a Google email address.
     ///
-    /// This method can also be used to normalize Google Apps addresses.
+    /// This method can also be used to normalize G Suite addresses.
     pub fn normalize_google(&self) -> EmailAddress {
         let (local, domain) = self.parts();
 
