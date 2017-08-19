@@ -6,6 +6,7 @@ use email_address::EmailAddress;
 use http::{ContextHandle, HandlerResult};
 use std::fmt::{Display, Formatter, Error as FmtError};
 use std::rc::Rc;
+use std::str::FromStr;
 
 
 /// The Portier scheme used to identify a regular Portier identity provider.
@@ -18,6 +19,36 @@ pub const GOOGLE_IDP_ORIGIN: &'static str = "https://accounts.google.com";
 /// Testing scheme for a Portier provider without TLS.
 #[cfg(feature = "insecure")]
 pub const PORTIER_INSECURE_IDP_SCHEME: &'static str = "http";
+
+
+/// Simple enum for kind of provider.
+pub enum ProviderKind {
+    Portier,
+    Google,
+}
+
+impl ProviderKind {
+    /// Return a string identifier for this provider kind.
+    pub fn as_str(&self) -> &'static str {
+        match *self {
+            ProviderKind::Portier => "portier",
+            ProviderKind::Google => "google",
+        }
+    }
+}
+
+impl FromStr for ProviderKind {
+    type Err = ();
+
+    /// Parse a string identifier back into a `ProviderKind`.
+    fn from_str(s: &str) -> Result<ProviderKind, ()> {
+        match s {
+            "portier" => Ok(ProviderKind::Portier),
+            "google" => Ok(ProviderKind::Google),
+            _ => Err(()),
+        }
+    }
+}
 
 
 /// Internal structure to represent a provider.
@@ -37,6 +68,14 @@ impl Provider {
             Provider::Portier { .. } | Provider::Google { .. } => {
                 Box::new(oidc::request(ctx_handle, email_addr, provider))
             },
+        }
+    }
+
+    /// Get a `ProviderKind` for this provider.
+    pub fn kind(&self) -> ProviderKind {
+        match *self {
+            Provider::Portier { .. } => ProviderKind::Portier,
+            Provider::Google { .. } => ProviderKind::Google,
         }
     }
 }

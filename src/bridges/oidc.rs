@@ -1,4 +1,4 @@
-use bridges::{GOOGLE_IDP_ORIGIN, Provider};
+use bridges::{GOOGLE_IDP_ORIGIN, Provider, ProviderKind};
 use crypto;
 use email_address::EmailAddress;
 use error::BrokerError;
@@ -68,6 +68,7 @@ pub fn request(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>, provid
     // Store the nonce in the session for use in the verify handler,
     // and set the session type.
     ctx.session.set("type", "oidc".to_owned());
+    ctx.session.set("provider_kind", provider.kind().as_str().to_owned());
     ctx.session.set("provider_origin", origin);
     ctx.session.set("provider_client_id", client_id);
     ctx.session.set("provider_nonce", provider_nonce.clone());
@@ -212,9 +213,13 @@ pub fn verify(ctx_handle: &ContextHandle, id_token: String)
             .expect("failed to parse provider token email address");
         assert_eq!(iss, ctx.session["provider_origin"]);
         assert_eq!(aud, ctx.session["provider_client_id"]);
-        // TODO: This normalization is here because we currently support only Google.
-        // Eventually, we'd only do this when Google is explicitely selected.
-        assert_eq!(token_addr.normalize_google(), email_addr.normalize_google());
+
+        // Apply normalization for Google.
+        match ctx.session["provider_kind"].parse().expect("invalid provider kind in session") {
+            ProviderKind::Portier => assert_eq!(token_addr, email_addr),
+            ProviderKind::Google => assert_eq!(token_addr.normalize_google(), email_addr.normalize_google()),
+        }
+
         let now = now_utc().to_timespec().sec;
         assert!(now < exp);
         assert_eq!(nonce, ctx.session["provider_nonce"]);
