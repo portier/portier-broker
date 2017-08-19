@@ -14,6 +14,7 @@ use std::error::Error;
 use std::ops::Index;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::{fmt, io};
 use tokio_core::reactor::Handle;
 use url::{Url, form_urlencoded};
 
@@ -28,6 +29,21 @@ header! { (XFrameOptions, "X-Frame-Options") => [String] }
 /// A boxed future. Unlike the regular `BoxFuture`, this is not `Send`.
 /// This means we also do not use the `boxed()` method.
 pub type BoxFuture<T, E> = Box<Future<Item=T, Error=E>>;
+
+
+/// Error type used to within an `io::Error`, to indicate a size limit was exceeded.
+#[derive(Debug)]
+pub struct SizeLimitExceeded;
+impl Error for SizeLimitExceeded {
+    fn description(&self) -> &str {
+        "size limit exceeded"
+    }
+}
+impl fmt::Display for SizeLimitExceeded {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.write_str(self.description())
+    }
+}
 
 
 /// Generic session storage
@@ -129,7 +145,11 @@ impl HyperService for Service {
     type Future = BoxFuture<Self::Response, Self::Error>;
 
     fn call(&self, req: Request) -> Self::Future {
-        info!("{} {}", req.method(), req.path());
+        if let Some(addr) = req.remote_addr() {
+            info!("{} - {} {}", addr, req.method(), req.path());
+        } else {
+            info!("n/a - {} {}", req.method(), req.path());
+        }
 
         // Match route or serve static files.
         let handler = match (self.router)(&req) {
@@ -233,14 +253,14 @@ fn handle_error(ctx: &Context, err: BrokerError) -> FutureResult<Response, Hyper
             future::ok(res)
         },
         (err @ BrokerError::Provider(_), Some(_)) => {
-            error!("{}", err);
+            info!("{}", err);
             return_to_relier(ctx, &[
                 ("error", "temporarily_unavailable"),
                 ("error_description", &err.description().to_string()),
             ])
         },
         (err @ BrokerError::Provider(_), None) => {
-            error!("{}", err);
+            info!("{}", err);
             let res = Response::new()
                 .with_status(StatusCode::ServiceUnavailable)
                 .with_header(ContentType::html())
@@ -324,8 +344,7 @@ pub fn parse_query(query: Option<&str>) -> HashMap<String, String> {
 pub fn read_body(body: Body) -> BoxFuture<Chunk, HyperError> {
     Box::new(body.fold(Chunk::default(), |mut acc, chunk| {
         if acc.len() + chunk.len() > 8096 {
-            // TODO: Is this the right thing to do?
-            future::err(HyperError::TooLarge)
+            future::err(io::Error::new(io::ErrorKind::Other, SizeLimitExceeded))
         } else {
             acc.extend(chunk);
             future::ok(acc)

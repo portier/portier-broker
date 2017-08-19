@@ -1,11 +1,5 @@
-use hyper::Error as HyperError;
-use lettre::transport::smtp::error::Error as MailError;
-use redis::RedisError;
-use std::convert::From;
 use std::error::Error;
 use std::fmt;
-use std::io::Error as IoError;
-use validation::ValidationError;
 
 
 /// Union of all possible runtime error types.
@@ -13,20 +7,12 @@ use validation::ValidationError;
 pub enum BrokerError {
     /// User input error, which results in 400
     Input(String),
-    /// Identity provider error, which we report in the RP redirect
+    /// Identity provider error, which results in 503 or email loop fallback
     Provider(String),
-    /// Internal errors, which we hide from the user
-    Custom(String),
+    /// Internal errors, which result in 500
+    Internal(String),
     /// User was rate limited, results in 413
     RateLimited,
-    /// Internal IO error
-    Io(IoError),
-    /// Internal Redis error
-    Redis(RedisError),
-    /// Internal Hyper error
-    Hyper(HyperError),
-    /// Internal Mail error
-    Mail(MailError),
 }
 
 pub type BrokerResult<T> = Result<T, BrokerError>;
@@ -34,27 +20,11 @@ pub type BrokerResult<T> = Result<T, BrokerError>;
 impl Error for BrokerError {
     fn description(&self) -> &str {
         match *self {
-            BrokerError::Input(ref description) |
-            BrokerError::Provider(ref description) |
-            BrokerError::Custom(ref description) => description,
+            BrokerError::Input(ref description)
+                | BrokerError::Provider(ref description)
+                | BrokerError::Internal(ref description)
+                => description,
             BrokerError::RateLimited => "rate limited",
-            BrokerError::Io(ref err) => err.description(),
-            BrokerError::Redis(ref err) => err.description(),
-            BrokerError::Hyper(ref err) => err.description(),
-            BrokerError::Mail(ref err) => err.description(),
-        }
-    }
-
-    fn cause(&self) -> Option<&Error> {
-        match *self {
-            BrokerError::Input(_) |
-            BrokerError::Provider(_) |
-            BrokerError::Custom(_) |
-            BrokerError::RateLimited => None,
-            BrokerError::Io(ref e) => Some(e),
-            BrokerError::Redis(ref e) => Some(e),
-            BrokerError::Hyper(ref e) => Some(e),
-            BrokerError::Mail(ref e) => Some(e),
         }
     }
 }
@@ -64,31 +34,3 @@ impl fmt::Display for BrokerError {
         write!(f, "{}", self.description())
     }
 }
-
-impl From<BrokerError> for String {
-    fn from(err: BrokerError) -> String {
-        err.description().to_string()
-    }
-}
-
-impl From<ValidationError> for BrokerError {
-    fn from(err: ValidationError) -> BrokerError {
-        BrokerError::Input(format!("{}", err))
-    }
-}
-
-// Conversion from other error types.
-macro_rules! from_error {
-    ( $orig:ty, $enum_type:ident ) => {
-        impl From<$orig> for BrokerError {
-            fn from(err: $orig) -> BrokerError {
-                BrokerError::$enum_type(err)
-            }
-        }
-    }
-}
-
-from_error!(IoError, Io);
-from_error!(HyperError, Hyper);
-from_error!(RedisError, Redis);
-from_error!(MailError, Mail);

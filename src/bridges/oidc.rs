@@ -99,7 +99,7 @@ pub fn request(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>, provid
     let f = {
         let origin = &ctx.session["provider_origin"];
         let config_url = build_config_url(origin);
-        fetch_json_url(&ctx.app, &config_url, &CacheKey::OidcConfig { origin })
+        fetch_json_url(&ctx.app, config_url, &CacheKey::OidcConfig { origin })
     }
         .map_err(move |e| {
             BrokerError::Provider(format!("could not fetch {}'s discovery document: {}",
@@ -173,7 +173,7 @@ pub fn verify(ctx_handle: &ContextHandle, id_token: String)
     let f = {
         let origin = &ctx.session["provider_origin"];
         let config_url = build_config_url(origin);
-        fetch_json_url(&ctx.app, &config_url, &CacheKey::OidcConfig { origin })
+        fetch_json_url(&ctx.app, config_url, &CacheKey::OidcConfig { origin })
     }
         .map_err(move |e| {
             BrokerError::Provider(format!("could not fetch {}'s discovery document: {}",
@@ -185,7 +185,7 @@ pub fn verify(ctx_handle: &ContextHandle, id_token: String)
             match jwks_url.parse::<Url>() {
                 Ok(url) => future::ok(url),
                 Err(e) => future::err(BrokerError::Provider(
-                    format!("could not parse {}'s JWKs URI: {}", email_addr2.domain(), e.description()))),
+                    format!("could not parse {}'s keys URL: {}", email_addr2.domain(), e.description()))),
             }
         });
 
@@ -197,7 +197,7 @@ pub fn verify(ctx_handle: &ContextHandle, id_token: String)
         let ctx = ctx_handle2.borrow();
         {
             let origin = &ctx.session["provider_origin"];
-            fetch_json_url(&ctx.app, &jwks_url, &CacheKey::OidcKeySet { origin })
+            fetch_json_url(&ctx.app, jwks_url, &CacheKey::OidcKeySet { origin })
         }
             .map_err(move |e| {
                 BrokerError::Provider(format!("could not fetch {}'s keys: {}",

@@ -30,16 +30,16 @@ pub fn query(app: &Rc<Config>, email_addr: &Rc<EmailAddress>)
     let result = Url::parse_with_params(&url, &[
         ("resource", format!("acct:{}", email_addr).as_str()),
         ("rel", WEBFINGER_PORTIER_REL),
-    ]).map_err(|e| BrokerError::Custom(
-        format!("could not build webfinger query url: {}", e.description())));
+    ]).map_err(|e| BrokerError::Internal(
+        format!("could not build query url: {}", e.description())));
     let f = future::result(result);
 
     // Make the request.
     let app = app.clone();
-    let email_addr = email_addr.clone();
+    let email_addr2 = email_addr.clone();
     let f = f.and_then(move |url| {
-        let acct = email_addr.as_str();
-        fetch_json_url(&app, &url, &CacheKey::Discovery { acct })
+        let acct = email_addr2.as_str();
+        fetch_json_url(&app, url, &CacheKey::Discovery { acct })
     });
 
     let f = f.map(|value| {
@@ -64,11 +64,16 @@ pub fn query(app: &Rc<Config>, email_addr: &Rc<EmailAddress>)
     });
 
     // Accept all provider failures, and simply return an empty list.
-    // TODO: Log these failures.
-    let f = f.or_else(|err| {
+    let email_addr = email_addr.clone();
+    let f = f.or_else(move |err| {
         match err {
-            BrokerError::Provider(_) => future::ok(vec![]),
-            err => future::err(err),
+            BrokerError::Provider(_) => {
+                info!("query failed for {}: {}", email_addr, err);
+                future::ok(vec![])
+            },
+            err => {
+                future::err(err)
+            },
         }
     });
 

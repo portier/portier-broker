@@ -39,35 +39,43 @@ impl<'a> CacheKey<'a> {
 /// Fetch `url` from cache or using a HTTP GET request, and parse the response as JSON. The
 /// cache is stored in `app.store` with `key`. The `client` is used to make the HTTP GET request,
 /// if necessary.
-pub fn fetch_json_url(app: &Rc<Config>, url: &Url, key: &CacheKey)
+pub fn fetch_json_url(app: &Rc<Config>, url: Url, key: &CacheKey)
                       -> Box<Future<Item=json::Value, Error=BrokerError>> {
+
+    let url = Rc::new(url);
 
     // Try to retrieve the result from cache.
     let key_str = key.to_string();
     let data: Option<String> = match app.store.client.get(&key_str) {
         Ok(data) => data,
-        Err(e) => return Box::new(future::err(e.into())),
+        Err(e) => return Box::new(future::err(BrokerError::Internal(
+            format!("cache lookup failed: {}", e)))),
     };
 
     let f: Box<Future<Item=String, Error=BrokerError>> = if let Some(data) = data {
+        info!("HIT {} - {}", key_str, url);
         Box::new(future::ok(data))
     } else {
         // Cache miss, make a request.
         // TODO: Also cache failed requests, perhaps for a shorter time.
-        let hyper_url = url.as_str().parse().expect("failed to convert Url to Hyper Url");
-        let f = app.http_client.get(hyper_url).map_err(|err| err.into());
+        info!("MISS {} - {}", key_str, url);
 
-        let url = url.to_string();
+        let url2 = url.clone();
+        let hyper_url = url.as_str().parse().expect("failed to convert Url to Hyper Url");
+        let f = app.http_client.get(hyper_url)
+            .map_err(move |e| BrokerError::Provider(format!("fetch failed ({}): {}", e, url2)));
+
+        let url2 = url.clone();
         let f = f.and_then(move |res| {
             if res.status() != StatusCode::Ok {
                 future::err(BrokerError::Provider(
-                    format!("fetch failed ({}): {}", res.status(), url)))
+                    format!("fetch failed ({}): {}", res.status(), url2)))
             } else {
                 future::ok(res)
             }
         });
 
-        let app = app.clone();
+        let url2 = url.clone();
         let f = f.and_then(move |res| {
             // Grab the max-age directive from the Cache-Control header.
             let max_age = res.headers().get().map_or(0, |header: &CacheControl| {
@@ -81,19 +89,21 @@ pub fn fetch_json_url(app: &Rc<Config>, url: &Url, key: &CacheKey)
 
             // Receive the body.
             http::read_body(res.body())
-                .map_err(|err| err.into())
-                .map(move |chunk| (app, chunk, max_age))
+                .map_err(move |e| BrokerError::Provider(format!("fetch failed ({}): {}", e, url2)))
+                .map(move |chunk| (chunk, max_age))
         });
 
-        let f = f.and_then(|(app, chunk, max_age)| {
+        let app = app.clone();
+        let url2 = url.clone();
+        let f = f.and_then(move |(chunk, max_age)| {
             let result = from_utf8(&chunk)
-                .map_err(|_| BrokerError::Provider("response contained invalid utf-8".to_string()))
+                .map_err(|_| BrokerError::Provider(format!("fetch failed (invalid UTF-8): {}", url2)))
                 .map(|data| data.to_owned())
                 .and_then(move |data| {
                     // Cache the response for at least `expire_cache`, but honor longer `max-age`.
                     let seconds = max(app.store.expire_cache, max_age as usize);
                     app.store.client.set_ex::<_, _, ()>(&key_str, &data, seconds)
-                        .map_err(|err| err.into())
+                        .map_err(|e| BrokerError::Internal(format!("cache write failed: {}", e)))
                         .map(|_| data)
                 });
             future::result(result)
@@ -102,9 +112,9 @@ pub fn fetch_json_url(app: &Rc<Config>, url: &Url, key: &CacheKey)
         Box::new(f)
     };
 
-    let f = f.and_then(|data| {
+    let f = f.and_then(move |data| {
         future::result(json::from_str(&data).map_err(|_| {
-            BrokerError::Provider("failed to parse response as JSON".to_string())
+            BrokerError::Provider(format!("fetch failed (invalid JSON): {}", url))
         }))
     });
 

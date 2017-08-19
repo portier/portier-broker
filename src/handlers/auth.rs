@@ -2,7 +2,7 @@ use bridges::{self, Provider};
 use crypto;
 use email_address::EmailAddress;
 use error::BrokerError;
-use futures::future::{self, Future};
+use futures::future::{self, Future, Either};
 use handlers::json_response;
 use http::{ContextHandle, HandlerResult};
 use hyper::server::Response;
@@ -72,7 +72,7 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
 
     let redirect_uri = match parse_redirect_uri(&redirect_uri, "redirect_uri") {
         Ok(url) => url,
-        Err(e) => return Box::new(future::err(e.into())),
+        Err(e) => return Box::new(future::err(BrokerError::Input(format!("{}", e)))),
     };
 
     if client_id != redirect_uri.origin().ascii_serialization() {
@@ -173,21 +173,27 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
     let email_addr2 = email_addr.clone();
     let f = Timeout::new(Duration::from_secs(5), &ctx.app.handle)
         .expect("failed to create discovery timeout")
-        .map_err(|e| panic!("error in discovery timeout: {}", e))
-        .and_then(move |_| {
-            info!("discovery timed out for {}", email_addr2.domain());
-            future::err(())
-        })
-        .select(f)
-        // Unpack the result and continue the other future.
-        // Perhaps a second attempt will have cache.
+        .select2(f)
         .then(move |result| {
-            let (result, other_future) = match result {
-                Ok((r, f)) => (Ok(r), f),
-                Err((e, f)) => (Err(e), f),
-            };
-            ctx_handle2.borrow().app.handle.spawn(other_future.map(|_| ()));
-            result
+            match result {
+                // Timeout resolved first.
+                Ok(Either::A((_, f))) => {
+                    info!("discovery timed out for {}", email_addr2);
+                    // Continue the discovery future in the background.
+                    ctx_handle2.borrow().app.handle.spawn(f.map(|_| ()));
+                    future::err(())
+                },
+                Err(Either::A((e, _))) => {
+                    panic!("error in discovery timeout: {}", e)
+                },
+                // Discovery resolved first.
+                Ok(Either::B((v, _))) => {
+                    future::ok(v)
+                },
+                Err(Either::B((e, _))) => {
+                    future::err(e)
+                },
+            }
         });
 
     // Email loop authentication.

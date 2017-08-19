@@ -31,14 +31,15 @@ impl Store {
             .atomic()
             .hset_multiple(&key, data).ignore()
             .expire(&key, self.expire_sessions).ignore()
-            .query::<()>(&self.client)?;
-        Ok(())
+            .query::<()>(&self.client)
+            .map_err(|e| BrokerError::Internal(format!("could not save a session: {}", e)))
     }
 
     pub fn get_session(&self, session_id: &str)
                        -> BrokerResult<HashMap<String, String>> {
         let key = Self::format_session_key(session_id);
-        let stored: HashMap<String, String> = self.client.hgetall(&key)?;
+        let stored: HashMap<String, String> = self.client.hgetall(&key)
+            .map_err(|e| BrokerError::Internal(format!("could not load a session: {}", e)))?;
         if stored.is_empty() {
             return Err(BrokerError::Input("session not found".to_string()));
         }

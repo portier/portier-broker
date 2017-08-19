@@ -9,7 +9,6 @@ use lettre::email::EmailBuilder;
 use lettre::transport::EmailTransport;
 use lettre::transport::smtp::SmtpTransportBuilder;
 use rand;
-use std::error::Error;
 use std::iter::Iterator;
 use std::rc::Rc;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
@@ -71,10 +70,11 @@ pub fn request(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>)
                      &ctx.app.templates.email_text.render(params))
         .subject(&[catalog.gettext("Finish logging in to"), origin.as_str()].join(" "))
         .build()
-        .unwrap_or_else(|err| panic!("unhandled error building email: {}", err.description()));
+        .unwrap_or_else(|err| panic!("unhandled error building email: {}", err));
     let mut builder = match SmtpTransportBuilder::new(&ctx.app.smtp_server) {
         Ok(builder) => builder,
-        Err(err) => return Box::new(future::err(err.into())),
+        Err(err) => return Box::new(future::err(BrokerError::Internal(
+            format!("could not create the smtp transport: {}", err)))),
     };
 
     if let (&Some(ref username), &Some(ref password)) = (&ctx.app.smtp_username, &ctx.app.smtp_password) {
@@ -89,7 +89,8 @@ pub fn request(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>)
     // Send the mail.
     let mut mailer = builder.build();
     if let Err(err) = mailer.send(email) {
-        return Box::new(future::err(err.into()))
+        return Box::new(future::err(BrokerError::Internal(
+            format!("could not send mail: {}", err))))
     }
 
     mailer.close();
