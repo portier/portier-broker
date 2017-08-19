@@ -20,7 +20,7 @@ macro_rules! try_get_param {
         match $ctx.params.remove($key) {
             Some(value) => value,
             None => return Box::new(future::err(BrokerError::Input(
-                concat!("missing request parameter ", $key).to_string()))),
+                concat!("missing request parameter ", $key).to_owned()))),
         }
     };
     ( $ctx:expr , $key:tt , $default:expr ) => {

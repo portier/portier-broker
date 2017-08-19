@@ -41,7 +41,7 @@ impl Store {
         let stored: HashMap<String, String> = self.client.hgetall(&key)
             .map_err(|e| BrokerError::Internal(format!("could not load a session: {}", e)))?;
         if stored.is_empty() {
-            return Err(BrokerError::Input("session not found".to_string()));
+            return Err(BrokerError::Input("session not found".to_owned()));
         }
         Ok(stored)
     }

@@ -212,7 +212,7 @@ pub struct ConfigBuilder {
 impl ConfigBuilder {
     pub fn new() -> ConfigBuilder {
         ConfigBuilder {
-            listen_ip: "127.0.0.1".to_string(),
+            listen_ip: "127.0.0.1".to_owned(),
             listen_port: 3333,
             public_url: None,
             allowed_origins: None,
@@ -225,12 +225,12 @@ impl ConfigBuilder {
             redis_url: None,
             redis_session_ttl: 900,
             redis_cache_ttl: 3600,
-            from_name: "Portier".to_string(),
+            from_name: "Portier".to_owned(),
             from_address: None,
             smtp_username: None,
             smtp_password: None,
             smtp_server: None,
-            limit_per_email: "5/min".to_string(),
+            limit_per_email: "5/min".to_owned(),
             domain_overrides: HashMap::new(),
             providers: HashMap::new(),
         }
@@ -299,7 +299,7 @@ impl ConfigBuilder {
     pub fn update_from_common_env(&mut self) -> &mut ConfigBuilder {
         if let Some(port) = env::var("PORT").ok().and_then(|s| s.parse().ok()) {
             // If $PORT is set, also bind to 0.0.0.0. Common PaaS convention.
-            self.listen_ip = "0.0.0.0".to_string();
+            self.listen_ip = "0.0.0.0".to_owned();
             self.listen_port = port;
         }
 
@@ -356,7 +356,7 @@ impl ConfigBuilder {
         // Additional validations
         if self.smtp_username.is_none() != self.smtp_password.is_none() {
             return Err(ConfigError::Custom(
-                "only one of smtp username and password specified; provide both or neither".to_string()
+                "only one of smtp username and password specified; provide both or neither".to_owned()
             ));
         }
 
@@ -538,14 +538,14 @@ impl EnvConfig {
             broker_ip: env::var("BROKER_IP").ok(),
             broker_port: env::var("BROKER_PORT").ok().and_then(|x| x.parse().ok()),
             broker_public_url: env::var("BROKER_PUBLIC_URL").ok(),
-            broker_allowed_origins: env::var("BROKER_ALLOWED_ORIGINS").ok().map(|x| x.split(',').map(|x| x.to_string()).collect()),
+            broker_allowed_origins: env::var("BROKER_ALLOWED_ORIGINS").ok().map(|x| x.split(',').map(|x| x.to_owned()).collect()),
 
             broker_static_ttl: env::var("BROKER_STATIC_TTL").ok().and_then(|x| x.parse().ok()),
             broker_discovery_ttl: env::var("BROKER_DISCOVERY_TTL").ok().and_then(|x| x.parse().ok()),
             broker_keys_ttl: env::var("BROKER_KEYS_TTL").ok().and_then(|x| x.parse().ok()),
 
             broker_token_ttl: env::var("BROKER_TOKEN_TTL").ok().and_then(|x| x.parse().ok()),
-            broker_keyfiles: env::var("BROKER_KEYFILES").ok().map(|x| x.split(',').map(|x| x.to_string()).collect()),
+            broker_keyfiles: env::var("BROKER_KEYFILES").ok().map(|x| x.split(',').map(|x| x.to_owned()).collect()),
             broker_keytext: env::var("BROKER_KEYTEXT").ok().and_then(|x| x.parse().ok()),
 
             broker_redis_url: env::var("BROKER_REDIS_URL").ok(),

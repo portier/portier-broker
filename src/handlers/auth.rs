@@ -65,9 +65,9 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
 
     let redirect_uri = try_get_param!(ctx, "redirect_uri");
     let client_id = try_get_param!(ctx, "client_id");
-    if try_get_param!(ctx, "response_mode", "fragment".to_string()) != "form_post" {
+    if try_get_param!(ctx, "response_mode", "fragment".to_owned()) != "form_post" {
         return Box::new(future::err(BrokerError::Input(
-            "unsupported response_mode, only form_post is supported".to_string())));
+            "unsupported response_mode, only form_post is supported".to_owned())));
     }
 
     let redirect_uri = match parse_redirect_uri(&redirect_uri, "redirect_uri") {
@@ -87,7 +87,7 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
     if let Some(ref whitelist) = ctx.app.allowed_origins {
         if !whitelist.contains(&client_id) {
             return Box::new(future::err(BrokerError::Input(
-                "the origin is not whitelisted".to_string())));
+                "the origin is not whitelisted".to_owned())));
         }
     }
 
@@ -95,13 +95,13 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
     let login_hint = try_get_param!(ctx, "login_hint");
     if try_get_param!(ctx, "response_type") != "id_token" {
         return Box::new(future::err(BrokerError::Input(
-            "unsupported response_type, only id_token is supported".to_string())));
+            "unsupported response_type, only id_token is supported".to_owned())));
     }
 
     let email_addr = match login_hint.parse::<EmailAddress>() {
         Ok(addr) => Rc::new(addr),
         Err(_) => return Box::new(future::err(BrokerError::Input(
-            "login_hint is not a valid email address".to_string()))),
+            "login_hint is not a valid email address".to_owned()))),
     };
 
     // Enforce ratelimit based on the login_hint

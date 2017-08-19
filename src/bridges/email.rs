@@ -123,7 +123,7 @@ pub fn verify(ctx_handle: &ContextHandle, code: &str)
 
     let trimmed = code.replace(|c: char| c.is_whitespace(), "").to_lowercase();
     if trimmed != ctx.session["code"] {
-        return Box::new(future::err(BrokerError::Input("incorrect code".to_string())));
+        return Box::new(future::err(BrokerError::Input("incorrect code".to_owned())));
     }
 
     let email = EmailAddress::from_trusted(&ctx.session["email"]);

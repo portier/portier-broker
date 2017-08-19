@@ -256,7 +256,7 @@ fn handle_error(ctx: &Context, err: BrokerError) -> FutureResult<Response, Hyper
             info!("{}", err);
             return_to_relier(ctx, &[
                 ("error", "temporarily_unavailable"),
-                ("error_description", &err.description().to_string()),
+                ("error_description", &err.description().to_owned()),
             ])
         },
         (err @ BrokerError::Provider(_), None) => {
@@ -265,7 +265,7 @@ fn handle_error(ctx: &Context, err: BrokerError) -> FutureResult<Response, Hyper
                 .with_status(StatusCode::ServiceUnavailable)
                 .with_header(ContentType::html())
                 .with_body(ctx.app.templates.error.render(&[
-                    ("error", &err.description().to_string()),
+                    ("error", &err.description().to_owned()),
                 ]));
             future::ok(res)
         },
@@ -306,9 +306,9 @@ fn set_headers(res: &mut Response) {
     headers.set(StrictTransportSecurity::excluding_subdomains(31_536_000u64));
     headers.set(ContentSecurityPolicy(csp.clone()));
     headers.set(XContentSecurityPolicy(csp));
-    headers.set(XContentTypeOptions("nosniff".to_string()));
-    headers.set(XXSSProtection("1; mode=block".to_string()));
-    headers.set(XFrameOptions("DENY".to_string()));
+    headers.set(XContentTypeOptions("nosniff".to_owned()));
+    headers.set(XXSSProtection("1; mode=block".to_owned()));
+    headers.set(XFrameOptions("DENY".to_owned()));
 
     // Default to disable caching completely.
     if !headers.has::<CacheControl>() {
