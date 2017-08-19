@@ -7,7 +7,9 @@ use handlers::json_response;
 use http::{ContextHandle, HandlerResult};
 use hyper::server::Response;
 use std::rc::Rc;
+use std::time::Duration;
 use store_limits::addr_limiter;
+use tokio_core::reactor::Timeout;
 use validation::{parse_redirect_uri, parse_oidc_endpoint};
 use webfinger;
 
@@ -115,8 +117,6 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
     ctx.session.set("nonce", nonce);
     ctx.session.set("redirect_uri", redirect_uri.into_string());
 
-    // TODO: Start discovery timeout
-
     // Discover the authentication endpoints based on the email domain.
     let f = if let Some(mapped) = ctx.app.domain_overrides.get(email_addr.domain()) {
         Box::new(future::ok(vec![mapped.clone()]))
@@ -167,6 +167,28 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
             Box::new(future::err(()))
         }
     });
+
+    // Apply a timeout to discovery.
+    let ctx_handle2 = ctx_handle.clone();
+    let email_addr2 = email_addr.clone();
+    let f = Timeout::new(Duration::from_secs(5), &ctx.app.handle)
+        .expect("failed to create discovery timeout")
+        .map_err(|e| panic!("error in discovery timeout: {}", e))
+        .and_then(move |_| {
+            info!("discovery timed out for {}", email_addr2.domain());
+            future::err(())
+        })
+        .select(f)
+        // Unpack the result and continue the other future.
+        // Perhaps a second attempt will have cache.
+        .then(move |result| {
+            let (result, other_future) = match result {
+                Ok((r, f)) => (Ok(r), f),
+                Err((e, f)) => (Err(e), f),
+            };
+            ctx_handle2.borrow().app.handle.spawn(other_future.map(|_| ()));
+            result
+        });
 
     // Email loop authentication.
     let ctx_handle2 = ctx_handle.clone();

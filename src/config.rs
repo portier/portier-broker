@@ -180,6 +180,7 @@ pub struct Config {
     pub providers: HashMap<Url, Rc<Provider>>,
     pub templates: Templates,
     pub i18n: I18n,
+    pub handle: Handle,
 }
 
 
@@ -432,6 +433,7 @@ impl ConfigBuilder {
             providers: providers,
             templates: Templates::default(),
             i18n: I18n::default(),
+            handle: handle.clone(),
         })
     }
 }
