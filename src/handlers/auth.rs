@@ -8,8 +8,7 @@ use http::{ContextHandle, HandlerResult};
 use hyper::server::Response;
 use std::rc::Rc;
 use store_limits::addr_limiter;
-use url::Url;
-use validation::{valid_uri, only_origin, same_origin};
+use validation::{parse_redirect_uri};
 use webfinger;
 
 
@@ -69,27 +68,26 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
             "unsupported response_mode, only form_post is supported".to_string())));
     }
 
-    let result = valid_uri(redirect_uri.as_str(), "redirect_uri")
-        .and_then(|_| valid_uri(&client_id, "client_id"))
-        .and_then(|_| same_origin(&client_id, redirect_uri.as_str()))
-        .and_then(|_| only_origin(&client_id))
-        .map_err(|err| err.into())
-        .and_then(|_| {
-            if let Some(ref whitelist) = ctx.app.allowed_origins {
-                if !whitelist.contains(&client_id.to_string()) {
-                    return Err(BrokerError::Input("the origin is not whitelisted".to_string()));
-                }
-            }
-            Ok(())
-        });
-    if let Err(err) = result {
-        return Box::new(future::err(err));
+    let redirect_uri = match parse_redirect_uri(&redirect_uri, "redirect_uri") {
+        Ok(url) => url,
+        Err(e) => return Box::new(future::err(e.into())),
+    };
+
+    if client_id != redirect_uri.origin().ascii_serialization() {
+        return Box::new(future::err(BrokerError::Input(
+            "the client_id must be the origin of the redirect_uri".to_owned())));
     }
 
     // Per the OAuth2 spec, we may redirect to the RP once we have validated client_id and
     // redirect_uri. In our case, this means we make redirect_uri available to error handling.
-    let redirect_uri: Url = redirect_uri.parse().expect("unable to parse redirect uri");
     ctx.redirect_uri = Some(redirect_uri.clone());
+
+    if let Some(ref whitelist) = ctx.app.allowed_origins {
+        if !whitelist.contains(&client_id) {
+            return Box::new(future::err(BrokerError::Input(
+                "the origin is not whitelisted".to_string())));
+        }
+    }
 
     let nonce = try_get_param!(ctx, "nonce");
     let login_hint = try_get_param!(ctx, "login_hint");
