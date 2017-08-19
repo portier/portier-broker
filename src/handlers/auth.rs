@@ -8,7 +8,7 @@ use http::{ContextHandle, HandlerResult};
 use hyper::server::Response;
 use std::rc::Rc;
 use store_limits::addr_limiter;
-use validation::{parse_redirect_uri};
+use validation::{parse_redirect_uri, parse_oidc_endpoint};
 use webfinger;
 
 
@@ -138,22 +138,16 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
             match endpoint.scheme() {
                 #[cfg(feature = "insecure")]
                 bridges::PORTIER_INSECURE_IDP_SCHEME => {
-                    // TODO: verify URI
-                    Some(Rc::new(Provider::Portier {
-                        origin: endpoint.origin().ascii_serialization()
-                    }))
+                    parse_oidc_endpoint(&endpoint)
+                        .map(|origin| Rc::new(Provider::Portier { origin }))
                 },
                 bridges::PORTIER_IDP_SCHEME => {
-                    // TODO: verify URI
-                    Some(Rc::new(Provider::Portier {
-                        origin: endpoint.origin().ascii_serialization()
-                    }))
+                    parse_oidc_endpoint(&endpoint)
+                        .map(|origin| Rc::new(Provider::Portier { origin }))
                 },
-                bridges::GOOGLE_IDP_SCHEME => {
-                    // TODO: verify URI
+                _ => {
                     ctx.app.providers.get(endpoint).cloned()
                 },
-                _ => None,
             }
         }).next()
     });

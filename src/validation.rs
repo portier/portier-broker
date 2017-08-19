@@ -64,24 +64,24 @@ impl From<url::ParseError> for ValidationError {
 }
 
 
-/// Test that a `redirect_uri` is valid and conforms to our expectations.
+/// Test that a `redirect_uri` is valid. Returns the parsed `Url` if successful.
 pub fn parse_redirect_uri(input: &str, param: &str) -> Result<Url, ValidationError> {
     if !input.starts_with("http://") && !input.starts_with("https://") {
-        return Err(ValidationError::BadScheme(param.to_owned()))
+        return Err(ValidationError::BadScheme(param.to_owned()));
     }
 
     let url = Url::parse(input)?;
     if url.username() != "" || url.password().is_some() {
-        return Err(ValidationError::UserinfoPresent(param.to_owned()))
+        return Err(ValidationError::UserinfoPresent(param.to_owned()));
     }
     if url.port() == Some(0) {
-        return Err(ValidationError::BadPort(param.to_owned()))
+        return Err(ValidationError::BadPort(param.to_owned()));
     }
 
     // Make sure the input origin matches the serialized origin.
     let origin = url.origin().ascii_serialization();
     if !input.starts_with(&origin) {
-        return Err(ValidationError::InconsistentSerialization(param.to_owned()))
+        return Err(ValidationError::InconsistentSerialization(param.to_owned()));
     }
     match input.as_bytes().get(origin.len()) {
         Some(&b'/') | None => {},
@@ -92,12 +92,34 @@ pub fn parse_redirect_uri(input: &str, param: &str) -> Result<Url, ValidationErr
 }
 
 
+/// Test that a OpenID Connect endpoint is valid.
+///
+/// This method is more tolerant than `parse_redirect_uri`, because we're in control of all
+/// validation on the IdP side. Note that this method also assumes the scheme was already checked.
+///
+/// Returns the origin if successful.
+pub fn parse_oidc_endpoint(input: &Url) -> Option<String> {
+    if input.port() == Some(0) {
+        return None;
+    }
+
+    // Simple check to see if it's just an origin.
+    // The input should be the same, with only a trailing slash.
+    let origin = input.origin().ascii_serialization();
+    if input.as_str().len() != origin.len() + 1 {
+        return None;
+    }
+
+    Some(origin)
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn accepts_valid_uris() {
+    fn valid_redirect_uris() {
         for uri in &[
             // HTTP
             "http://example.com",
@@ -129,7 +151,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_invalid_uris() {
+    fn invalid_redirect_uris() {
         for uri in &[
             // Incomplete strings
             "",
@@ -173,6 +195,65 @@ mod tests {
             "http://»",
         ] {
             if parse_redirect_uri(uri, "input").is_ok() {
+                panic!(format!("did not reject uri: {}", uri))
+            }
+        }
+    }
+
+    #[test]
+    fn valid_oidc_endpoints() {
+        for uri in &[
+            // HTTP
+            "http://example.com",
+            "http://localhost",
+            "http://127.0.0.1",
+
+            // HTTPS
+            "https://example.com",
+            "https://localhost",
+            "https://127.0.0.1",
+
+            // Odd notations
+            "http:example.com",
+            "http://@example.com",
+
+            // Redundant default ports
+            "http://example.com:80",
+            "https://example.com:443",
+
+            // Non-default ports
+            "http://example.com:8080",
+            "http://127.0.0.1:8080",
+            "http://example.com:443",
+            "https://example.com:80",
+        ] {
+            let uri = uri.parse().expect("could not parse a test uri");
+            if parse_oidc_endpoint(&uri).is_none() {
+                panic!(format!("unexpectedly rejected uri: {}", uri))
+            }
+        }
+    }
+
+    #[test]
+    fn invalid_oidc_endpoints() {
+        for uri in &[
+            // Userinfo
+            "http://user:pass@example.com",
+            "http://user@example.com",
+
+            // Paths, query strings, and fragments
+            "http://example.com:8080/path?foo=bar#baz",
+            "http://example.com:8080/?foo=bar#baz",
+            "http://example.com:8080/#baz",
+            "http://example.com:8080/path#baz",
+            "http://example.com:8080/path?foo=bar",
+
+            // Invalid ports
+            "http://example.com:0",
+        ] {
+            println!("{}", uri);
+            let uri = uri.parse().expect("could not parse a test uri");
+            if parse_oidc_endpoint(&uri).is_some() {
                 panic!(format!("did not reject uri: {}", uri))
             }
         }

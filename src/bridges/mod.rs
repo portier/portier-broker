@@ -10,8 +10,6 @@ use std::rc::Rc;
 
 /// The Portier scheme used to identify a regular Portier identity provider.
 pub const PORTIER_IDP_SCHEME: &'static str = "https";
-/// The Portier scheme used to identify Google-like authentication endpoints.
-pub const GOOGLE_IDP_SCHEME: &'static str = "https+io.portier.idp.google";
 /// The Portier endpoint for the Google provider.
 pub const GOOGLE_IDP_ENDPOINT: &'static str = "https+io.portier.idp.google://accounts.google.com";
 /// The origin of the Google identity provider.
