@@ -197,6 +197,8 @@ pub fn verify(ctx_handle: &ContextHandle, id_token: String)
     let f = f.and_then(move |jwt_payload| {
         let ctx = ctx_handle.borrow();
         let domain = email_addr.domain();
+        let redirect_uri = ctx.redirect_uri.as_ref()
+            .expect("email::verify called without redirect_uri set");
 
         // Verify the claims contained in the token.
         let descr = format!("{}'s token payload", domain);
@@ -219,7 +221,8 @@ pub fn verify(ctx_handle: &ContextHandle, id_token: String)
 
         // If everything is okay, build a new identity token and send it
         // to the relying party.
-        future::ok(crypto::create_jwt(&ctx.app, &*email_addr, &ctx.session["client_id"], &ctx.session["nonce"]))
+        let aud = redirect_uri.origin().ascii_serialization();
+        future::ok(crypto::create_jwt(&ctx.app, &*email_addr, &aud, &ctx.session["nonce"]))
     });
 
     Box::new(f)

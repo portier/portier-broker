@@ -212,14 +212,14 @@ pub fn verify_jws(jws: &str, key_set: &json::Value) -> Result<json::Value, ()> {
         })
 }
 
-/// Helper method to create a JWT for a given email address and origin.
+/// Helper method to create a JWT for a given email address and audience.
 ///
 /// Builds the JSON payload, then signs it using the last key provided in
 /// the configuration object.
-pub fn create_jwt(app: &Config, email: &EmailAddress, origin: &str, nonce: &str) -> String {
+pub fn create_jwt(app: &Config, email: &EmailAddress, aud: &str, nonce: &str) -> String {
     let now = now_utc().to_timespec().sec;
     let payload = json!({
-        "aud": origin,
+        "aud": aud,
         "email": email.as_str(),
         "email_verified": email.as_str(),
         "exp": now + app.token_ttl as i64,

@@ -18,7 +18,7 @@ pub fn confirmation(ctx_handle: ContextHandle) -> HandlerResult {
             return Box::new(future::err(err));
         }
 
-        let redirect_uri = ctx.session["redirect"].parse().expect("unable to parse stored redirect uri");
+        let redirect_uri = ctx.session["redirect_uri"].parse().expect("unable to parse stored redirect uri");
         ctx.redirect_uri = Some(redirect_uri);
 
         try_get_param!(ctx, "code")

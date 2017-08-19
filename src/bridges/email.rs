@@ -51,10 +51,12 @@ pub fn request(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>)
                        utf8_percent_encode(&ctx.session.id, QUERY_ENCODE_SET),
                        utf8_percent_encode(&chars, QUERY_ENCODE_SET));
 
-    let client_id: &str = &ctx.session["client_id"];
     let catalog = ctx.catalog();
+    let origin = ctx.redirect_uri.as_ref()
+        .expect("email::request called without redirect_uri set")
+        .origin().unicode_serialization();
     let params = &[
-        ("client_id", client_id),
+        ("origin", origin.as_str()),
         ("code", &chars_fmt),
         ("link", &href),
         ("title", catalog.gettext("Finish logging in to")),
@@ -67,7 +69,7 @@ pub fn request(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>)
         .from((&*ctx.app.from_address, &*ctx.app.from_name))
         .alternative(&ctx.app.templates.email_html.render(params),
                      &ctx.app.templates.email_text.render(params))
-        .subject(&[catalog.gettext("Finish logging in to"), client_id].join(" "))
+        .subject(&[catalog.gettext("Finish logging in to"), origin.as_str()].join(" "))
         .build()
         .unwrap_or_else(|err| panic!("unhandled error building email: {}", err.description()));
     let mut builder = match SmtpTransportBuilder::new(&ctx.app.smtp_server) {
@@ -97,7 +99,7 @@ pub fn request(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>)
     let res = Response::new()
         .with_header(ContentType::html())
         .with_body(ctx.app.templates.confirm_email.render(&[
-            ("client_id", client_id),
+            ("origin", origin.as_str()),
             ("session_id", &ctx.session.id),
             ("title", catalog.gettext("Confirm your address")),
             ("explanation", catalog.gettext("We've sent you an email to confirm your address.")),
@@ -115,6 +117,8 @@ pub fn verify(ctx_handle: &ContextHandle, code: &str)
               -> Box<Future<Item=String, Error=BrokerError>> {
 
     let ctx = ctx_handle.borrow();
+    let redirect_uri = ctx.redirect_uri.as_ref()
+        .expect("email::verify called without redirect_uri set");
 
     let trimmed = code.replace(|c: char| c.is_whitespace(), "").to_lowercase();
     if trimmed != ctx.session["code"] {
@@ -122,7 +126,7 @@ pub fn verify(ctx_handle: &ContextHandle, code: &str)
     }
 
     let email = EmailAddress::from_trusted(&ctx.session["email"]);
-    let client_id = &ctx.session["client_id"];
+    let aud = redirect_uri.origin().ascii_serialization();
     let nonce = &ctx.session["nonce"];
-    Box::new(future::ok(crypto::create_jwt(&*ctx.app, &email, client_id, nonce)))
+    Box::new(future::ok(crypto::create_jwt(&*ctx.app, &email, &aud, nonce)))
 }

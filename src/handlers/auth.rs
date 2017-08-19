@@ -114,9 +114,8 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
     // Create the common session structure, but do not yet save the session
     ctx.session.id = crypto::session_id(&*email_addr, &client_id);
     ctx.session.set("email", email_addr.as_str().to_owned());
-    ctx.session.set("client_id", client_id.clone());
     ctx.session.set("nonce", nonce);
-    ctx.session.set("redirect", redirect_uri.into_string());
+    ctx.session.set("redirect_uri", redirect_uri.into_string());
 
     // TODO: Start discovery timeout
 
