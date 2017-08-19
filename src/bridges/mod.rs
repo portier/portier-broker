@@ -21,7 +21,9 @@ pub const GOOGLE_IDP_ORIGIN: &'static str = "https://accounts.google.com";
 pub const PORTIER_INSECURE_IDP_SCHEME: &'static str = "http";
 
 
-/// Simple enum for kind of provider.
+/// Simple enum for the kind of provider.
+///
+/// Used for the `provider_kind` session field in the OpenID Connect bridge.
 pub enum ProviderKind {
     Portier,
     Google,

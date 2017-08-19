@@ -8,19 +8,19 @@ use store_cache::{CacheKey, fetch_json_url};
 use url::Url;
 
 
-// Our relation string in WebFinger
+// Our relation string in webfinger
 const WEBFINGER_PORTIER_REL: &'static str = "https://portier.io/specs/auth/1.0/idp";
 
 
-/// Query WebFinger for the given email address
+/// Query webfinger for the given email address
 ///
-/// This queries the WebFinger endpoint of the domain for the given email
+/// This queries the webfinger endpoint of the domain for the given email
 /// address. The resource queried is the email address itself, as an `acct` URL.
 /// Request failures of any kind simply result in an empty list.
 pub fn query(app: &Rc<Config>, email_addr: &Rc<EmailAddress>)
     -> Box<Future<Item=Vec<Url>, Error=BrokerError>> {
 
-    // Build the WebFinger query URL. We can safely do string concatenation here, because the
+    // Build the webfinger query URL. We can safely do string concatenation here, because the
     // domain has already been validated using the `url` crate.
     #[cfg(feature = "insecure")]
     let url = format!("http://{}/.well-known/webfinger", email_addr.domain());

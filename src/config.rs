@@ -1,5 +1,3 @@
-#![allow(unknown_lints, cyclomatic_complexity)]
-
 use bridges::{GOOGLE_IDP_ENDPOINT, Provider};
 use crypto;
 use gettext::Catalog;

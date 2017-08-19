@@ -142,7 +142,7 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
                         .map(|origin| Rc::new(Provider::Portier { origin }))
                 },
                 bridges::PORTIER_IDP_SCHEME => {
-                    parse_oidc_endpoint(&endpoint)
+                    parse_oidc_endpoint(endpoint)
                         .map(|origin| Rc::new(Provider::Portier { origin }))
                 },
                 _ => {

@@ -95,7 +95,8 @@ pub fn parse_redirect_uri(input: &str, param: &str) -> Result<Url, ValidationErr
 /// Test that a OpenID Connect endpoint is valid.
 ///
 /// This method is more tolerant than `parse_redirect_uri`, because we're in control of all
-/// validation on the IdP side. Note that this method also assumes the scheme was already checked.
+/// validation on the identity provider side. Note that this method also assumes the scheme was
+/// already checked.
 ///
 /// Returns the origin if successful.
 pub fn parse_oidc_endpoint(input: &Url) -> Option<String> {
