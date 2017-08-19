@@ -20,9 +20,8 @@ const WEBFINGER_PORTIER_REL: &'static str = "https://portier.io/specs/auth/1.0/i
 pub fn query(app: &Rc<Config>, email_addr: &Rc<EmailAddress>)
     -> Box<Future<Item=Vec<Url>, Error=BrokerError>> {
 
-    // Build the WebFinger query URL.
-    // TODO: Verify safety of building the URL like this.
-
+    // Build the WebFinger query URL. We can safely do string concatenation here, because the
+    // domain has already been validated using the `url` crate.
     #[cfg(feature = "insecure")]
     let url = format!("http://{}/.well-known/webfinger", email_addr.domain());
     #[cfg(not(feature = "insecure"))]

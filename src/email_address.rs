@@ -1,6 +1,6 @@
-use idna;
 use std::fmt::{Display, Debug, Formatter, Result as FmtResult};
 use std::str::FromStr;
+use url::Host;
 
 
 #[derive(Clone,PartialEq,Eq)]
@@ -16,9 +16,13 @@ impl FromStr for EmailAddress {
         let local_end = input.find('@').ok_or(())?;
         // Transform local part to lowercase, according to unicode
         let local = input[..local_end].to_lowercase();
-        // Normalize domain to lowercase ASCII, according to WHATWG
-        let domain = idna::domain_to_ascii(&input[local_end + 1..]).map_err(|_| ())?;
-        Ok(EmailAddress::from_parts(&local, &domain))
+        // Verify and normalize domain to lowercase ASCII, according to WHATWG
+        let host = Host::parse(&input[local_end + 1..]).map_err(|_| ())?;
+        if let Host::Domain(domain) = host {
+            Ok(EmailAddress::from_parts(&local, &domain))
+        } else {
+            Err(())
+        }
     }
 }
 

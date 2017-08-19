@@ -11,7 +11,6 @@ dependencies = [
  "hyper 0.11.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "hyper-staticfile 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "hyper-tls 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "idna 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "lettre 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "mustache 0.8.1 (registry+https://github.com/rust-lang/crates.io-index)",
