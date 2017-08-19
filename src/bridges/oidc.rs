@@ -37,6 +37,24 @@ macro_rules! try_get_json_field {
 }
 
 
+/// Macro used to verify a token payload field.
+///
+/// Will return from the caller with a `BrokerError` if the check fails. The `$key` and `$descr`
+/// parameters are used in the error description.
+///
+/// ```
+/// check_field!(foo == "bar", "foo", "example document");
+/// ```
+macro_rules! check_field {
+    ( $check:expr, $key:expr, $descr:expr ) => {
+        if !$check {
+            return future::err(BrokerError::Provider(
+                format!("{} has incorrect value in {}", $key, $descr)));
+        }
+    }
+}
+
+
 /// Helper method to issue an OAuth authorization request.
 ///
 /// When an authentication request comes in and matches one of the "famous"
@@ -208,21 +226,26 @@ pub fn verify(ctx_handle: &ContextHandle, id_token: String)
         let token_addr = try_get_json_field!(jwt_payload, "email", descr);
         let exp = try_get_json_field!(jwt_payload, "exp", |v| v.as_i64(), descr);
         let nonce = try_get_json_field!(jwt_payload, "nonce", descr);
-        // TODO: Turn these into provider errors.
-        let token_addr: EmailAddress = token_addr.parse()
-            .expect("failed to parse provider token email address");
-        assert_eq!(iss, ctx.session["provider_origin"]);
-        assert_eq!(aud, ctx.session["provider_client_id"]);
+
+        let token_addr: EmailAddress = match token_addr.parse() {
+            Ok(addr) => addr,
+            Err(_) => return future::err(BrokerError::Provider(format!(
+                    "failed to parse email from {}", descr))),
+        };
+
+        check_field!(iss == ctx.session["provider_origin"], "iss", descr);
+        check_field!(aud == ctx.session["provider_client_id"], "aud", descr);
+        check_field!(nonce == ctx.session["provider_nonce"], "nonce", descr);
 
         // Apply normalization for Google.
-        match ctx.session["provider_kind"].parse().expect("invalid provider kind in session") {
-            ProviderKind::Portier => assert_eq!(token_addr, email_addr),
-            ProviderKind::Google => assert_eq!(token_addr.normalize_google(), email_addr.normalize_google()),
-        }
+        let kind = ctx.session["provider_kind"].parse().expect("invalid provider kind in session");
+        check_field!(match kind {
+            ProviderKind::Portier => token_addr == *email_addr,
+            ProviderKind::Google => token_addr.normalize_google() == email_addr.normalize_google(),
+        }, "email", descr);
 
         let now = now_utc().to_timespec().sec;
-        assert!(now < exp);
-        assert_eq!(nonce, ctx.session["provider_nonce"]);
+        check_field!(now < exp, "exp", descr);
 
         // If everything is okay, build a new identity token and send it
         // to the relying party.
