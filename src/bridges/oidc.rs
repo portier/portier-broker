@@ -100,10 +100,16 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>, link: &Li
     let provider_origin = match validation::parse_oidc_href(&link.href) {
         Some(origin) => origin,
         None => return Box::new(future::err(BrokerError::Provider(
-            format!("invalid href: {}", link.href)))),
+            format!("invalid href (validation failed): {}", link.href)))),
     };
     let bridge_data = Rc::new(match link.rel {
         Relation::Portier => {
+            #[cfg(not(feature = "insecure"))] {
+                if link.href.scheme() != "https" {
+                    return Box::new(future::err(BrokerError::Provider(
+                        format!("invalid href (not HTTPS): {}", link.href))));
+                }
+            }
             OidcBridgeData {
                 origin: provider_origin,
                 client_id: ctx.app.public_url.clone(),
@@ -130,16 +136,8 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>, link: &Li
         },
     });
 
-    // Retrieve the provider's configuration and extract the
-    // `authorization_endpoint` from it.
-    let bridge_data2 = bridge_data.clone();
-    let f = {
-        let config_url = build_config_url(&bridge_data2.origin);
-        fetch_json_url(&ctx.app, config_url, &CacheKey::OidcConfig {
-            origin: bridge_data2.origin.as_str(),
-        }).map_err(move |e| BrokerError::Provider(
-            format!("could not fetch {}'s configuration: {}", bridge_data2.origin, e)))
-    };
+    // Retrieve the provider's configuration.
+    let f = fetch_config(ctx_handle, &bridge_data);
 
     let ctx_handle = ctx_handle.clone();
     let email_addr = email_addr.clone();
@@ -226,16 +224,8 @@ pub fn callback(ctx_handle: ContextHandle) -> HandlerResult {
         (bridge_data, id_token)
     };
 
-    // Request the provider's configuration to get the `jwks_uri` values from it.
-    let bridge_data2 = bridge_data.clone();
-    let f = {
-        let ctx = ctx_handle.borrow();
-        let config_url = build_config_url(&bridge_data2.origin);
-        fetch_json_url(&ctx.app, config_url, &CacheKey::OidcConfig {
-            origin: bridge_data2.origin.as_str(),
-        }).map_err(move |e| BrokerError::Provider(
-            format!("could not fetch {}'s configuration: {}", bridge_data2.origin, e)))
-    };
+    // Retrieve the provider's configuration.
+    let f = fetch_config(&ctx_handle, &bridge_data);
 
     // Grab the keys from the provider, then verify the signature.
     let ctx_handle2 = ctx_handle.clone();
@@ -293,8 +283,39 @@ pub fn callback(ctx_handle: ContextHandle) -> HandlerResult {
     Box::new(f)
 }
 
-/// Build the URL to the OpenID Connect configuration for a provider at the given origin.
-fn build_config_url(provider_origin: &str) -> Url {
-    format!("{}/.well-known/openid-configuration", provider_origin).parse()
-        .expect("could not build the OpenID Connect configuration URL")
+// Retrieve and verify the provider's configuration.
+fn fetch_config(ctx_handle: &ContextHandle, bridge_data: &Rc<OidcBridgeData>)
+    -> Box<Future<Item=ProviderConfig, Error=BrokerError>> {
+
+    let config_url = format!("{}/.well-known/openid-configuration", bridge_data.origin).parse()
+        .expect("could not build the OpenID Connect configuration URL");
+
+    let ctx = ctx_handle.borrow();
+    let bridge_data = bridge_data.clone();
+    let f = fetch_json_url::<ProviderConfig>(&ctx.app, config_url, &CacheKey::OidcConfig {
+        origin: bridge_data.origin.as_str(),
+    });
+
+    let f = f.then(move |result| {
+        let provider_config = match result {
+            Ok(provider_config) => provider_config,
+            Err(e) => return future::err(BrokerError::Provider(
+                format!("could not fetch {}'s configuration: {}", bridge_data.origin, e))),
+        };
+
+        #[cfg(not(feature = "insecure"))] {
+            if provider_config.authorization_endpoint.scheme() != "https" {
+                return future::err(BrokerError::Provider(
+                    format!("{}'s authorization_endpoint is not HTTPS", bridge_data.origin)));
+            }
+            if provider_config.jwks_uri.scheme() != "https" {
+                return future::err(BrokerError::Provider(
+                    format!("{}'s jwks_uri is not HTTPS", bridge_data.origin)));
+            }
+        }
+
+        future::ok(provider_config)
+    });
+
+    Box::new(f)
 }
