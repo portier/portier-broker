@@ -398,7 +398,7 @@ impl ConfigBuilder {
             }
         };
 
-        // Configure default domain mappings for hosted Google
+        // Configure default domain overrides for hosted Google
         let mut domain_overrides = HashMap::new();
         if self.google.is_some() {
             let links = vec![Link {

@@ -137,20 +137,22 @@ per_email       BROKER_LIMIT_PER_EMAIL "5/min"
 client_id       BROKER_GOOGLE_CLIENT_ID (none)
 =============== ======================= =======
 
-**[domain_mapping] section:**
+**[domain_overrides] section:**
 
-This section contains arbitrary domain names, mapped to provider endpoints,
-allowing local configuration on the broker to skip and override WebFinger
-queries for some domains.
+This section contains arbitrary domain names, mapped to a list of
+WebFinger-like links, allowing local configuration on the broker to skip and
+override WebFinger queries for some domains.
 
-This is currently most useful for G Suite domains, which are specified as:
+This is currently most useful for G Suite domains that don't respond to
+WebFinger, which can be specified as:
 
 .. code-block:: toml
 
-   [domain_mapping]
-   "my-apps-domain.example" = "https+io.portier.idp.google://accounts.google.com"
+   [[domain_overrides."my-apps-domain.example"]]
+   rel = "https://portier.io/specs/auth/1.0/idp/google"
+   href = "https://accounts.google.com"
 
-When the ``[google]`` section is present, default mappings are added for
+When the ``[google]`` section is present, default overrides are added for
 ``gmail.com`` and ``googlemail.com``.
 
 Contributing
