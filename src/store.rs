@@ -1,6 +1,5 @@
 use error::{BrokerResult, BrokerError};
-use redis::{self, Commands, PipelineCommands};
-use std::collections::HashMap;
+use redis::{self, Commands};
 
 
 #[derive(Clone)]
@@ -24,21 +23,17 @@ impl Store {
         }
     }
 
-    pub fn store_session(&self, session_id: &str, data: &[(&str, &str)])
+    pub fn store_session(&self, session_id: &str, data: &str)
                          -> BrokerResult<()> {
         let key = Self::format_session_key(session_id);
-        redis::pipe()
-            .atomic()
-            .hset_multiple(&key, data).ignore()
-            .expire(&key, self.expire_sessions).ignore()
-            .query::<()>(&self.client)
+        self.client.set_ex(&key, data, self.expire_sessions)
             .map_err(|e| BrokerError::Internal(format!("could not save a session: {}", e)))
     }
 
     pub fn get_session(&self, session_id: &str)
-                       -> BrokerResult<HashMap<String, String>> {
+                       -> BrokerResult<String> {
         let key = Self::format_session_key(session_id);
-        let stored: HashMap<String, String> = self.client.hgetall(&key)
+        let stored: String = self.client.get(&key)
             .map_err(|e| BrokerError::Internal(format!("could not load a session: {}", e)))?;
         if stored.is_empty() {
             return Err(BrokerError::Input("session not found".to_owned()));

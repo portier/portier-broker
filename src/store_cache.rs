@@ -5,6 +5,7 @@ use http;
 use hyper::StatusCode;
 use hyper::header::{CacheControl, CacheDirective};
 use redis::Commands;
+use serde::de::DeserializeOwned;
 use serde_json as json;
 use std::cmp::max;
 use std::rc::Rc;
@@ -39,8 +40,9 @@ impl<'a> CacheKey<'a> {
 /// Fetch `url` from cache or using a HTTP GET request, and parse the response as JSON. The
 /// cache is stored in `app.store` with `key`. The `client` is used to make the HTTP GET request,
 /// if necessary.
-pub fn fetch_json_url(app: &Rc<Config>, url: Url, key: &CacheKey)
-                      -> Box<Future<Item=json::Value, Error=BrokerError>> {
+pub fn fetch_json_url<T>(app: &Rc<Config>, url: Url, key: &CacheKey)
+    -> Box<Future<Item=T, Error=BrokerError>>
+    where T: 'static + DeserializeOwned {
 
     let url = Rc::new(url);
 
@@ -97,7 +99,7 @@ pub fn fetch_json_url(app: &Rc<Config>, url: Url, key: &CacheKey)
         let url2 = url.clone();
         let f = f.and_then(move |(chunk, max_age)| {
             let result = from_utf8(&chunk)
-                .map_err(|_| BrokerError::Provider(format!("fetch failed (invalid UTF-8): {}", url2)))
+                .map_err(|e| BrokerError::Provider(format!("fetch failed ({}): {}", e, url2)))
                 .map(|data| data.to_owned())
                 .and_then(move |data| {
                     // Cache the response for at least `expire_cache`, but honor longer `max-age`.
@@ -112,10 +114,10 @@ pub fn fetch_json_url(app: &Rc<Config>, url: Url, key: &CacheKey)
         Box::new(f)
     };
 
-    let f = f.and_then(move |data| {
-        future::result(json::from_str(&data).map_err(|_| {
-            BrokerError::Provider(format!("fetch failed (invalid JSON): {}", url))
-        }))
+    let f = f.and_then(move |data| -> future::FutureResult<T, BrokerError> {
+        let result = json::from_str(&data)
+            .map_err(|e| BrokerError::Provider(format!("fetch failed ({}): {}", e, url)));
+        future::result(result)
     });
 
     Box::new(f)

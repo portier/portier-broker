@@ -1,4 +1,5 @@
 use base64;
+use bridges::oidc::ProviderKey;
 use config::Config;
 use email_address::EmailAddress;
 use openssl::bn::{BigNum, BigNumRef};
@@ -157,14 +158,10 @@ pub fn nonce() -> String {
 ///
 /// Searches the provided JWK Key Set Value for the key matching the given
 /// id. Returns a usable public key if exactly one key is found.
-pub fn jwk_key_set_find(set: &json::Value, kid: &str) -> Result<PKey, ()> {
-    let key_objs = set.get("keys").and_then(|v| v.as_array()).ok_or(())?;
-    let matching = key_objs.iter()
-        .filter(|key_obj| {
-            key_obj.get("kid").and_then(|v| v.as_str()) == Some(kid) &&
-            key_obj.get("use").and_then(|v| v.as_str()) == Some("sig")
-        })
-        .collect::<Vec<&json::Value>>();
+pub fn jwk_key_set_find(key_set: &[ProviderKey], kid: &str) -> Result<PKey, ()> {
+    let matching: Vec<&ProviderKey> = key_set.iter()
+        .filter(|key| key.use_ == "sig" && key.kid == kid)
+        .collect();
 
     // Verify that we found exactly one key matching the key ID.
     if matching.len() != 1 {
@@ -172,19 +169,16 @@ pub fn jwk_key_set_find(set: &json::Value, kid: &str) -> Result<PKey, ()> {
     }
 
     // Then, use the data to build a public key object for verification.
-    let n = matching[0].get("n").and_then(|v| v.as_str()).ok_or(())
-                .and_then(|data| base64url_decode(data))
-                .and_then(|data| BigNum::from_slice(&data).map_err(|_| ()))?;
-    let e = matching[0].get("e").and_then(|v| v.as_str()).ok_or(())
-                .and_then(|data| base64url_decode(data))
-                .and_then(|data| BigNum::from_slice(&data).map_err(|_| ()))?;
+    let key = matching.first().expect("expected one key");
+    let n = base64url_decode(&key.n).and_then(|data| BigNum::from_slice(&data).map_err(|_| ()))?;
+    let e = base64url_decode(&key.e).and_then(|data| BigNum::from_slice(&data).map_err(|_| ()))?;
     let rsa = Rsa::from_public_components(n, e).map_err(|_| ())?;
     Ok(PKey::from_rsa(rsa).map_err(|_| ())?)
 }
 
 
 /// Verify a JWS signature, returning the payload as Value if successful.
-pub fn verify_jws(jws: &str, key_set: &json::Value) -> Result<json::Value, ()> {
+pub fn verify_jws(jws: &str, key_set: &[ProviderKey]) -> Result<json::Value, ()> {
     // Extract the header from the JWT structure. Determine what key was used
     // to sign the token, so we can then verify the signature.
     let parts: Vec<&str> = jws.split('.').collect();

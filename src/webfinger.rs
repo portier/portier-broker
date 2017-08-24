@@ -4,12 +4,69 @@ use error::BrokerError;
 use futures::future::{self, Future};
 use std::error::Error;
 use std::rc::Rc;
+use std::str::FromStr;
 use store_cache::{CacheKey, fetch_json_url};
 use url::Url;
 
 
-// Our relation string in webfinger
-const WEBFINGER_PORTIER_REL: &'static str = "https://portier.io/specs/auth/1.0/idp";
+/// Portier webfinger relation
+pub const WEBFINGER_PORTIER_REL: &'static str = "https://portier.io/specs/auth/1.0/idp";
+/// Portier + Google webfinger relation
+pub const WEBFINGER_GOOGLE_REL: &'static str = "https://portier.io/specs/auth/1.0/idp/google";
+
+
+/// Deserialization types
+#[derive(Deserialize)]
+pub struct DescriptorDef {
+    #[serde(default)]
+    pub links: Vec<LinkDef>,
+}
+
+#[derive(Clone,Debug,Deserialize)]
+pub struct LinkDef {
+    #[serde(default)]
+    pub rel: String,
+    #[serde(default)]
+    pub href: String,
+}
+
+
+/// Parsed and validated webfinger relation
+#[derive(Clone,Copy,Debug)]
+pub enum Relation {
+    Portier,
+    Google,
+}
+
+impl FromStr for Relation {
+    type Err = &'static str;
+    fn from_str(s: &str) -> Result<Relation, &'static str> {
+        match s {
+            WEBFINGER_PORTIER_REL => Ok(Relation::Portier),
+            WEBFINGER_GOOGLE_REL => Ok(Relation::Google),
+            _ => Err("unsupported value"),
+        }
+    }
+}
+
+
+/// Parsed and validated webfinger link
+#[derive(Clone,Debug)]
+pub struct Link {
+    pub rel: Relation,
+    pub href: Url,
+}
+
+impl Link {
+    /// Parse and validate a deserialized link
+    pub fn from_de_link(link: &LinkDef) -> Result<Link, String> {
+        match (link.rel.parse(), link.href.parse()) {
+            (Ok(rel), Ok(href)) => Ok(Link { rel, href }),
+            (Err(e), _) => Err(format!("invalid rel: {}", e)),
+            (_, Err(e)) => Err(format!("invalid href: {}", e)),
+        }
+    }
+}
 
 
 /// Query webfinger for the given email address
@@ -18,7 +75,7 @@ const WEBFINGER_PORTIER_REL: &'static str = "https://portier.io/specs/auth/1.0/i
 /// address. The resource queried is the email address itself, as an `acct` URL.
 /// Request failures of any kind simply result in an empty list.
 pub fn query(app: &Rc<Config>, email_addr: &Rc<EmailAddress>)
-    -> Box<Future<Item=Vec<Url>, Error=BrokerError>> {
+    -> Box<Future<Item=Vec<Link>, Error=BrokerError>> {
 
     // Build the webfinger query URL. We can safely do string concatenation here, because the
     // domain has already been validated using the `url` crate.
@@ -27,54 +84,24 @@ pub fn query(app: &Rc<Config>, email_addr: &Rc<EmailAddress>)
     #[cfg(not(feature = "insecure"))]
     let url = format!("https://{}/.well-known/webfinger", email_addr.domain());
 
-    let result = Url::parse_with_params(&url, &[
+    let url = match Url::parse_with_params(&url, &[
         ("resource", format!("acct:{}", email_addr).as_str()),
         ("rel", WEBFINGER_PORTIER_REL),
-    ]).map_err(|e| BrokerError::Internal(
-        format!("could not build query url: {}", e.description())));
-    let f = future::result(result);
+        ("rel", WEBFINGER_GOOGLE_REL),
+    ]) {
+        Ok(url) => url,
+        Err(e) => return Box::new(future::err(BrokerError::Internal(
+            format!("could not build webfinger query url: {}", e.description())))),
+    };
 
     // Make the request.
-    let app = app.clone();
-    let email_addr2 = email_addr.clone();
-    let f = f.and_then(move |url| {
-        let acct = email_addr2.as_str();
-        fetch_json_url(&app, url, &CacheKey::Discovery { acct })
-    });
+    let f = fetch_json_url(app, url, &CacheKey::Discovery { acct: email_addr.as_str() });
 
-    let f = f.map(|value| {
-        value.get("links").and_then(|val| val.as_array())
-            .map_or_else(|| vec![], |links| {
-                links.iter()
-                    // Filter on the Portier relation.
-                    .filter(|link| {
-                        let opt = link.get("rel").and_then(|val| val.as_str());
-                        opt == Some(WEBFINGER_PORTIER_REL)
-                    })
-                    // Extract all endpoints, parse the URLs.
-                    .filter_map(|link| {
-                        link.get("href")
-                            .and_then(|val| val.as_str())
-                            .ok_or(())
-                            .and_then(|href| href.parse().map_err(|_| ()))
-                            .ok()
-                    })
-                    .collect()
-            })
-    });
-
-    // Accept all provider failures, and simply return an empty list.
-    let email_addr = email_addr.clone();
-    let f = f.or_else(move |err| {
-        match err {
-            BrokerError::Provider(_) => {
-                info!("query failed for {}: {}", email_addr, err);
-                future::ok(vec![])
-            },
-            err => {
-                future::err(err)
-            },
-        }
+    // Parse the relations.
+    let f = f.map(|descriptor: DescriptorDef| {
+        descriptor.links.iter()
+            .filter_map(|link| Link::from_de_link(link).ok())
+            .collect()
     });
 
     Box::new(f)

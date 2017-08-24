@@ -99,7 +99,7 @@ pub fn parse_redirect_uri(input: &str, param: &str) -> Result<Url, ValidationErr
 /// already checked.
 ///
 /// Returns the origin if successful.
-pub fn parse_oidc_endpoint(input: &Url) -> Option<String> {
+pub fn parse_oidc_href(input: &Url) -> Option<String> {
     if input.port() == Some(0) {
         return None;
     }
@@ -229,7 +229,7 @@ mod tests {
             "https://example.com:80",
         ] {
             let uri = uri.parse().expect("could not parse a test uri");
-            if parse_oidc_endpoint(&uri).is_none() {
+            if parse_oidc_href(&uri).is_none() {
                 panic!(format!("unexpectedly rejected uri: {}", uri))
             }
         }
@@ -254,7 +254,7 @@ mod tests {
         ] {
             println!("{}", uri);
             let uri = uri.parse().expect("could not parse a test uri");
-            if parse_oidc_endpoint(&uri).is_some() {
+            if parse_oidc_href(&uri).is_some() {
                 panic!(format!("did not reject uri: {}", uri))
             }
         }

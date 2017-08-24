@@ -1,17 +1,14 @@
-use bridges::{self, Provider};
-use crypto;
+use bridges;
 use email_address::EmailAddress;
 use error::BrokerError;
 use futures::future::{self, Future, Either};
-use handlers::json_response;
-use http::{ContextHandle, HandlerResult};
-use hyper::server::Response;
+use http::{ContextHandle, HandlerResult, json_response};
 use std::rc::Rc;
 use std::time::Duration;
 use store_limits::addr_limiter;
 use tokio_core::reactor::Timeout;
-use validation::{parse_redirect_uri, parse_oidc_endpoint};
-use webfinger;
+use validation::parse_redirect_uri;
+use webfinger::{self, Link, Relation};
 
 
 /// Request handler to return the OpenID Discovery document.
@@ -104,67 +101,34 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
             "login_hint is not a valid email address".to_owned()))),
     };
 
-    // Enforce ratelimit based on the login_hint
+    // Enforce ratelimit based on the login_hint.
     match addr_limiter(&ctx.app.store, email_addr.as_str(), &ctx.app.limit_per_email) {
         Err(err) => return Box::new(future::err(err)),
         Ok(false) => return Box::new(future::err(BrokerError::RateLimited)),
         _ => {},
     }
 
-    // Create the common session structure, but do not yet save the session
-    ctx.session.id = crypto::session_id(&*email_addr, &client_id);
-    ctx.session.set("email", email_addr.as_str().to_owned());
-    ctx.session.set("nonce", nonce);
-    ctx.session.set("redirect_uri", redirect_uri.into_string());
+    // Create the session with common data, but do not yet save it.
+    ctx.start_session(&client_id, (*email_addr).clone(), nonce);
 
     // Discover the authentication endpoints based on the email domain.
     let f = if let Some(mapped) = ctx.app.domain_overrides.get(email_addr.domain()) {
-        Box::new(future::ok(vec![mapped.clone()]))
+        Box::new(future::ok(mapped.clone()))
     } else {
         webfinger::query(&ctx.app, &email_addr)
     };
 
-    let email_addr2 = email_addr.clone();
-    let f = f.or_else(move |err| {
-        info!("discovery failed for {}: {}", email_addr2, err);
-        future::err(())
-    });
-
-    // Get a provider configuration for the first endpoint we support.
-    let ctx_handle2 = ctx_handle.clone();
-    let f = f.map(move |endpoints| {
-        let ctx = ctx_handle2.borrow();
-        endpoints.iter().filter_map(|endpoint| {
-            match endpoint.scheme() {
-                #[cfg(feature = "insecure")]
-                bridges::PORTIER_INSECURE_IDP_SCHEME => {
-                    parse_oidc_endpoint(&endpoint)
-                        .map(|origin| Rc::new(Provider::Portier { origin }))
-                },
-                bridges::PORTIER_IDP_SCHEME => {
-                    parse_oidc_endpoint(endpoint)
-                        .map(|origin| Rc::new(Provider::Portier { origin }))
-                },
-                _ => {
-                    ctx.app.providers.get(endpoint).cloned()
-                },
-            }
-        }).next()
-    });
-
-    // Try to authenticate with this provider.
+    // Try to authenticate with the first provider.
+    // TODO: Queue discovery of links and process in order, with individual timeouts.
     let ctx_handle2 = ctx_handle.clone();
     let email_addr2 = email_addr.clone();
-    let f = f.and_then(move |provider| -> Box<Future<Item=Response, Error=()>> {
-        if let Some(provider) = provider {
-            let f = Provider::delegate_request(&ctx_handle2, &email_addr2, &provider)
-                .or_else(move |err| {
-                    info!("error authenticating with {}: {}", provider, err);
-                    future::err(())
-                });
-            Box::new(f)
-        } else {
-            Box::new(future::err(()))
+    let f = f.and_then(move |links| {
+        match links.first() {
+            // Portier and Google providers share an implementation
+            Some(link @ &Link { rel: Relation::Portier, .. })
+                | Some(link @ &Link { rel: Relation::Google, .. })
+                => bridges::oidc::auth(&ctx_handle2, &email_addr2, link),
+            _ => Box::new(future::err(BrokerError::ProviderCancelled)),
         }
     });
 
@@ -178,10 +142,11 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
             match result {
                 // Timeout resolved first.
                 Ok(Either::A((_, f))) => {
-                    info!("discovery timed out for {}", email_addr2);
                     // Continue the discovery future in the background.
-                    ctx_handle2.borrow().app.handle.spawn(f.map(|_| ()));
-                    future::err(())
+                    ctx_handle2.borrow().app.handle.spawn(
+                        f.map(|_| ()).map_err(|e| { e.log(); () }));
+                    future::err(BrokerError::Provider(
+                        format!("discovery timed out for {}", email_addr2)))
                 },
                 Err(Either::A((e, _))) => {
                     panic!("error in discovery timeout: {}", e)
@@ -196,10 +161,16 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
             }
         });
 
-    // Email loop authentication.
+    // Fall back to email loop authentication.
     let ctx_handle2 = ctx_handle.clone();
-    let f = f.or_else(move |_| {
-        bridges::email::request(&ctx_handle2, &email_addr)
+    let f = f.or_else(move |e| {
+        e.log();
+        match e {
+            BrokerError::Provider(_)
+                | BrokerError::ProviderCancelled
+                => bridges::email::auth(&ctx_handle2, &email_addr),
+            _ => Box::new(future::err(e))
+        }
     });
 
     Box::new(f)

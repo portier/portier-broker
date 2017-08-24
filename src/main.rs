@@ -24,6 +24,9 @@ extern crate tokio_core;
 extern crate toml;
 extern crate url;
 
+#[macro_use]
+mod macros;
+
 mod bridges;
 mod config;
 mod crypto;
@@ -31,6 +34,7 @@ mod email_address;
 mod error;
 mod handlers;
 mod http;
+mod serde_helpers;
 mod store;
 mod store_cache;
 mod store_limits;
@@ -54,11 +58,11 @@ fn router(req: &Request) -> Option<http::Handler> {
         (&Method::Get, "/auth") | (&Method::Post, "/auth") => handlers::auth::auth,
 
         // Identity provider endpoints
-        (&Method::Get, "/callback") => handlers::oidc::fragment_callback,
-        (&Method::Post, "/callback") => handlers::oidc::callback,
+        (&Method::Get, "/callback") => bridges::oidc::fragment_callback,
+        (&Method::Post, "/callback") => bridges::oidc::callback,
 
         // Email loop endpoints
-        (&Method::Get, "/confirm") => handlers::email::confirmation,
+        (&Method::Get, "/confirm") => bridges::email::confirmation,
 
         // Misc endpoints
         (&Method::Get, "/") => handlers::pages::index,

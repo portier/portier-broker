@@ -1,6 +1,8 @@
 use std::fmt::{Display, Debug, Formatter, Result as FmtResult};
 use std::str::FromStr;
 use url::Host;
+use serde::{Deserialize, Deserializer};
+use serde::{Serialize, Serializer};
 
 
 #[derive(Clone,PartialEq,Eq)]
@@ -26,10 +28,18 @@ impl FromStr for EmailAddress {
     }
 }
 
-/// Return the serialization of this email address.
 impl AsRef<str> for EmailAddress {
+    /// Return the serialization of this email address.
     fn as_ref(&self) -> &str {
         &self.serialization
+    }
+}
+
+impl Serialize for EmailAddress {
+    /// Serialize this email address as a string.
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where S: Serializer {
+        self.as_str().serialize(serializer)
     }
 }
 
@@ -51,6 +61,15 @@ impl EmailAddress {
             serialization: input.to_owned(),
             local_end: input.find('@').expect("no @ found in input"),
         }
+    }
+
+    /// Deserialize implementation for trusted input.
+    ///
+    /// Because this assumes input is valid, it must be explicitely selected using
+    /// `#[serde(deserialize_with = "EmailAddress::deserialize_trusted")]`
+    pub fn deserialize_trusted<'de, D>(deserializer: D) -> Result<EmailAddress, D::Error>
+            where D: Deserializer<'de> {
+        <&str>::deserialize(deserializer).map(|s| EmailAddress::from_trusted(s))
     }
 
     /// Return the serialization.

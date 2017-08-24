@@ -13,9 +13,24 @@ pub enum BrokerError {
     Internal(String),
     /// User was rate limited, results in 413
     RateLimited,
+    /// Result status used by bridges to cancel a request
+    ProviderCancelled,
 }
 
-pub type BrokerResult<T> = Result<T, BrokerError>;
+impl BrokerError {
+    /// Log this error at the appropriate log level.
+    pub fn log(&self) {
+        match *self {
+            BrokerError::Input(ref description) => debug!("{}", description),
+            BrokerError::Provider(ref description) => info!("{}", description),
+            BrokerError::Internal(ref description) => error!("{}", description),
+            // Silent errors
+            BrokerError::RateLimited
+                | BrokerError::ProviderCancelled
+                => {},
+        }
+    }
+}
 
 impl Error for BrokerError {
     fn description(&self) -> &str {
@@ -24,7 +39,9 @@ impl Error for BrokerError {
                 | BrokerError::Provider(ref description)
                 | BrokerError::Internal(ref description)
                 => description,
-            BrokerError::RateLimited => "rate limited",
+            BrokerError::RateLimited
+                | BrokerError::ProviderCancelled
+                => unreachable!(),
         }
     }
 }
@@ -34,3 +51,7 @@ impl fmt::Display for BrokerError {
         write!(f, "{}", self.description())
     }
 }
+
+
+/// Result type with `BrokerError` for errors.
+pub type BrokerResult<T> = Result<T, BrokerError>;
