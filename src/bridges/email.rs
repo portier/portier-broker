@@ -138,5 +138,5 @@ pub fn confirmation(ctx_handle: ContextHandle) -> HandlerResult {
         return Box::new(future::err(BrokerError::Input("incorrect code".to_owned())));
     }
 
-    Box::new(future::ok(complete_auth(&*ctx)))
+    Box::new(future::result(complete_auth(&*ctx)))
 }

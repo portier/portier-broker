@@ -115,7 +115,6 @@ impl Context {
         };
         let data = json::to_string(&Session { data, bridge_data }).map_err(|e| BrokerError::Internal(
             format!("could not serialize session: {}", e)))?;
-        trace!("save_session: {:?}", data);
         self.app.store.store_session(&self.session_id, &data)?;
         Ok(true)
     }

@@ -24,14 +24,14 @@ impl Store {
     }
 
     pub fn store_session(&self, session_id: &str, data: &str)
-                         -> BrokerResult<()> {
+            -> BrokerResult<()> {
         let key = Self::format_session_key(session_id);
         self.client.set_ex(&key, data, self.expire_sessions)
             .map_err(|e| BrokerError::Internal(format!("could not save a session: {}", e)))
     }
 
     pub fn get_session(&self, session_id: &str)
-                       -> BrokerResult<String> {
+            -> BrokerResult<String> {
         let key = Self::format_session_key(session_id);
         let stored: String = self.client.get(&key)
             .map_err(|e| BrokerError::Internal(format!("could not load a session: {}", e)))?;
@@ -39,6 +39,13 @@ impl Store {
             return Err(BrokerError::Input("session not found".to_owned()));
         }
         Ok(stored)
+    }
+
+    pub fn remove_session(&self, session_id: &str)
+            -> BrokerResult<()> {
+        let key = Self::format_session_key(session_id);
+        self.client.del(&key)
+            .map_err(|e| BrokerError::Internal(format!("could not remove a session: {}", e)))
     }
 
     fn format_session_key(session_id: &str) -> String {

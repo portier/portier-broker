@@ -287,7 +287,7 @@ pub fn callback(ctx_handle: ContextHandle) -> HandlerResult {
 
         // If everything is okay, build a new identity token and send it
         // to the relying party.
-        future::ok(complete_auth(&*ctx))
+        future::result(complete_auth(&*ctx))
     });
 
     Box::new(f)
