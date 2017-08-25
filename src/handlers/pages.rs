@@ -22,7 +22,7 @@ pub fn version(_: ContextHandle) -> HandlerResult {
     let version = env!("CARGO_PKG_VERSION");
     let sha = match env::var("HEROKU_SLUG_COMMIT") {
         Ok(sha) => sha,
-        Err(_) => "unknown".to_string(),
+        Err(_) => "unknown".to_owned(),
     };
     let body = format!("Portier {} (git commit {})", version, sha);
 

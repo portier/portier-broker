@@ -1,18 +1,24 @@
+use bridges::BridgeData;
 use config::Config;
-use error::BrokerError;
+use crypto;
+use email_address::EmailAddress;
+use error::{BrokerError, BrokerResult};
 use futures::future::{self, Future, FutureResult};
 use futures::Stream;
 use gettext::Catalog;
-use handlers::return_to_relier;
 use hyper::{Method, Body, Chunk, StatusCode, Error as HyperError};
 use hyper::header::{AcceptLanguage, ContentType, StrictTransportSecurity, CacheControl, CacheDirective};
 use hyper::server::{Request, Response, Service as HyperService};
 use hyper_staticfile::Static;
+use mustache;
+use serde_helpers::UrlDef;
+use serde_json as json;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::{fmt, io};
 use tokio_core::reactor::Handle;
 use url::{Url, form_urlencoded};
 
@@ -29,12 +35,50 @@ header! { (XFrameOptions, "X-Frame-Options") => [String] }
 pub type BoxFuture<T, E> = Box<Future<Item=T, Error=E>>;
 
 
-/// Additional context for a request
+/// Error type used to within an `io::Error`, to indicate a size limit was exceeded.
+#[derive(Debug)]
+pub struct SizeLimitExceeded;
+impl Error for SizeLimitExceeded {
+    fn description(&self) -> &str {
+        "size limit exceeded"
+    }
+}
+impl fmt::Display for SizeLimitExceeded {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt.write_str(self.description())
+    }
+}
+
+
+// A session as stored in Redis.
+#[derive(Serialize,Deserialize)]
+pub struct Session {
+    pub data: SessionData,
+    pub bridge_data: BridgeData,
+}
+
+
+// Common session data.
+#[derive(Serialize,Deserialize)]
+pub struct SessionData {
+    #[serde(with = "UrlDef")]
+    pub redirect_uri: Url,
+    #[serde(deserialize_with = "EmailAddress::deserialize_trusted")]
+    pub email_addr: EmailAddress,
+    pub nonce: String,
+}
+
+
+/// Context for a request
 pub struct Context {
     /// The application configuration
     pub app: Rc<Config>,
     /// Request parameters, from the query or body
     pub params: HashMap<String, String>,
+    /// Session ID
+    pub session_id: String,
+    /// Session data (must be explicitely loaded)
+    pub session_data: Option<SessionData>,
     /// Index into the config catalogs of the language to use
     pub catalog_idx: usize,
     /// Redirect URI of the relying party
@@ -45,6 +89,50 @@ impl Context {
     /// Get a reference to the language catalog to use
     pub fn catalog(&self) -> &Catalog {
         &self.app.i18n.catalogs[self.catalog_idx].1
+    }
+
+    /// Start a session by filling out the common part.
+    pub fn start_session(&mut self, client_id: &str, email_addr: EmailAddress, nonce: String) {
+        assert!(self.session_id.is_empty());
+        assert!(self.session_data.is_none());
+        let redirect_uri = self.redirect_uri.as_ref().expect("start_session called without redirect_uri");
+        self.session_id = crypto::session_id(&email_addr, client_id);
+        self.session_data = Some(SessionData {
+            redirect_uri: redirect_uri.clone(),
+            email_addr: email_addr,
+            nonce: nonce,
+        });
+    }
+
+    /// Try to save the session with the given bridge data.
+    ///
+    /// Will return `false` if the session was not started, which will also happen if another
+    /// provider has already claimed the session.
+    pub fn save_session(&mut self, bridge_data: BridgeData) -> BrokerResult<bool> {
+        let data = match self.session_data.take() {
+            Some(data) => data,
+            None => return Ok(false),
+        };
+        let data = json::to_string(&Session { data, bridge_data }).map_err(|e| BrokerError::Internal(
+            format!("could not serialize session: {}", e)))?;
+        self.app.store.store_session(&self.session_id, &data)?;
+        Ok(true)
+    }
+
+    /// Load a session from storage.
+    pub fn load_session(&mut self, id: &str) -> BrokerResult<BridgeData> {
+        assert!(self.session_id.is_empty());
+        assert!(self.session_data.is_none());
+        assert!(self.redirect_uri.is_none());
+        let data = self.app.store.get_session(id)?;
+        let (data, bridge_data) = match json::from_str(&data) {
+            Ok(Session { data, bridge_data }) => (data, bridge_data),
+            Err(e) => return Err(BrokerError::Internal(format!("could not deserialize session: {}", e))),
+        };
+        self.redirect_uri = Some(data.redirect_uri.clone());
+        self.session_id = id.to_owned();
+        self.session_data = Some(data);
+        Ok(bridge_data)
     }
 }
 
@@ -86,7 +174,11 @@ impl HyperService for Service {
     type Future = BoxFuture<Self::Response, Self::Error>;
 
     fn call(&self, req: Request) -> Self::Future {
-        info!("{} {}", req.method(), req.path());
+        if let Some(addr) = req.remote_addr() {
+            info!("{} - {} {}", addr, req.method(), req.path());
+        } else {
+            info!("n/a - {} {}", req.method(), req.path());
+        }
 
         // Match route or serve static files.
         let handler = match (self.router)(&req) {
@@ -121,6 +213,8 @@ impl HyperService for Service {
             let ctx_handle = Rc::new(RefCell::new(Context {
                 app: app,
                 params: params,
+                session_id: String::default(),
+                session_data: None,
                 catalog_idx: catalog_idx,
                 redirect_uri: None,
             }));
@@ -131,7 +225,7 @@ impl HyperService for Service {
             // Handle errors.
             f.or_else(move |err| {
                 let ctx = ctx_handle.borrow();
-                handle_error(&*ctx, err)
+                future::ok(handle_error(&*ctx, err))
             })
         });
 
@@ -164,15 +258,9 @@ impl HyperService for Service {
 ///
 /// The large match-statement below handles all these scenario's properly, and
 /// sets proper response codes for each category.
-fn handle_error(ctx: &Context, err: BrokerError) -> FutureResult<Response, HyperError> {
+fn handle_error(ctx: &Context, err: BrokerError) -> Response {
+    err.log();
     match (err, ctx.redirect_uri.as_ref()) {
-        (BrokerError::RateLimited, _) => {
-            let res = Response::new()
-                .with_status(StatusCode::TooManyRequests)
-                .with_header(ContentType::plaintext())
-                .with_body("Rate limit exceeded. Please try again later.");
-            future::ok(res)
-        },
         (err @ BrokerError::Input(_), Some(_)) => {
             return_to_relier(ctx, &[
                 ("error", "invalid_request"),
@@ -180,46 +268,48 @@ fn handle_error(ctx: &Context, err: BrokerError) -> FutureResult<Response, Hyper
             ])
         },
         (err @ BrokerError::Input(_), None) => {
-            let res = Response::new()
+            Response::new()
                 .with_status(StatusCode::BadRequest)
                 .with_header(ContentType::html())
                 .with_body(ctx.app.templates.error.render(&[
                     ("error", err.description()),
-                ]));
-            future::ok(res)
+                ]))
         },
         (err @ BrokerError::Provider(_), Some(_)) => {
-            error!("{}", err);
             return_to_relier(ctx, &[
                 ("error", "temporarily_unavailable"),
-                ("error_description", &err.description().to_string()),
+                ("error_description", &err.description().to_owned()),
             ])
         },
         (err @ BrokerError::Provider(_), None) => {
-            error!("{}", err);
-            let res = Response::new()
+            Response::new()
                 .with_status(StatusCode::ServiceUnavailable)
                 .with_header(ContentType::html())
                 .with_body(ctx.app.templates.error.render(&[
-                    ("error", &err.description().to_string()),
-                ]));
-            future::ok(res)
+                    ("error", &err.description().to_owned()),
+                ]))
         },
-        (err, Some(_)) => {
-            error!("{}", err);
+        (BrokerError::Internal(_), Some(_)) => {
             return_to_relier(ctx, &[
                 ("error", "server_error"),
             ])
         },
-        (err, None) => {
-            error!("{}", err);
-            let res = Response::new()
+        (BrokerError::Internal(_), None) => {
+            Response::new()
                 .with_status(StatusCode::InternalServerError)
                 .with_header(ContentType::html())
                 .with_body(ctx.app.templates.error.render(&[
                     ("error", "internal server error"),
-                ]));
-            future::ok(res)
+                ]))
+        },
+        (BrokerError::RateLimited, _) => {
+            Response::new()
+                .with_status(StatusCode::TooManyRequests)
+                .with_header(ContentType::plaintext())
+                .with_body("Rate limit exceeded. Please try again later.")
+        },
+        (BrokerError::ProviderCancelled, _) => {
+            unreachable!()
         },
     }
 }
@@ -242,9 +332,9 @@ fn set_headers(res: &mut Response) {
     headers.set(StrictTransportSecurity::excluding_subdomains(31_536_000u64));
     headers.set(ContentSecurityPolicy(csp.clone()));
     headers.set(XContentSecurityPolicy(csp));
-    headers.set(XContentTypeOptions("nosniff".to_string()));
-    headers.set(XXSSProtection("1; mode=block".to_string()));
-    headers.set(XFrameOptions("DENY".to_string()));
+    headers.set(XContentTypeOptions("nosniff".to_owned()));
+    headers.set(XXSSProtection("1; mode=block".to_owned()));
+    headers.set(XFrameOptions("DENY".to_owned()));
 
     // Default to disable caching completely.
     if !headers.has::<CacheControl>() {
@@ -280,8 +370,7 @@ pub fn parse_query(query: Option<&str>) -> HashMap<String, String> {
 pub fn read_body(body: Body) -> BoxFuture<Chunk, HyperError> {
     Box::new(body.fold(Chunk::default(), |mut acc, chunk| {
         if acc.len() + chunk.len() > 8096 {
-            // TODO: Is this the right thing to do?
-            future::err(HyperError::TooLarge)
+            future::err(io::Error::new(io::ErrorKind::Other, SizeLimitExceeded))
         } else {
             acc.extend(chunk);
             future::ok(acc)
@@ -293,6 +382,53 @@ pub fn read_body(body: Body) -> BoxFuture<Chunk, HyperError> {
 /// Parse the request form-encoded body into a `HashMap`.
 pub fn parse_form_encoded_body(body: Body) -> BoxFuture<HashMap<String, String>, HyperError> {
     Box::new(read_body(body).map(|chunk| parse_form_encoded(&chunk)))
+}
+
+
+/// Helper function for returning a result to the Relying Party.
+///
+/// Takes an array of `(name, value)` parameter pairs to send to the relier and
+/// embeds them in a form in `tmpl/forward.html`, from where it's POSTed to the
+/// RP's `redirect_uri` as soon as the page has loaded.
+///
+/// The return value is a tuple of response modifiers.
+pub fn return_to_relier(ctx: &Context, params: &[(&str, &str)]) -> Response {
+    let redirect_uri = ctx.redirect_uri.as_ref()
+        .expect("return_to_relier called without redirect_uri set");
+
+    let data = mustache::MapBuilder::new()
+        .insert_str("redirect_uri", redirect_uri)
+        .insert_vec("params", |mut builder| {
+            for &param in params {
+                builder = builder.push_map(|builder| {
+                    let (name, value) = param;
+                    builder.insert_str("name", name).insert_str("value", value)
+                });
+            }
+            builder
+        })
+        .build();
+
+    Response::new()
+        .with_header(ContentType::html())
+        .with_body(ctx.app.templates.forward.render_data(&data))
+}
+
+
+/// Helper function for returning a response with JSON data.
+///
+/// Serializes the argument value to JSON and returns a HTTP 200 response
+/// code with the serialized JSON as the body.
+pub fn json_response<E>(obj: &json::Value, max_age: u32) -> FutureResult<Response, E> {
+    let body = json::to_string(&obj).expect("unable to coerce JSON Value into string");
+    let res = Response::new()
+        .with_header(ContentType::json())
+        .with_header(CacheControl(vec![
+            CacheDirective::Public,
+            CacheDirective::MaxAge(max_age),
+        ]))
+        .with_body(body);
+    future::ok(res)
 }
 
 
