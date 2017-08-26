@@ -145,7 +145,7 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
                     // Continue the discovery future in the background.
                     ctx_handle2.borrow().app.handle.spawn(
                         f.map(|_| ()).map_err(|e| { e.log(); () }));
-                    future::err(BrokerError::Provider(
+                    Err(BrokerError::Provider(
                         format!("discovery timed out for {}", email_addr2)))
                 },
                 Err(Either::A((e, _))) => {
@@ -153,10 +153,10 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
                 },
                 // Discovery resolved first.
                 Ok(Either::B((v, _))) => {
-                    future::ok(v)
+                    Ok(v)
                 },
                 Err(Either::B((e, _))) => {
-                    future::err(e)
+                    Err(e)
                 },
             }
         });

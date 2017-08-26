@@ -35,7 +35,7 @@ header! { (XFrameOptions, "X-Frame-Options") => [String] }
 pub type BoxFuture<T, E> = Box<Future<Item=T, Error=E>>;
 
 
-/// Error type used to within an `io::Error`, to indicate a size limit was exceeded.
+/// Error type used within an `io::Error`, to indicate a size limit was exceeded.
 #[derive(Debug)]
 pub struct SizeLimitExceeded;
 impl Error for SizeLimitExceeded {
@@ -225,7 +225,7 @@ impl HyperService for Service {
             // Handle errors.
             f.or_else(move |err| {
                 let ctx = ctx_handle.borrow();
-                future::ok(handle_error(&*ctx, err))
+                Ok(handle_error(&*ctx, err))
             })
         });
 
@@ -370,10 +370,10 @@ pub fn parse_query(query: Option<&str>) -> HashMap<String, String> {
 pub fn read_body(body: Body) -> BoxFuture<Chunk, HyperError> {
     Box::new(body.fold(Chunk::default(), |mut acc, chunk| {
         if acc.len() + chunk.len() > 8096 {
-            future::err(io::Error::new(io::ErrorKind::Other, SizeLimitExceeded))
+            Err(io::Error::new(io::ErrorKind::Other, SizeLimitExceeded))
         } else {
             acc.extend(chunk);
-            future::ok(acc)
+            Ok(acc)
         }
     }))
 }
