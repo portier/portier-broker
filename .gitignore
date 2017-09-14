@@ -1,5 +1,10 @@
+# This file doubles as .gitignore and .dockerignore
+
+# Build products
 target
 lang/*.mo
+
+# Runtime files
 *.pem
-res/.well-known/*
 config.toml
+res/.well-known
