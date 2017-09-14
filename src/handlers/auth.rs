@@ -120,8 +120,8 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
 
     // Try to authenticate with the first provider.
     // TODO: Queue discovery of links and process in order, with individual timeouts.
-    let ctx_handle2 = ctx_handle.clone();
-    let email_addr2 = email_addr.clone();
+    let ctx_handle2 = Rc::clone(&ctx_handle);
+    let email_addr2 = Rc::clone(&email_addr);
     let f = f.and_then(move |links| {
         match links.first() {
             // Portier and Google providers share an implementation
@@ -133,8 +133,8 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
     });
 
     // Apply a timeout to discovery.
-    let ctx_handle2 = ctx_handle.clone();
-    let email_addr2 = email_addr.clone();
+    let ctx_handle2 = Rc::clone(&ctx_handle);
+    let email_addr2 = Rc::clone(&email_addr);
     let f = Timeout::new(Duration::from_secs(5), &ctx.app.handle)
         .expect("failed to create discovery timeout")
         .select2(f)
@@ -162,7 +162,7 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
         });
 
     // Fall back to email loop authentication.
-    let ctx_handle2 = ctx_handle.clone();
+    let ctx_handle2 = Rc::clone(&ctx_handle);
     let f = f.or_else(move |e| {
         e.log();
         match e {

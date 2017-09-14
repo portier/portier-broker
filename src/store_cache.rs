@@ -62,12 +62,12 @@ pub fn fetch_json_url<T>(app: &Rc<Config>, url: Url, key: &CacheKey)
         // TODO: Also cache failed requests, perhaps for a shorter time.
         info!("MISS {} - {}", key_str, url);
 
-        let url2 = url.clone();
+        let url2 = Rc::clone(&url);
         let hyper_url = url.as_str().parse().expect("failed to convert Url to Hyper Url");
         let f = app.http_client.get(hyper_url)
             .map_err(move |e| BrokerError::Provider(format!("fetch failed ({}): {}", e, url2)));
 
-        let url2 = url.clone();
+        let url2 = Rc::clone(&url);
         let f = f.and_then(move |res| {
             if res.status() != StatusCode::Ok {
                 Err(BrokerError::Provider(
@@ -77,7 +77,7 @@ pub fn fetch_json_url<T>(app: &Rc<Config>, url: Url, key: &CacheKey)
             }
         });
 
-        let url2 = url.clone();
+        let url2 = Rc::clone(&url);
         let f = f.and_then(move |res| {
             // Grab the max-age directive from the Cache-Control header.
             let max_age = res.headers().get().map_or(0, |header: &CacheControl| {
@@ -95,8 +95,8 @@ pub fn fetch_json_url<T>(app: &Rc<Config>, url: Url, key: &CacheKey)
                 .map(move |chunk| (chunk, max_age))
         });
 
-        let app = app.clone();
-        let url2 = url.clone();
+        let app = Rc::clone(app);
+        let url2 = Rc::clone(&url);
         let f = f.and_then(move |(chunk, max_age)| {
             from_utf8(&chunk)
                 .map_err(|e| BrokerError::Provider(format!("fetch failed ({}): {}", e, url2)))

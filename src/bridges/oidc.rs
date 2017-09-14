@@ -139,8 +139,8 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>, link: &Li
     // Retrieve the provider's configuration.
     let f = fetch_config(ctx_handle, &bridge_data);
 
-    let ctx_handle = ctx_handle.clone();
-    let email_addr = email_addr.clone();
+    let ctx_handle = Rc::clone(ctx_handle);
+    let email_addr = Rc::clone(email_addr);
     let f = f.and_then(move |provider_config: ProviderConfig| {
         let mut ctx = ctx_handle.borrow_mut();
 
@@ -223,8 +223,8 @@ pub fn callback(ctx_handle: ContextHandle) -> HandlerResult {
     let f = fetch_config(&ctx_handle, &bridge_data);
 
     // Grab the keys from the provider, then verify the signature.
-    let ctx_handle2 = ctx_handle.clone();
-    let bridge_data2 = bridge_data.clone();
+    let ctx_handle2 = Rc::clone(&ctx_handle);
+    let bridge_data2 = Rc::clone(&bridge_data);
     let f = f.and_then(move |provider_config: ProviderConfig| {
         let ctx = ctx_handle2.borrow();
         fetch_json_url(&ctx.app, provider_config.jwks_uri, &CacheKey::OidcKeySet {
@@ -238,7 +238,7 @@ pub fn callback(ctx_handle: ContextHandle) -> HandlerResult {
             })
     });
 
-    let ctx_handle = ctx_handle.clone();
+    let ctx_handle = Rc::clone(&ctx_handle);
     let f = f.and_then(move |jwt_payload| {
         let ctx = ctx_handle.borrow();
         let data = ctx.session_data.as_ref().expect("session vanished");
@@ -286,7 +286,7 @@ fn fetch_config(ctx_handle: &ContextHandle, bridge_data: &Rc<OidcBridgeData>)
         .expect("could not build the OpenID Connect configuration URL");
 
     let ctx = ctx_handle.borrow();
-    let bridge_data = bridge_data.clone();
+    let bridge_data = Rc::clone(bridge_data);
     let f = fetch_json_url::<ProviderConfig>(&ctx.app, config_url, &CacheKey::OidcConfig {
         origin: bridge_data.origin.as_str(),
     });
