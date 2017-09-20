@@ -139,8 +139,8 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>, link: &Li
     // Retrieve the provider's configuration.
     let f = fetch_config(ctx_handle, &bridge_data);
 
-    let ctx_handle = ctx_handle.clone();
-    let email_addr = email_addr.clone();
+    let ctx_handle = Rc::clone(ctx_handle);
+    let email_addr = Rc::clone(email_addr);
     let f = f.and_then(move |provider_config: ProviderConfig| {
         let mut ctx = ctx_handle.borrow_mut();
 
@@ -163,27 +163,22 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>, link: &Li
             "&login_hint=",
             &utf8_percent_encode(email_addr.as_str(), QUERY_ENCODE_SET).to_string(),
         ].join(""));
-        let auth_url = match result {
-            Ok(url) => url,
-            Err(_) => {
-                let domain = email_addr.domain();
-                return future::err(BrokerError::Provider(
-                    format!("failed to build valid authorization URL from {}'s 'authorization_endpoint'", domain)));
-            },
-        };
+        let auth_url = result.map_err(|_| {
+            let domain = email_addr.domain();
+            BrokerError::Provider(
+                format!("failed to build valid authorization URL from {}'s 'authorization_endpoint'", domain))
+        })?;
 
         // Save session data, committing the session to this provider.
         let bridge_data = Rc::try_unwrap(bridge_data).map_err(|_| ()).expect("lingering oidc bridge data references");
-        match ctx.save_session(BridgeData::Oidc(bridge_data)) {
-            Ok(true) => {},
-            Ok(false) => return future::err(BrokerError::ProviderCancelled),
-            Err(e) => return future::err(e),
+        if !ctx.save_session(BridgeData::Oidc(bridge_data))? {
+            return Err(BrokerError::ProviderCancelled);
         }
 
         let res = Response::new()
             .with_status(StatusCode::SeeOther)
             .with_header(Location::new(auth_url.into_string()));
-        future::ok(res)
+        Ok(res)
     });
 
     Box::new(f)
@@ -228,8 +223,8 @@ pub fn callback(ctx_handle: ContextHandle) -> HandlerResult {
     let f = fetch_config(&ctx_handle, &bridge_data);
 
     // Grab the keys from the provider, then verify the signature.
-    let ctx_handle2 = ctx_handle.clone();
-    let bridge_data2 = bridge_data.clone();
+    let ctx_handle2 = Rc::clone(&ctx_handle);
+    let bridge_data2 = Rc::clone(&bridge_data);
     let f = f.and_then(move |provider_config: ProviderConfig| {
         let ctx = ctx_handle2.borrow();
         fetch_json_url(&ctx.app, provider_config.jwks_uri, &CacheKey::OidcKeySet {
@@ -243,7 +238,7 @@ pub fn callback(ctx_handle: ContextHandle) -> HandlerResult {
             })
     });
 
-    let ctx_handle = ctx_handle.clone();
+    let ctx_handle = Rc::clone(&ctx_handle);
     let f = f.and_then(move |jwt_payload| {
         let ctx = ctx_handle.borrow();
         let data = ctx.session_data.as_ref().expect("session vanished");
@@ -262,7 +257,7 @@ pub fn callback(ctx_handle: ContextHandle) -> HandlerResult {
         // Normalize the token email address too.
         let token_addr: EmailAddress = match token_addr.parse() {
             Ok(addr) => bridge_data.normalization.apply(addr),
-            Err(_) => return future::err(BrokerError::Provider(format!(
+            Err(_) => return Err(BrokerError::Provider(format!(
                     "failed to parse email from {}", descr))),
         };
 
@@ -277,7 +272,7 @@ pub fn callback(ctx_handle: ContextHandle) -> HandlerResult {
 
         // If everything is okay, build a new identity token and send it
         // to the relying party.
-        future::result(complete_auth(&*ctx))
+        complete_auth(&*ctx)
     });
 
     Box::new(f)
@@ -291,30 +286,27 @@ fn fetch_config(ctx_handle: &ContextHandle, bridge_data: &Rc<OidcBridgeData>)
         .expect("could not build the OpenID Connect configuration URL");
 
     let ctx = ctx_handle.borrow();
-    let bridge_data = bridge_data.clone();
+    let bridge_data = Rc::clone(bridge_data);
     let f = fetch_json_url::<ProviderConfig>(&ctx.app, config_url, &CacheKey::OidcConfig {
         origin: bridge_data.origin.as_str(),
     });
 
     let f = f.then(move |result| {
-        let provider_config = match result {
-            Ok(provider_config) => provider_config,
-            Err(e) => return future::err(BrokerError::Provider(
-                format!("could not fetch {}'s configuration: {}", bridge_data.origin, e))),
-        };
+        let provider_config = result.map_err(|e| BrokerError::Provider(
+            format!("could not fetch {}'s configuration: {}", bridge_data.origin, e)))?;
 
         #[cfg(not(feature = "insecure"))] {
             if provider_config.authorization_endpoint.scheme() != "https" {
-                return future::err(BrokerError::Provider(
+                return Err(BrokerError::Provider(
                     format!("{}'s authorization_endpoint is not HTTPS", bridge_data.origin)));
             }
             if provider_config.jwks_uri.scheme() != "https" {
-                return future::err(BrokerError::Provider(
+                return Err(BrokerError::Provider(
                     format!("{}'s jwks_uri is not HTTPS", bridge_data.origin)));
             }
         }
 
-        future::ok(provider_config)
+        Ok(provider_config)
     });
 
     Box::new(f)

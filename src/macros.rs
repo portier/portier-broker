@@ -34,7 +34,7 @@ macro_rules! try_get_json_field {
     ( $input:expr, $key:tt, $conv:expr, $descr:expr ) => {
         match $input.get($key).and_then($conv) {
             Some(v) => v,
-            None => return future::err(BrokerError::Provider(
+            None => return Err(BrokerError::Provider(
                 format!("{} missing from {}", $key, $descr))),
         }
     };
@@ -56,7 +56,7 @@ macro_rules! try_get_json_field {
 macro_rules! check_field {
     ( $check:expr, $key:expr, $descr:expr ) => {
         if !$check {
-            return future::err(BrokerError::Provider(
+            return Err(BrokerError::Provider(
                 format!("{} has incorrect value in {}", $key, $descr)));
         }
     }

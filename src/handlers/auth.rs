@@ -120,8 +120,8 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
 
     // Try to authenticate with the first provider.
     // TODO: Queue discovery of links and process in order, with individual timeouts.
-    let ctx_handle2 = ctx_handle.clone();
-    let email_addr2 = email_addr.clone();
+    let ctx_handle2 = Rc::clone(&ctx_handle);
+    let email_addr2 = Rc::clone(&email_addr);
     let f = f.and_then(move |links| {
         match links.first() {
             // Portier and Google providers share an implementation
@@ -133,8 +133,8 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
     });
 
     // Apply a timeout to discovery.
-    let ctx_handle2 = ctx_handle.clone();
-    let email_addr2 = email_addr.clone();
+    let ctx_handle2 = Rc::clone(&ctx_handle);
+    let email_addr2 = Rc::clone(&email_addr);
     let f = Timeout::new(Duration::from_secs(5), &ctx.app.handle)
         .expect("failed to create discovery timeout")
         .select2(f)
@@ -145,7 +145,7 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
                     // Continue the discovery future in the background.
                     ctx_handle2.borrow().app.handle.spawn(
                         f.map(|_| ()).map_err(|e| { e.log(); () }));
-                    future::err(BrokerError::Provider(
+                    Err(BrokerError::Provider(
                         format!("discovery timed out for {}", email_addr2)))
                 },
                 Err(Either::A((e, _))) => {
@@ -153,16 +153,16 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
                 },
                 // Discovery resolved first.
                 Ok(Either::B((v, _))) => {
-                    future::ok(v)
+                    Ok(v)
                 },
                 Err(Either::B((e, _))) => {
-                    future::err(e)
+                    Err(e)
                 },
             }
         });
 
     // Fall back to email loop authentication.
-    let ctx_handle2 = ctx_handle.clone();
+    let ctx_handle2 = Rc::clone(&ctx_handle);
     let f = f.or_else(move |e| {
         e.log();
         match e {

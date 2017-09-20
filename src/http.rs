@@ -35,7 +35,7 @@ header! { (XFrameOptions, "X-Frame-Options") => [String] }
 pub type BoxFuture<T, E> = Box<Future<Item=T, Error=E>>;
 
 
-/// Error type used to within an `io::Error`, to indicate a size limit was exceeded.
+/// Error type used within an `io::Error`, to indicate a size limit was exceeded.
 #[derive(Debug)]
 pub struct SizeLimitExceeded;
 impl Error for SizeLimitExceeded {
@@ -160,7 +160,7 @@ pub struct Service {
 impl Service {
     pub fn new<P: Into<PathBuf>>(handle: &Handle, app: &Rc<Config>, router: Router, path: P) -> Service {
         Service {
-            app: app.clone(),
+            app: Rc::clone(app),
             router: router,
             static_: Static::new(handle, path).with_cache_headers(app.static_ttl),
         }
@@ -194,7 +194,7 @@ impl HyperService for Service {
             _ => unreachable!(),
         };
 
-        let app = self.app.clone();
+        let app = Rc::clone(&self.app);
         let f = f.and_then(move |params| {
             // Determine the language catalog to use.
             let mut catalog_idx = 0;
@@ -220,12 +220,12 @@ impl HyperService for Service {
             }));
 
             // Call the route handler.
-            let f = handler(ctx_handle.clone());
+            let f = handler(Rc::clone(&ctx_handle));
 
             // Handle errors.
             f.or_else(move |err| {
                 let ctx = ctx_handle.borrow();
-                future::ok(handle_error(&*ctx, err))
+                Ok(handle_error(&*ctx, err))
             })
         });
 
@@ -370,10 +370,10 @@ pub fn parse_query(query: Option<&str>) -> HashMap<String, String> {
 pub fn read_body(body: Body) -> BoxFuture<Chunk, HyperError> {
     Box::new(body.fold(Chunk::default(), |mut acc, chunk| {
         if acc.len() + chunk.len() > 8096 {
-            future::err(io::Error::new(io::ErrorKind::Other, SizeLimitExceeded))
+            Err(io::Error::new(io::ErrorKind::Other, SizeLimitExceeded))
         } else {
             acc.extend(chunk);
-            future::ok(acc)
+            Ok(acc)
         }
     }))
 }

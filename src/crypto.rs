@@ -216,7 +216,7 @@ pub fn create_jwt(app: &Config, email: &EmailAddress, aud: &str, nonce: &str) ->
         "aud": aud,
         "email": email.as_str(),
         "email_verified": email.as_str(),
-        "exp": now + app.token_ttl as i64,
+        "exp": now + i64::from(app.token_ttl),
         "iat": now,
         "iss": &app.public_url,
         "sub": email.as_str(),

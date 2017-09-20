@@ -62,22 +62,22 @@ pub fn fetch_json_url<T>(app: &Rc<Config>, url: Url, key: &CacheKey)
         // TODO: Also cache failed requests, perhaps for a shorter time.
         info!("MISS {} - {}", key_str, url);
 
-        let url2 = url.clone();
+        let url2 = Rc::clone(&url);
         let hyper_url = url.as_str().parse().expect("failed to convert Url to Hyper Url");
         let f = app.http_client.get(hyper_url)
             .map_err(move |e| BrokerError::Provider(format!("fetch failed ({}): {}", e, url2)));
 
-        let url2 = url.clone();
+        let url2 = Rc::clone(&url);
         let f = f.and_then(move |res| {
             if res.status() != StatusCode::Ok {
-                future::err(BrokerError::Provider(
+                Err(BrokerError::Provider(
                     format!("fetch failed ({}): {}", res.status(), url2)))
             } else {
-                future::ok(res)
+                Ok(res)
             }
         });
 
-        let url2 = url.clone();
+        let url2 = Rc::clone(&url);
         let f = f.and_then(move |res| {
             // Grab the max-age directive from the Cache-Control header.
             let max_age = res.headers().get().map_or(0, |header: &CacheControl| {
@@ -95,10 +95,10 @@ pub fn fetch_json_url<T>(app: &Rc<Config>, url: Url, key: &CacheKey)
                 .map(move |chunk| (chunk, max_age))
         });
 
-        let app = app.clone();
-        let url2 = url.clone();
+        let app = Rc::clone(app);
+        let url2 = Rc::clone(&url);
         let f = f.and_then(move |(chunk, max_age)| {
-            let result = from_utf8(&chunk)
+            from_utf8(&chunk)
                 .map_err(|e| BrokerError::Provider(format!("fetch failed ({}): {}", e, url2)))
                 .map(|data| data.to_owned())
                 .and_then(move |data| {
@@ -107,17 +107,15 @@ pub fn fetch_json_url<T>(app: &Rc<Config>, url: Url, key: &CacheKey)
                     app.store.client.set_ex::<_, _, ()>(&key_str, &data, seconds)
                         .map_err(|e| BrokerError::Internal(format!("cache write failed: {}", e)))
                         .map(|_| data)
-                });
-            future::result(result)
+                })
         });
 
         Box::new(f)
     };
 
-    let f = f.and_then(move |data| -> future::FutureResult<T, BrokerError> {
-        let result = json::from_str(&data)
-            .map_err(|e| BrokerError::Provider(format!("fetch failed ({}): {}", e, url)));
-        future::result(result)
+    let f = f.and_then(move |data| {
+        json::from_str(&data)
+            .map_err(|e| BrokerError::Provider(format!("fetch failed ({}): {}", e, url)))
     });
 
     Box::new(f)
