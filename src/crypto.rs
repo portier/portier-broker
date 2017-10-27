@@ -8,10 +8,11 @@ use openssl::hash::{Hasher, MessageDigest};
 use openssl::rsa::Rsa;
 use openssl::pkey::PKey;
 use openssl::sign::{Signer, Verifier};
-use rand::{OsRng, Rng};
+use rand::{OsRng, Rng, random};
 use serde_json as json;
 use std::fs::File;
 use std::io::{Read, Error as IoError};
+use std::iter::Iterator;
 use time::now_utc;
 
 
@@ -147,10 +148,21 @@ pub fn session_id(email: &EmailAddress, client_id: &str) -> String {
 }
 
 
+/// Helper function to create a secure nonce.
 pub fn nonce() -> String {
     let mut rng = OsRng::new().expect("unable to create rng");
     let rand_bytes: Vec<u8> = (0..16).map(|_| rng.gen()).collect();
     base64url_encode(&rand_bytes)
+}
+
+
+/// Helper function to create a random string consisting of
+/// characters from the z-base-32 set.
+pub fn random_zbase32(len: usize) -> String {
+    const CHARSET: &'static [u8] = b"13456789abcdefghijkmnopqrstuwxyz";
+    String::from_utf8((0..len).map(|_| {
+        CHARSET[random::<usize>() % CHARSET.len()]
+    }).collect()).expect("failed to build one-time pad")
 }
 
 

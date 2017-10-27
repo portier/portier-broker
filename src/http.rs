@@ -6,7 +6,7 @@ use error::{BrokerError, BrokerResult};
 use futures::future::{self, Future, FutureResult};
 use futures::Stream;
 use gettext::Catalog;
-use hyper::{Method, Body, Chunk, StatusCode, Error as HyperError};
+use hyper::{Method, Body, Chunk, Error as HyperError};
 use hyper::header::{AcceptLanguage, ContentType, StrictTransportSecurity, CacheControl, CacheDirective};
 use hyper::server::{Request, Response, Service as HyperService};
 use hyper_staticfile::Static;
@@ -259,55 +259,75 @@ impl HyperService for Service {
 /// The large match-statement below handles all these scenario's properly, and
 /// sets proper response codes for each category.
 fn handle_error(ctx: &Context, err: BrokerError) -> Response {
-    err.log();
+    let reference = err.log();
+
+    let catalog = ctx.catalog();
     match (err, ctx.redirect_uri.as_ref()) {
-        (err @ BrokerError::Input(_), Some(_)) => {
+        // Redirects with description.
+        (err @ BrokerError::Input(_), Some(_))
+            | (err @ BrokerError::Provider(_), Some(_))
+            | (err @ BrokerError::ProviderInput(_), Some(_))
+            => {
             return_to_relier(ctx, &[
-                ("error", "invalid_request"),
+                ("error", err.oauth_error_code()),
                 ("error_description", err.description()),
             ])
         },
+        // Friendly error pages for what we can't redirect.
         (err @ BrokerError::Input(_), None) => {
             Response::new()
-                .with_status(StatusCode::BadRequest)
+                .with_status(err.http_status_code())
                 .with_header(ContentType::html())
                 .with_body(ctx.app.templates.error.render(&[
                     ("error", err.description()),
+                    ("intro", catalog.gettext("The request is invalid, and could not be completed.")),
+                    ("reason", catalog.gettext("Technical description")),
+                    ("explanation", catalog.gettext("This indicates an issue with the site you're trying to login to. Contact the site administrator to get the issue resolved.")),
                 ]))
         },
-        (err @ BrokerError::Provider(_), Some(_)) => {
-            return_to_relier(ctx, &[
-                ("error", "temporarily_unavailable"),
-                ("error_description", &err.description().to_owned()),
-            ])
-        },
-        (err @ BrokerError::Provider(_), None) => {
+        (err @ BrokerError::Provider(_), None)
+            | (err @ BrokerError::ProviderInput(_), None)
+            => {
             Response::new()
-                .with_status(StatusCode::ServiceUnavailable)
+                .with_status(err.http_status_code())
                 .with_header(ContentType::html())
                 .with_body(ctx.app.templates.error.render(&[
-                    ("error", &err.description().to_owned()),
+                    ("error", err.description()),
+                    ("intro", catalog.gettext("Failed to connect with your email domain.")),
+                    ("reason", catalog.gettext("Technical description")),
+                    ("explanation", catalog.gettext("Contact the administrator of your email domain to get the issue resolved.")),
                 ]))
         },
-        (BrokerError::Internal(_), Some(_)) => {
-            return_to_relier(ctx, &[
-                ("error", "server_error"),
-            ])
-        },
-        (BrokerError::Internal(_), None) => {
+        // Friendly error pages for what we will never redirect.
+        (err @ BrokerError::Internal(_), _) => {
             Response::new()
-                .with_status(StatusCode::InternalServerError)
+                .with_status(err.http_status_code())
                 .with_header(ContentType::html())
                 .with_body(ctx.app.templates.error.render(&[
-                    ("error", "internal server error"),
+                    ("ref", &reference.expect("internal error must have a reference")),
+                    ("intro", catalog.gettext("Something went wrong, and we cannot complete your request at this time.")),
+                    ("explanation", catalog.gettext("An internal error occurred, which has been logged with the below reference number.")),
                 ]))
         },
-        (BrokerError::RateLimited, _) => {
+        (err @ BrokerError::RateLimited, _) => {
             Response::new()
-                .with_status(StatusCode::TooManyRequests)
-                .with_header(ContentType::plaintext())
-                .with_body("Rate limit exceeded. Please try again later.")
+                .with_status(err.http_status_code())
+                .with_header(ContentType::html())
+                .with_body(ctx.app.templates.error.render(&[
+                    ("intro", catalog.gettext("Too many login attempts.")),
+                    ("explanation", catalog.gettext("We've received too many requests in a short amount of time. Please try again later.")),
+                ]))
         },
+        (err @ BrokerError::SessionExpired, _) => {
+            Response::new()
+                .with_status(err.http_status_code())
+                .with_header(ContentType::html())
+                .with_body(ctx.app.templates.error.render(&[
+                    ("intro", catalog.gettext("The session has expired.")),
+                    ("explanation", catalog.gettext("Your login attempt may have taken too long, or you tried to follow an old link. Please try again.")),
+                ]))
+        },
+        // Internal status that should never bubble this far
         (BrokerError::ProviderCancelled, _) => {
             unreachable!()
         },

@@ -60,9 +60,9 @@ pub fn key_set(ctx_handle: ContextHandle) -> HandlerResult {
 pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
     let mut ctx = ctx_handle.borrow_mut();
 
-    let redirect_uri = try_get_param!(ctx, "redirect_uri");
-    let client_id = try_get_param!(ctx, "client_id");
-    if try_get_param!(ctx, "response_mode", "fragment".to_owned()) != "form_post" {
+    let redirect_uri = try_get_input_param!(ctx, "redirect_uri");
+    let client_id = try_get_input_param!(ctx, "client_id");
+    if try_get_input_param!(ctx, "response_mode", "fragment".to_owned()) != "form_post" {
         return Box::new(future::err(BrokerError::Input(
             "unsupported response_mode, only form_post is supported".to_owned())));
     }
@@ -88,9 +88,9 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
         }
     }
 
-    let nonce = try_get_param!(ctx, "nonce");
-    let login_hint = try_get_param!(ctx, "login_hint");
-    if try_get_param!(ctx, "response_type") != "id_token" {
+    let nonce = try_get_input_param!(ctx, "nonce");
+    let login_hint = try_get_input_param!(ctx, "login_hint");
+    if try_get_input_param!(ctx, "response_type") != "id_token" {
         return Box::new(future::err(BrokerError::Input(
             "unsupported response_type, only id_token is supported".to_owned())));
     }

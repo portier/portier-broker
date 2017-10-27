@@ -35,7 +35,7 @@ impl Store {
         let key = Self::format_session_key(session_id);
         let stored: Option<String> = self.client.get(&key)
             .map_err(|e| BrokerError::Internal(format!("could not load a session: {}", e)))?;
-        stored.ok_or_else(|| BrokerError::Input("session not found".to_owned()))
+        stored.ok_or_else(|| BrokerError::SessionExpired)
     }
 
     pub fn remove_session(&self, session_id: &str)
