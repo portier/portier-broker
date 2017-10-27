@@ -56,12 +56,13 @@ impl BrokerError {
     /// Get the HTTP status code for this error.
     pub fn http_status_code(&self) -> StatusCode {
         match *self {
-            BrokerError::Input(_) => StatusCode::BadRequest,
+            BrokerError::Input(_)
+                | BrokerError::ProviderInput(_)
+                | BrokerError::SessionExpired
+                => StatusCode::BadRequest,
             BrokerError::Provider(_) => StatusCode::ServiceUnavailable,
-            BrokerError::ProviderInput(_) => StatusCode::BadRequest,
             BrokerError::Internal(_) => StatusCode::InternalServerError,
             BrokerError::RateLimited => StatusCode::TooManyRequests,
-            BrokerError::SessionExpired => StatusCode::BadRequest,
             // Internal status that should never bubble this far
             BrokerError::ProviderCancelled => unreachable!(),
         }
@@ -71,14 +72,16 @@ impl BrokerError {
     pub fn oauth_error_code(&self) -> &str {
         match *self {
             BrokerError::Input(_) => "invalid_request",
-            BrokerError::Provider(_) => "temporarily_unavailable",
-            BrokerError::ProviderInput(_) => "temporarily_unavailable",
+            BrokerError::Provider(_)
+                | BrokerError::ProviderInput(_)
+                => "temporarily_unavailable",
             BrokerError::Internal(_) => "server_error",
             // We will never redirect for these types of errors
-            BrokerError::RateLimited => unreachable!(),
-            BrokerError::SessionExpired => unreachable!(),
-            // Internal status that should never bubble this far
-            BrokerError::ProviderCancelled => unreachable!(),
+            BrokerError::RateLimited
+                | BrokerError::SessionExpired
+                // Internal status that should never bubble this far
+                | BrokerError::ProviderCancelled
+                => unreachable!(),
         }
     }
 }
