@@ -15,7 +15,7 @@ use webfinger::{self, Link, Relation};
 ///
 /// Most of this is hard-coded for now, although the URLs are constructed by
 /// using the base URL as configured in the `public_url` configuration value.
-pub fn discovery(ctx_handle: ContextHandle) -> HandlerResult {
+pub fn discovery(ctx_handle: &ContextHandle) -> HandlerResult {
     let ctx = ctx_handle.borrow();
 
     let obj = json!({
@@ -40,7 +40,7 @@ pub fn discovery(ctx_handle: ContextHandle) -> HandlerResult {
 ///
 /// Relying Parties will need to fetch this data to be able to verify identity
 /// tokens issued by this daemon instance.
-pub fn key_set(ctx_handle: ContextHandle) -> HandlerResult {
+pub fn key_set(ctx_handle: &ContextHandle) -> HandlerResult {
     let ctx = ctx_handle.borrow();
 
     let obj = json!({
@@ -57,7 +57,7 @@ pub fn key_set(ctx_handle: ContextHandle) -> HandlerResult {
 /// Calls the `oidc::request()` function if the provided email address's
 /// domain matches one of the configured famous providers. Otherwise, calls the
 /// `email::request()` function to allow authentication through the email loop.
-pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
+pub fn auth(ctx_handle: &ContextHandle) -> HandlerResult {
     let mut ctx = ctx_handle.borrow_mut();
 
     let redirect_uri = try_get_input_param!(ctx, "redirect_uri");
@@ -120,7 +120,7 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
 
     // Try to authenticate with the first provider.
     // TODO: Queue discovery of links and process in order, with individual timeouts.
-    let ctx_handle2 = Rc::clone(&ctx_handle);
+    let ctx_handle2 = Rc::clone(ctx_handle);
     let email_addr2 = Rc::clone(&email_addr);
     let f = f.and_then(move |links| {
         match links.first() {
@@ -133,7 +133,7 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
     });
 
     // Apply a timeout to discovery.
-    let ctx_handle2 = Rc::clone(&ctx_handle);
+    let ctx_handle2 = Rc::clone(ctx_handle);
     let email_addr2 = Rc::clone(&email_addr);
     let f = Timeout::new(Duration::from_secs(5), &ctx.app.handle)
         .expect("failed to create discovery timeout")
@@ -162,7 +162,7 @@ pub fn auth(ctx_handle: ContextHandle) -> HandlerResult {
         });
 
     // Fall back to email loop authentication.
-    let ctx_handle2 = Rc::clone(&ctx_handle);
+    let ctx_handle2 = Rc::clone(ctx_handle);
     let f = f.or_else(move |e| {
         e.log();
         match e {

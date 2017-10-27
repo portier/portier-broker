@@ -142,7 +142,7 @@ pub type ContextHandle = Rc<RefCell<Context>>;
 /// Result type of handlers
 pub type HandlerResult = BoxFuture<Response, BrokerError>;
 /// Handler function type
-pub type Handler = fn(ContextHandle) -> HandlerResult;
+pub type Handler = fn(&ContextHandle) -> HandlerResult;
 /// Router function type
 pub type Router = fn(&Request) -> Option<Handler>;
 
@@ -220,7 +220,7 @@ impl HyperService for Service {
             }));
 
             // Call the route handler.
-            let f = handler(Rc::clone(&ctx_handle));
+            let f = handler(&ctx_handle);
 
             // Handle errors.
             f.or_else(move |err| {

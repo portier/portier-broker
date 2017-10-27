@@ -116,7 +116,7 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>) -> Handle
 ///
 /// Retrieves the session based session ID and the expected one-time pad. Verifies the code and
 /// returns the resulting token to the relying party.
-pub fn confirmation(ctx_handle: ContextHandle) -> HandlerResult {
+pub fn confirmation(ctx_handle: &ContextHandle) -> HandlerResult {
     let mut ctx = ctx_handle.borrow_mut();
 
     let session_id = try_get_provider_param!(ctx, "session");
