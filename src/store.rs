@@ -33,12 +33,9 @@ impl Store {
     pub fn get_session(&self, session_id: &str)
             -> BrokerResult<String> {
         let key = Self::format_session_key(session_id);
-        let stored: String = self.client.get(&key)
+        let stored: Option<String> = self.client.get(&key)
             .map_err(|e| BrokerError::Internal(format!("could not load a session: {}", e)))?;
-        if stored.is_empty() {
-            return Err(BrokerError::Input("session not found".to_owned()));
-        }
-        Ok(stored)
+        stored.ok_or_else(|| BrokerError::Input("session not found".to_owned()))
     }
 
     pub fn remove_session(&self, session_id: &str)
