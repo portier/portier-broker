@@ -21,7 +21,7 @@ path = "src/main.rs"
 glob = "0.2.11"
 
 [dependencies]
-base64 = "0.6.0"
+base64 = "0.7.0"
 docopt = "0.8.1"
 env_logger = "0.4.3"
 futures = "0.1.14"
