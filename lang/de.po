@@ -21,3 +21,36 @@ msgstr "Benutze den Link in der Email für den Login bei"
 
 msgid "Alternatively, enter the code from the email to continue in this browser tab:"
 msgstr "Alternativ gebe in diesem Browsertab den in der Email stehenden Code ein:"
+
+msgid "The request is invalid, and could not be completed."
+msgstr "Dieser Seitenaufruf ist fehlerhaft, und wir können ihn nicht beenden."
+
+msgid "This indicates an issue with the site you're trying to login to. Contact the site administrator to get the issue resolved."
+msgstr "Wahrscheinlich ist etwas kaputt auf der Seite, auf der du dich einloggen willst. Kontaktiere bitte den Seitenadministrator."
+
+msgid "Failed to connect with your email domain."
+msgstr "Konnte keine Verbindung zur Emaildomain herstellen."
+
+msgid "Contact the administrator of your email domain to get the issue resolved."
+msgstr "Kontaktiere bitte den Administatror der Emaildomain, um den Fehler zu beheben."
+
+msgid "Something went wrong, and we cannot complete your request at this time."
+msgstr "Da ging etwas schief, und wir können die Abfrage nicht beenden."
+
+msgid "An internal error occurred, which has been logged with the below reference number."
+msgstr "Es gab gerade einen internen Fehler, der mit der unteren Referenznummer protokolliert wurde."
+
+msgid "Too many login attempts."
+msgstr "Zu viele Loginversuche."
+
+msgid "We've received too many requests in a short amount of time. Please try again later."
+msgstr "Wir haben in einem kurzem Zeitraum zu viele Seitenaufrufe gesehen. Bitte versuche es später nochmal."
+
+msgid "The session has expired."
+msgstr "Die Sitzung ist abgelaufen."
+
+msgid "Your login attempt may have taken too long, or you tried to follow an old link. Please try again."
+msgstr "Dein Loginversuch brauchte wohl zu lange, oder du bist einem alten Link gefolgt. Bitte versuche es nochmal."
+
+msgid "Technical description"
+msgstr "Technische Beschreibung"

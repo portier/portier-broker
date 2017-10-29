@@ -1,4 +1,5 @@
 use bridges::{BridgeData, complete_auth};
+use crypto::{random_zbase32};
 use email_address::EmailAddress;
 use error::BrokerError;
 use futures::future;
@@ -8,14 +9,8 @@ use hyper::header::ContentType;
 use lettre::email::EmailBuilder;
 use lettre::transport::EmailTransport;
 use lettre::transport::smtp::SmtpTransportBuilder;
-use rand;
-use std::iter::Iterator;
 use std::rc::Rc;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
-
-
-/// The z-base-32 character set, from which we select characters for the one-time pad.
-const CODE_CHARS: &'static [u8] = b"13456789abcdefghijkmnopqrstuwxyz";
 
 
 /// Data we store in the session.
@@ -38,9 +33,7 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>) -> Handle
     let mut ctx = ctx_handle.borrow_mut();
 
     // Generate a 12-character one-time pad.
-    let chars = String::from_utf8((0..12).map(|_| {
-        CODE_CHARS[rand::random::<usize>() % CODE_CHARS.len()]
-    }).collect()).expect("failed to build one-time pad");
+    let chars = random_zbase32(12);
     // For display, we split it in two groups of 6.
     let chars_fmt = [&chars[0..6], &chars[6..12]].join(" ");
 
@@ -123,19 +116,20 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>) -> Handle
 ///
 /// Retrieves the session based session ID and the expected one-time pad. Verifies the code and
 /// returns the resulting token to the relying party.
-pub fn confirmation(ctx_handle: ContextHandle) -> HandlerResult {
+pub fn confirmation(ctx_handle: &ContextHandle) -> HandlerResult {
     let mut ctx = ctx_handle.borrow_mut();
 
-    let session_id = try_get_param!(ctx, "session");
+    let session_id = try_get_provider_param!(ctx, "session");
     let bridge_data = match ctx.load_session(&session_id) {
         Ok(BridgeData::Email(bridge_data)) => Rc::new(bridge_data),
-        Ok(_) => return Box::new(future::err(BrokerError::Input("invalid session".to_owned()))),
+        Ok(_) => return Box::new(future::err(BrokerError::ProviderInput("invalid session".to_owned()))),
         Err(e) => return Box::new(future::err(e)),
     };
 
-    let code = try_get_param!(ctx, "code").replace(|c: char| c.is_whitespace(), "").to_lowercase();
+    let code = try_get_provider_param!(ctx, "code")
+        .replace(|c: char| c.is_whitespace(), "").to_lowercase();
     if code != bridge_data.code {
-        return Box::new(future::err(BrokerError::Input("incorrect code".to_owned())));
+        return Box::new(future::err(BrokerError::ProviderInput("incorrect code".to_owned())));
     }
 
     Box::new(future::result(complete_auth(&*ctx)))

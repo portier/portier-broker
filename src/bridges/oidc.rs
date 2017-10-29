@@ -189,7 +189,7 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>, link: &Li
 ///
 /// For providers that don't support `response_mode=form_post`, we capture the fragment parameters
 /// in javascript and emulate the POST request.
-pub fn fragment_callback(ctx_handle: ContextHandle) -> HandlerResult {
+pub fn fragment_callback(ctx_handle: &ContextHandle) -> HandlerResult {
     let ctx = ctx_handle.borrow();
 
     let res = Response::new()
@@ -204,26 +204,26 @@ pub fn fragment_callback(ctx_handle: ContextHandle) -> HandlerResult {
 /// Match the returned email address and nonce against our session data, then extract the identity
 /// token returned by the provider and verify it. Return an identity token for the relying party if
 /// successful, or an error message otherwise.
-pub fn callback(ctx_handle: ContextHandle) -> HandlerResult {
+pub fn callback(ctx_handle: &ContextHandle) -> HandlerResult {
     let (bridge_data, id_token) = {
         let mut ctx = ctx_handle.borrow_mut();
 
-        let session_id = try_get_param!(ctx, "state");
+        let session_id = try_get_provider_param!(ctx, "state");
         let bridge_data = match ctx.load_session(&session_id) {
             Ok(BridgeData::Oidc(bridge_data)) => Rc::new(bridge_data),
-            Ok(_) => return Box::new(future::err(BrokerError::Input("invalid session".to_owned()))),
+            Ok(_) => return Box::new(future::err(BrokerError::ProviderInput("invalid session".to_owned()))),
             Err(e) => return Box::new(future::err(e)),
         };
 
-        let id_token = try_get_param!(ctx, "id_token");
+        let id_token = try_get_provider_param!(ctx, "id_token");
         (bridge_data, id_token)
     };
 
     // Retrieve the provider's configuration.
-    let f = fetch_config(&ctx_handle, &bridge_data);
+    let f = fetch_config(ctx_handle, &bridge_data);
 
     // Grab the keys from the provider, then verify the signature.
-    let ctx_handle2 = Rc::clone(&ctx_handle);
+    let ctx_handle2 = Rc::clone(ctx_handle);
     let bridge_data2 = Rc::clone(&bridge_data);
     let f = f.and_then(move |provider_config: ProviderConfig| {
         let ctx = ctx_handle2.borrow();
@@ -233,12 +233,12 @@ pub fn callback(ctx_handle: ContextHandle) -> HandlerResult {
             .then(move |result| {
                 let key_set: ProviderKeys = result.map_err(|e| BrokerError::Provider(
                     format!("could not fetch {}'s keys: {}", &bridge_data2.origin, e)))?;
-                crypto::verify_jws(&id_token, &key_set.keys).map_err(|_| BrokerError::Provider(
+                crypto::verify_jws(&id_token, &key_set.keys).map_err(|_| BrokerError::ProviderInput(
                     format!("could not verify the token received from {}", &bridge_data2.origin)))
             })
     });
 
-    let ctx_handle = Rc::clone(&ctx_handle);
+    let ctx_handle = Rc::clone(ctx_handle);
     let f = f.and_then(move |jwt_payload| {
         let ctx = ctx_handle.borrow();
         let data = ctx.session_data.as_ref().expect("session vanished");
@@ -248,27 +248,27 @@ pub fn callback(ctx_handle: ContextHandle) -> HandlerResult {
 
         // Extract the token claims.
         let descr = format!("{}'s token payload", email_addr.domain());
-        let iss = try_get_json_field!(jwt_payload, "iss", descr);
-        let aud = try_get_json_field!(jwt_payload, "aud", descr);
-        let token_addr = try_get_json_field!(jwt_payload, "email", descr);
-        let exp = try_get_json_field!(jwt_payload, "exp", |v| v.as_i64(), descr);
-        let nonce = try_get_json_field!(jwt_payload, "nonce", descr);
+        let iss = try_get_token_field!(jwt_payload, "iss", descr);
+        let aud = try_get_token_field!(jwt_payload, "aud", descr);
+        let token_addr = try_get_token_field!(jwt_payload, "email", descr);
+        let exp = try_get_token_field!(jwt_payload, "exp", |v| v.as_i64(), descr);
+        let nonce = try_get_token_field!(jwt_payload, "nonce", descr);
 
         // Normalize the token email address too.
         let token_addr: EmailAddress = match token_addr.parse() {
             Ok(addr) => bridge_data.normalization.apply(addr),
-            Err(_) => return Err(BrokerError::Provider(format!(
+            Err(_) => return Err(BrokerError::ProviderInput(format!(
                     "failed to parse email from {}", descr))),
         };
 
         // Verify the token claims.
-        check_field!(iss == bridge_data.origin, "iss", descr);
-        check_field!(aud == *bridge_data.client_id, "aud", descr);
-        check_field!(nonce == *bridge_data.nonce, "nonce", descr);
-        check_field!(token_addr == email_addr, "email", descr);
+        check_token_field!(iss == bridge_data.origin, "iss", descr);
+        check_token_field!(aud == *bridge_data.client_id, "aud", descr);
+        check_token_field!(nonce == *bridge_data.nonce, "nonce", descr);
+        check_token_field!(token_addr == email_addr, "email", descr);
 
         let now = now_utc().to_timespec().sec;
-        check_field!(now < exp, "exp", descr);
+        check_token_field!(now < exp, "exp", descr);
 
         // If everything is okay, build a new identity token and send it
         // to the relying party.
