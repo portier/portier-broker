@@ -8,6 +8,7 @@ extern crate hyper;
 extern crate hyper_staticfile;
 extern crate hyper_tls;
 extern crate lettre;
+extern crate lettre_email;
 #[macro_use]
 extern crate log;
 extern crate mustache;

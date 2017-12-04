@@ -6,9 +6,10 @@ use futures::future;
 use http::{ContextHandle, HandlerResult};
 use hyper::Response;
 use hyper::header::ContentType;
-use lettre::email::EmailBuilder;
-use lettre::transport::EmailTransport;
-use lettre::transport::smtp::SmtpTransportBuilder;
+use lettre_email::EmailBuilder;
+use lettre::EmailTransport;
+use lettre::smtp::{ClientSecurity, SmtpTransportBuilder};
+use lettre::smtp::authentication::Credentials;
 use std::rc::Rc;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 
@@ -60,20 +61,21 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>) -> Handle
         EmailBuilder::new()
             .to(email_addr.as_str())
             .from((&*ctx.app.from_address, &*ctx.app.from_name))
-            .alternative(&ctx.app.templates.email_html.render(params),
-                         &ctx.app.templates.email_text.render(params))
-            .subject(&[catalog.gettext("Finish logging in to"), display_origin.as_str()].join(" "))
+            .alternative(ctx.app.templates.email_html.render(params),
+                         ctx.app.templates.email_text.render(params))
+            .subject([catalog.gettext("Finish logging in to"), display_origin.as_str()].join(" "))
             .build()
             .unwrap_or_else(|err| panic!("unhandled error building email: {}", err))
     };
-    let mut builder = match SmtpTransportBuilder::new(&ctx.app.smtp_server) {
+    // TODO: Configurable security.
+    let mut builder = match SmtpTransportBuilder::new(&ctx.app.smtp_server, ClientSecurity::Opportunistic) {
         Ok(builder) => builder,
         Err(err) => return Box::new(future::err(BrokerError::Internal(
             format!("could not create the smtp transport: {}", err)))),
     };
 
     if let (&Some(ref username), &Some(ref password)) = (&ctx.app.smtp_username, &ctx.app.smtp_password) {
-        builder = builder.credentials(username, password);
+        builder = builder.credentials(Credentials::new(username.to_owned(), password.to_owned()));
     }
 
     // Store the code in the session for use in the verify handler. We should never fail to claim
@@ -89,7 +91,7 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>) -> Handle
 
     // Send the mail.
     let mut mailer = builder.build();
-    if let Err(err) = mailer.send(email) {
+    if let Err(err) = mailer.send(&email) {
         return Box::new(future::err(BrokerError::Internal(
             format!("could not send mail: {}", err))))
     }
