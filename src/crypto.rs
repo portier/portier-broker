@@ -159,7 +159,7 @@ pub fn nonce() -> String {
 /// Helper function to create a random string consisting of
 /// characters from the z-base-32 set.
 pub fn random_zbase32(len: usize) -> String {
-    const CHARSET: &'static [u8] = b"13456789abcdefghijkmnopqrstuwxyz";
+    const CHARSET: &[u8] = b"13456789abcdefghijkmnopqrstuwxyz";
     String::from_utf8((0..len).map(|_| {
         CHARSET[random::<usize>() % CHARSET.len()]
     }).collect()).expect("failed to build one-time pad")

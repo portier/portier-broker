@@ -77,13 +77,13 @@ fn router(req: &Request) -> Option<http::Handler> {
 
 
 /// Defines the program's version, as set by Cargo at compile time.
-const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 
 /// Defines the program's usage string.
 ///
 /// [Docopt](http://docopt.org) parses this and generates a custom argv parser.
-const USAGE: &'static str = r#"
+const USAGE: &str = r#"
 Portier Broker
 
 Usage:

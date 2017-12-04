@@ -18,7 +18,7 @@ use webfinger::{Link, Relation};
 
 
 /// The origin of the Google identity provider.
-pub const GOOGLE_IDP_ORIGIN: &'static str = "https://accounts.google.com";
+pub const GOOGLE_IDP_ORIGIN: &str = "https://accounts.google.com";
 
 
 /// Normalization to apply to an email address.
