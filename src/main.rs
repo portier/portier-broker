@@ -12,6 +12,7 @@ extern crate lettre_email;
 #[macro_use]
 extern crate log;
 extern crate mustache;
+extern crate native_tls;
 extern crate openssl;
 extern crate rand;
 extern crate redis;
