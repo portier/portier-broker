@@ -1,5 +1,4 @@
 use email_address::EmailAddress;
-use error::BrokerError;
 use futures::future;
 use http::{ContextHandle, HandlerResult};
 use hyper::header::{CacheControl, CacheDirective, ContentType};
@@ -12,12 +11,16 @@ use hyper::server::Response;
 pub fn normalize(ctx_handle: &ContextHandle) -> HandlerResult {
     let ctx = ctx_handle.borrow();
 
-    let input = try_get_input_param!(ctx.query_params(), "email");
-    let parsed = match input.parse::<EmailAddress>() {
-        Ok(addr) => addr,
-        Err(_) => return Box::new(future::err(BrokerError::Input(
-            "not a valid email address".to_owned()))),
-    };
+    let result = String::from_utf8_lossy(&ctx.body)
+        .lines()
+        .map(|s| {
+            match s.parse::<EmailAddress>() {
+                Ok(addr) => addr.to_string(),
+                Err(_) => "".to_owned(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
 
     let res = Response::new()
         .with_header(ContentType::plaintext())
@@ -25,6 +28,6 @@ pub fn normalize(ctx_handle: &ContextHandle) -> HandlerResult {
             CacheDirective::NoCache,
             CacheDirective::NoStore,
         ]))
-        .with_body(parsed.to_string());
+        .with_body(result);
     Box::new(future::ok(res))
 }

@@ -58,7 +58,7 @@ fn router(req: &Request) -> Option<http::Handler> {
         (&Method::Get, "/.well-known/openid-configuration") => handlers::auth::discovery,
         (&Method::Get, "/keys.json") => handlers::auth::key_set,
         (&Method::Get, "/auth") | (&Method::Post, "/auth") => handlers::auth::auth,
-        (&Method::Get, "/normalize") => handlers::normalize::normalize,
+        (&Method::Post, "/normalize") => handlers::normalize::normalize,
 
         // Identity provider endpoints
         (&Method::Get, "/callback") => bridges::oidc::fragment_callback,
