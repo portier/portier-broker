@@ -10,9 +10,9 @@ use hyper::server::Response;
 /// Performs normalization of email addresses, for clients that cannot implement all the necessary
 /// parts of the relevant specifications. (Unicode, WHATWG, etc.)
 pub fn normalize(ctx_handle: &ContextHandle) -> HandlerResult {
-    let mut ctx = ctx_handle.borrow_mut();
+    let ctx = ctx_handle.borrow();
 
-    let input = try_get_input_param!(ctx, "email");
+    let input = try_get_input_param!(ctx.query_params(), "email");
     let parsed = match input.parse::<EmailAddress>() {
         Ok(addr) => addr,
         Err(_) => return Box::new(future::err(BrokerError::Input(

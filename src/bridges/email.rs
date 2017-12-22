@@ -115,15 +115,16 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>) -> Handle
 /// returns the resulting token to the relying party.
 pub fn confirmation(ctx_handle: &ContextHandle) -> HandlerResult {
     let mut ctx = ctx_handle.borrow_mut();
+    let mut params = ctx.query_params();
 
-    let session_id = try_get_provider_param!(ctx, "session");
+    let session_id = try_get_provider_param!(params, "session");
     let bridge_data = match ctx.load_session(&session_id) {
         Ok(BridgeData::Email(bridge_data)) => Rc::new(bridge_data),
         Ok(_) => return Box::new(future::err(BrokerError::ProviderInput("invalid session".to_owned()))),
         Err(e) => return Box::new(future::err(e)),
     };
 
-    let code = try_get_provider_param!(ctx, "code")
+    let code = try_get_provider_param!(params, "code")
         .replace(|c: char| c.is_whitespace(), "").to_lowercase();
     if code != bridge_data.code {
         return Box::new(future::err(BrokerError::ProviderInput("incorrect code".to_owned())));

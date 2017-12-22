@@ -73,8 +73,12 @@ pub struct SessionData {
 pub struct Context {
     /// The application configuration
     pub app: Rc<Config>,
-    /// Request parameters, from the query or body
-    pub params: HashMap<String, String>,
+    /// Request method
+    pub method: Method,
+    /// Request query string
+    pub query: String,
+    /// Request body
+    pub body: Chunk,
     /// Session ID
     pub session_id: String,
     /// Session data (must be explicitely loaded)
@@ -89,6 +93,16 @@ impl Context {
     /// Get a reference to the language catalog to use
     pub fn catalog(&self) -> &Catalog {
         &self.app.i18n.catalogs[self.catalog_idx].1
+    }
+
+    /// Parse the query string into a `HashMap`.
+    pub fn query_params(&self) -> HashMap<String, String> {
+        parse_form_encoded(self.query.as_bytes())
+    }
+
+    /// Parse the form-encoded body into a `HashMap`.
+    pub fn form_params(&self) -> HashMap<String, String> {
+        parse_form_encoded(&self.body)
     }
 
     /// Start a session by filling out the common part.
@@ -186,16 +200,15 @@ impl HyperService for Service {
             None => return self.static_.call(req),
         };
 
-        // Parse request parameters.
+        // Read the request body.
         let (method, uri, _, headers, body) = req.deconstruct();
         let f = match method {
-            Method::Get => Box::new(future::ok(parse_query(uri.query()))),
-            Method::Post => parse_form_encoded_body(body),
-            _ => unreachable!(),
+            Method::Post => read_body(body),
+            _ => Box::new(future::ok(Chunk::from(vec![]))),
         };
 
         let app = Rc::clone(&self.app);
-        let f = f.and_then(move |params| {
+        let f = f.and_then(move |body| {
             // Determine the language catalog to use.
             let mut catalog_idx = 0;
             if let Some(&AcceptLanguage(ref list)) = headers.get() {
@@ -212,7 +225,9 @@ impl HyperService for Service {
             // Create the request context.
             let ctx_handle = Rc::new(RefCell::new(Context {
                 app: app,
-                params: params,
+                method: method,
+                query: uri.query().unwrap_or("").to_owned(),
+                body: body,
                 session_id: String::default(),
                 session_data: None,
                 catalog_idx: catalog_idx,
@@ -376,16 +391,6 @@ pub fn parse_form_encoded(input: &[u8]) -> HashMap<String, String> {
 }
 
 
-/// Parse the request query string into a `HashMap`.
-pub fn parse_query(query: Option<&str>) -> HashMap<String, String> {
-    if let Some(query) = query {
-        parse_form_encoded(query.as_bytes())
-    } else {
-        HashMap::new()
-    }
-}
-
-
 /// Read the request or response body up to a fixed size.
 pub fn read_body(body: Body) -> BoxFuture<Chunk, HyperError> {
     Box::new(body.fold(Chunk::default(), |mut acc, chunk| {
@@ -396,12 +401,6 @@ pub fn read_body(body: Body) -> BoxFuture<Chunk, HyperError> {
             Ok(acc)
         }
     }))
-}
-
-
-/// Parse the request form-encoded body into a `HashMap`.
-pub fn parse_form_encoded_body(body: Body) -> BoxFuture<HashMap<String, String>, HyperError> {
-    Box::new(read_body(body).map(|chunk| parse_form_encoded(&chunk)))
 }
 
 

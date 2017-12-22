@@ -3,6 +3,7 @@ use email_address::EmailAddress;
 use error::BrokerError;
 use futures::future::{self, Future, Either};
 use http::{ContextHandle, HandlerResult, json_response};
+use hyper::Method;
 use std::rc::Rc;
 use std::time::Duration;
 use store_limits::addr_limiter;
@@ -59,10 +60,15 @@ pub fn key_set(ctx_handle: &ContextHandle) -> HandlerResult {
 /// `email::request()` function to allow authentication through the email loop.
 pub fn auth(ctx_handle: &ContextHandle) -> HandlerResult {
     let mut ctx = ctx_handle.borrow_mut();
+    let mut params = match ctx.method {
+        Method::Get => ctx.query_params(),
+        Method::Post => ctx.form_params(),
+        _ => unreachable!(),
+    };
 
-    let redirect_uri = try_get_input_param!(ctx, "redirect_uri");
-    let client_id = try_get_input_param!(ctx, "client_id");
-    if try_get_input_param!(ctx, "response_mode", "fragment".to_owned()) != "form_post" {
+    let redirect_uri = try_get_input_param!(params, "redirect_uri");
+    let client_id = try_get_input_param!(params, "client_id");
+    if try_get_input_param!(params, "response_mode", "fragment".to_owned()) != "form_post" {
         return Box::new(future::err(BrokerError::Input(
             "unsupported response_mode, only form_post is supported".to_owned())));
     }
@@ -88,9 +94,9 @@ pub fn auth(ctx_handle: &ContextHandle) -> HandlerResult {
         }
     }
 
-    let nonce = try_get_input_param!(ctx, "nonce");
-    let login_hint = try_get_input_param!(ctx, "login_hint");
-    if try_get_input_param!(ctx, "response_type") != "id_token" {
+    let nonce = try_get_input_param!(params, "nonce");
+    let login_hint = try_get_input_param!(params, "login_hint");
+    if try_get_input_param!(params, "response_type") != "id_token" {
         return Box::new(future::err(BrokerError::Input(
             "unsupported response_type, only id_token is supported".to_owned())));
     }
