@@ -99,7 +99,7 @@ impl NamedKey {
         let mut signer = Signer::new(MessageDigest::sha256(), &self.key)
             .expect("could not initialize signer");
         let sig = signer.update(&input)
-            .and_then(|_| signer.finish())
+            .and_then(|_| signer.sign_to_vec())
             .expect("failed to sign jwt");
 
         input.push(b'.');
@@ -207,7 +207,7 @@ pub fn verify_jws(jws: &str, key_set: &[ProviderKey]) -> Result<json::Value, ()>
     let message_len = parts[0].len() + parts[1].len() + 1;
     let mut verifier = Verifier::new(MessageDigest::sha256(), &pub_key).map_err(|_| ())?;
     verifier.update(jws[..message_len].as_bytes())
-        .and_then(|_| verifier.finish(&decoded[2]))
+        .and_then(|_| verifier.verify(&decoded[2]))
         .map_err(|_| ())
         .and_then(|ok| {
             if ok {
