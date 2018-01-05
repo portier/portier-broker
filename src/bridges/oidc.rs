@@ -18,7 +18,7 @@ use webfinger::{Link, Relation};
 
 
 /// The origin of the Google identity provider.
-pub const GOOGLE_IDP_ORIGIN: &'static str = "https://accounts.google.com";
+pub const GOOGLE_IDP_ORIGIN: &str = "https://accounts.google.com";
 
 
 /// Normalization to apply to an email address.
@@ -207,15 +207,16 @@ pub fn fragment_callback(ctx_handle: &ContextHandle) -> HandlerResult {
 pub fn callback(ctx_handle: &ContextHandle) -> HandlerResult {
     let (bridge_data, id_token) = {
         let mut ctx = ctx_handle.borrow_mut();
+        let mut params = ctx.form_params();
 
-        let session_id = try_get_provider_param!(ctx, "state");
+        let session_id = try_get_provider_param!(params, "state");
         let bridge_data = match ctx.load_session(&session_id) {
             Ok(BridgeData::Oidc(bridge_data)) => Rc::new(bridge_data),
             Ok(_) => return Box::new(future::err(BrokerError::ProviderInput("invalid session".to_owned()))),
             Err(e) => return Box::new(future::err(e)),
         };
 
-        let id_token = try_get_provider_param!(ctx, "id_token");
+        let id_token = try_get_provider_param!(params, "id_token");
         (bridge_data, id_token)
     };
 

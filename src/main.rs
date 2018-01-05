@@ -8,9 +8,11 @@ extern crate hyper;
 extern crate hyper_staticfile;
 extern crate hyper_tls;
 extern crate lettre;
+extern crate lettre_email;
 #[macro_use]
 extern crate log;
 extern crate mustache;
+extern crate native_tls;
 extern crate openssl;
 extern crate rand;
 extern crate redis;
@@ -56,6 +58,7 @@ fn router(req: &Request) -> Option<http::Handler> {
         (&Method::Get, "/.well-known/openid-configuration") => handlers::auth::discovery,
         (&Method::Get, "/keys.json") => handlers::auth::key_set,
         (&Method::Get, "/auth") | (&Method::Post, "/auth") => handlers::auth::auth,
+        (&Method::Post, "/normalize") => handlers::normalize::normalize,
 
         // Identity provider endpoints
         (&Method::Get, "/callback") => bridges::oidc::fragment_callback,
@@ -75,13 +78,13 @@ fn router(req: &Request) -> Option<http::Handler> {
 
 
 /// Defines the program's version, as set by Cargo at compile time.
-const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 
 /// Defines the program's usage string.
 ///
 /// [Docopt](http://docopt.org) parses this and generates a custom argv parser.
-const USAGE: &'static str = r#"
+const USAGE: &str = r#"
 Portier Broker
 
 Usage:

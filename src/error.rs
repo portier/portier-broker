@@ -47,7 +47,7 @@ impl BrokerError {
             // Internal errors should ring alarm bells.
             ref err @ BrokerError::Internal(_) => {
                 let reference = random_zbase32(6);
-                error!("[REF:{}] {}", err.description(), reference);
+                error!("[REF:{}] {}", reference, err.description());
                 Some(reference)
             },
         }

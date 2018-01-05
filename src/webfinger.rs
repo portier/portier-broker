@@ -10,9 +10,9 @@ use url::Url;
 
 
 /// Portier webfinger relation
-pub const WEBFINGER_PORTIER_REL: &'static str = "https://portier.io/specs/auth/1.0/idp";
+pub const WEBFINGER_PORTIER_REL: &str = "https://portier.io/specs/auth/1.0/idp";
 /// Portier + Google webfinger relation
-pub const WEBFINGER_GOOGLE_REL: &'static str = "https://portier.io/specs/auth/1.0/idp/google";
+pub const WEBFINGER_GOOGLE_REL: &str = "https://portier.io/specs/auth/1.0/idp/google";
 
 
 /// Deserialization types

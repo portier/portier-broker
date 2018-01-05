@@ -4,20 +4,20 @@
 /// the parameter is missing and has no default.
 ///
 /// ```
-/// let foo = try_get_input_param!(ctx, "foo");
-/// let foo = try_get_input_param!(ctx, "foo", "default");
+/// let foo = try_get_input_param!(params, "foo");
+/// let foo = try_get_input_param!(params, "foo", "default");
 /// ```
 #[macro_export]
 macro_rules! try_get_input_param {
-    ( $ctx:expr , $key:tt ) => {
-        match $ctx.params.remove($key) {
+    ( $params:expr , $key:tt ) => {
+        match $params.remove($key) {
             Some(value) => value,
             None => return Box::new(future::err(BrokerError::Input(
                 concat!("missing request parameter ", $key).to_owned()))),
         }
     };
-    ( $ctx:expr , $key:tt , $default:expr ) => {
-        $ctx.params.remove($key).unwrap_or($default)
+    ( $params:expr , $key:tt , $default:expr ) => {
+        $params.remove($key).unwrap_or($default)
     };
 }
 
@@ -27,12 +27,12 @@ macro_rules! try_get_input_param {
 /// the parameter is missing.
 ///
 /// ```
-/// let foo = try_get_provider_param!(ctx, "foo");
+/// let foo = try_get_provider_param!(params, "foo");
 /// ```
 #[macro_export]
 macro_rules! try_get_provider_param {
-    ( $ctx:expr , $key:tt ) => {
-        match $ctx.params.remove($key) {
+    ( $params:expr , $key:tt ) => {
+        match $params.remove($key) {
             Some(value) => value,
             None => return Box::new(future::err(BrokerError::Input(
                 concat!("missing request parameter ", $key).to_owned()))),

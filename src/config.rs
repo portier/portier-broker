@@ -136,7 +136,7 @@ pub struct I18n {
 }
 
 
-const SUPPORTED_LANGUAGES: &'static [&'static str] = &["en", "de", "nl"];
+const SUPPORTED_LANGUAGES: &[&str] = &["en", "de", "nl"];
 
 impl Default for I18n {
     fn default() -> I18n {

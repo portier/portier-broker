@@ -1,4 +1,5 @@
 use bridges::{BridgeData, complete_auth};
+use config::Config;
 use crypto::{random_zbase32};
 use email_address::EmailAddress;
 use error::BrokerError;
@@ -6,9 +7,12 @@ use futures::future;
 use http::{ContextHandle, HandlerResult};
 use hyper::Response;
 use hyper::header::ContentType;
-use lettre::email::EmailBuilder;
-use lettre::transport::EmailTransport;
-use lettre::transport::smtp::SmtpTransportBuilder;
+use lettre_email::EmailBuilder;
+use lettre::EmailTransport;
+use lettre::smtp::{ClientSecurity, SmtpTransport};
+use lettre::smtp::client::net::ClientTlsParameters;
+use lettre::smtp::authentication::Credentials;
+use native_tls::TlsConnector;
 use std::rc::Rc;
 use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 
@@ -60,21 +64,12 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>) -> Handle
         EmailBuilder::new()
             .to(email_addr.as_str())
             .from((&*ctx.app.from_address, &*ctx.app.from_name))
-            .alternative(&ctx.app.templates.email_html.render(params),
-                         &ctx.app.templates.email_text.render(params))
-            .subject(&[catalog.gettext("Finish logging in to"), display_origin.as_str()].join(" "))
+            .alternative(ctx.app.templates.email_html.render(params),
+                         ctx.app.templates.email_text.render(params))
+            .subject([catalog.gettext("Finish logging in to"), display_origin.as_str()].join(" "))
             .build()
             .unwrap_or_else(|err| panic!("unhandled error building email: {}", err))
     };
-    let mut builder = match SmtpTransportBuilder::new(&ctx.app.smtp_server) {
-        Ok(builder) => builder,
-        Err(err) => return Box::new(future::err(BrokerError::Internal(
-            format!("could not create the smtp transport: {}", err)))),
-    };
-
-    if let (&Some(ref username), &Some(ref password)) = (&ctx.app.smtp_username, &ctx.app.smtp_password) {
-        builder = builder.credentials(username, password);
-    }
 
     // Store the code in the session for use in the verify handler. We should never fail to claim
     // the session, because we only get here after all other options have failed.
@@ -88,12 +83,14 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>) -> Handle
     }
 
     // Send the mail.
-    let mut mailer = builder.build();
-    if let Err(err) = mailer.send(email) {
+    let mut mailer = match build_transport(&ctx.app) {
+        Ok(mailer) => mailer,
+        Err(reason) => return Box::new(future::err(BrokerError::Internal(reason))),
+    };
+    if let Err(err) = mailer.send(&email) {
         return Box::new(future::err(BrokerError::Internal(
             format!("could not send mail: {}", err))))
     }
-
     mailer.close();
 
     // Render a form for the user.
@@ -118,19 +115,44 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>) -> Handle
 /// returns the resulting token to the relying party.
 pub fn confirmation(ctx_handle: &ContextHandle) -> HandlerResult {
     let mut ctx = ctx_handle.borrow_mut();
+    let mut params = ctx.query_params();
 
-    let session_id = try_get_provider_param!(ctx, "session");
+    let session_id = try_get_provider_param!(params, "session");
     let bridge_data = match ctx.load_session(&session_id) {
         Ok(BridgeData::Email(bridge_data)) => Rc::new(bridge_data),
         Ok(_) => return Box::new(future::err(BrokerError::ProviderInput("invalid session".to_owned()))),
         Err(e) => return Box::new(future::err(e)),
     };
 
-    let code = try_get_provider_param!(ctx, "code")
+    let code = try_get_provider_param!(params, "code")
         .replace(|c: char| c.is_whitespace(), "").to_lowercase();
     if code != bridge_data.code {
         return Box::new(future::err(BrokerError::ProviderInput("incorrect code".to_owned())));
     }
 
     Box::new(future::result(complete_auth(&*ctx)))
+}
+
+
+/// Build the SMTP transport from config.
+fn build_transport(app: &Config) -> Result<SmtpTransport, String> {
+    // Extract domain, and build an address with a default port.
+    // Split the same way `to_socket_addrs` does.
+    let parts = app.smtp_server.rsplitn(2, ':').collect::<Vec<_>>();
+    let (domain, addr) = if parts.len() == 2 {
+        (parts[1].to_owned(), app.smtp_server.to_owned())
+    } else {
+        (parts[0].to_owned(), format!("{}:25", app.smtp_server))
+    };
+
+    // TODO: Configurable security.
+    let tls_connector = TlsConnector::builder().and_then(|builder| builder.build())
+        .map_err(|e| format!("could not initialize tls: {}", e))?;
+    let security = ClientSecurity::Opportunistic(ClientTlsParameters::new(domain, tls_connector));
+    let mut builder = SmtpTransport::builder(&addr, security)
+        .map_err(|e| format!("could not create the smtp transport: {}", e))?;
+    if let (&Some(ref username), &Some(ref password)) = (&app.smtp_username, &app.smtp_password) {
+        builder = builder.credentials(Credentials::new(username.to_owned(), password.to_owned()));
+    }
+    Ok(builder.build())
 }
