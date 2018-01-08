@@ -18,10 +18,15 @@ impl FromStr for EmailAddress {
         let local_end = input.find('@').ok_or(())?;
         // Transform local part to lowercase, according to unicode
         let local = input[..local_end].to_lowercase();
+        if local == "" { return Err(()); }
         // Verify and normalize domain to lowercase ASCII, according to WHATWG
         let host = Host::parse(&input[local_end + 1..]).map_err(|_| ())?;
         if let Host::Domain(domain) = host {
-            Ok(EmailAddress::from_parts(&local, &domain))
+            if domain == "" {
+                Err(())
+            } else {
+                Ok(EmailAddress::from_parts(&local, &domain))
+            }
         } else {
             Err(())
         }
@@ -137,12 +142,12 @@ mod tests {
     use super::EmailAddress;
 
     #[test]
-    fn test_normal() {
+    fn test_valid() {
         fn parse(input: &str, output: &str) {
             assert_eq!(
                 input.parse::<EmailAddress>().unwrap(),
                 EmailAddress::from_trusted(output)
-            )
+            );
         }
         parse("example.foo+bar@example.com",
               "example.foo+bar@example.com");
@@ -155,12 +160,24 @@ mod tests {
     }
 
     #[test]
+    fn test_invalid() {
+        fn parse(input: &str) {
+            assert!(input.parse::<EmailAddress>().is_err());
+        }
+        parse("foo");
+        parse("foo@");
+        parse("@foo.example");
+        parse("foo@127.0.0.1");
+        parse("foo@[::1]");
+    }
+
+    #[test]
     fn test_google() {
         fn parse(input: &str, output: &str) {
             assert_eq!(
                 input.parse::<EmailAddress>().unwrap().normalize_google(),
                 EmailAddress::from_trusted(output)
-            )
+            );
         }
         parse("example@gmail.com",
               "example@gmail.com");
