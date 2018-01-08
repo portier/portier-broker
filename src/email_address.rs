@@ -150,6 +150,8 @@ mod tests {
               "example.foo+bar@example.com");
         parse("BJÖRN@göteborg.test",
               "björn@xn--gteborg-90a.test");
+        parse("İⅢ@İⅢ.example",
+              "i̇ⅲ@xn--iiii-qwc.example");
     }
 
     #[test]
