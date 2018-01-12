@@ -7,10 +7,13 @@ extern crate gettext;
 extern crate hyper;
 extern crate hyper_staticfile;
 extern crate hyper_tls;
+extern crate idna;
 extern crate lettre;
 extern crate lettre_email;
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate matches;
 extern crate mustache;
 extern crate native_tls;
 extern crate openssl;
