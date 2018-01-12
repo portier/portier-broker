@@ -63,6 +63,7 @@ pub struct Session {
 pub struct SessionData {
     #[serde(with = "UrlDef")]
     pub redirect_uri: Url,
+    pub email: String,
     #[serde(deserialize_with = "EmailAddress::deserialize_trusted")]
     pub email_addr: EmailAddress,
     pub nonce: String,
@@ -106,15 +107,16 @@ impl Context {
     }
 
     /// Start a session by filling out the common part.
-    pub fn start_session(&mut self, client_id: &str, email_addr: EmailAddress, nonce: String) {
+    pub fn start_session(&mut self, client_id: &str, email: &str, email_addr: &EmailAddress, nonce: &str) {
         assert!(self.session_id.is_empty());
         assert!(self.session_data.is_none());
         let redirect_uri = self.redirect_uri.as_ref().expect("start_session called without redirect_uri");
-        self.session_id = crypto::session_id(&email_addr, client_id);
+        self.session_id = crypto::session_id(email_addr, client_id);
         self.session_data = Some(SessionData {
             redirect_uri: redirect_uri.clone(),
-            email_addr: email_addr,
-            nonce: nonce,
+            email: email.to_owned(),
+            email_addr: email_addr.clone(),
+            nonce: nonce.to_owned(),
         });
     }
 

@@ -19,7 +19,7 @@ pub fn complete_auth(ctx: &Context) -> BrokerResult<Response> {
     let data = ctx.session_data.as_ref().expect("complete_auth called without a session");
     ctx.app.store.remove_session(&ctx.session_id)?;
     let aud = data.redirect_uri.origin().ascii_serialization();
-    let jwt = crypto::create_jwt(&ctx.app, &data.email_addr, &aud, &data.nonce);
+    let jwt = crypto::create_jwt(&ctx.app, &data.email, &data.email_addr, &aud, &data.nonce);
     Ok(return_to_relier(ctx, &[("id_token", &jwt)]))
 }
 

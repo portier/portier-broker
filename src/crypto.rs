@@ -222,16 +222,17 @@ pub fn verify_jws(jws: &str, key_set: &[ProviderKey]) -> Result<json::Value, ()>
 ///
 /// Builds the JSON payload, then signs it using the last key provided in
 /// the configuration object.
-pub fn create_jwt(app: &Config, email: &EmailAddress, aud: &str, nonce: &str) -> String {
+pub fn create_jwt(app: &Config, email: &str, email_addr: &EmailAddress, aud: &str, nonce: &str) -> String {
     let now = now_utc().to_timespec().sec;
     let payload = json!({
         "aud": aud,
-        "email": email.as_str(),
-        "email_verified": email.as_str(),
+        "email": email_addr.as_str(),
+        "email_verified": email_addr.as_str(),
+        "email_original": email,
         "exp": now + i64::from(app.token_ttl),
         "iat": now,
         "iss": &app.public_url,
-        "sub": email.as_str(),
+        "sub": email_addr.as_str(),
         "nonce": nonce,
     });
     let key = app.keys.last().expect("unable to locate signing key");
