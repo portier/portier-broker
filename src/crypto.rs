@@ -6,7 +6,7 @@ use openssl::bn::{BigNum, BigNumRef};
 use openssl::error::ErrorStack as SslErrorStack;
 use openssl::hash::{Hasher, MessageDigest};
 use openssl::rsa::Rsa;
-use openssl::pkey::PKey;
+use openssl::pkey::{PKey, Public, Private};
 use openssl::sign::{Signer, Verifier};
 use rand::{OsRng, Rng, random};
 use serde_json as json;
@@ -46,7 +46,7 @@ impl From<SslErrorStack> for CryptoError {
 /// A named key pair, for use in JWS signing.
 pub struct NamedKey {
     id: String,
-    key: PKey,
+    key: PKey<Private>,
 }
 
 
@@ -68,15 +68,14 @@ impl NamedKey {
     }
 
     /// Creates a NamedKey from an Rsa
-    pub fn from_rsa(rsa: Rsa) -> Result<NamedKey, CryptoError> {
+    pub fn from_rsa(rsa: Rsa<Private>) -> Result<NamedKey, CryptoError> {
         let id = {
-            let e = rsa.e().ok_or(CryptoError::Custom("unable to retrieve key's e value"))?;
-            let n = rsa.n().ok_or(CryptoError::Custom("unable to retrieve key's n value"))?;
+            let (e, n) = (rsa.e(), rsa.n());
             let mut hasher = Hasher::new(MessageDigest::sha256())?;
             let hash = hasher.update(&e.to_vec())
                 .and_then(|_| hasher.update(b"."))
                 .and_then(|_| hasher.update(&n.to_vec()))
-                .and_then(|_| hasher.finish2())?;
+                .and_then(|_| hasher.finish())?;
             base64url_encode(&hash)
         };
         let key = PKey::from_rsa(rsa)?;
@@ -114,8 +113,7 @@ impl NamedKey {
         }
 
         let rsa = self.key.rsa().expect("unable to retrieve rsa key");
-        let n = rsa.n().expect("unable to retrieve key's n value");
-        let e = rsa.e().expect("unable to retrieve key's e value");
+        let (n, e) = (rsa.n(), rsa.e());
         json!({
             "kty": "RSA",
             "alg": "RS256",
@@ -142,7 +140,7 @@ pub fn session_id(email: &EmailAddress, client_id: &str) -> String {
     let hash = hasher.update(email.as_str().as_bytes())
         .and_then(|_| hasher.update(client_id.as_bytes()))
         .and_then(|_| hasher.update(&rand_bytes))
-        .and_then(|_| hasher.finish2())
+        .and_then(|_| hasher.finish())
         .expect("session hashing failed");
     base64url_encode(&hash)
 }
@@ -170,7 +168,7 @@ pub fn random_zbase32(len: usize) -> String {
 ///
 /// Searches the provided JWK Key Set Value for the key matching the given
 /// id. Returns a usable public key if exactly one key is found.
-pub fn jwk_key_set_find(key_set: &[ProviderKey], kid: &str) -> Result<PKey, ()> {
+pub fn jwk_key_set_find(key_set: &[ProviderKey], kid: &str) -> Result<PKey<Public>, ()> {
     let matching: Vec<&ProviderKey> = key_set.iter()
         .filter(|key| key.use_ == "sig" && key.kid == kid)
         .collect();

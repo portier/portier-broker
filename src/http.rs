@@ -16,6 +16,7 @@ use serde_json as json;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::error::Error;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::{fmt, io};
@@ -167,6 +168,8 @@ pub type Router = fn(&Request) -> Option<Handler>;
 pub struct Service {
     /// The application configuration
     app: Rc<Config>,
+    /// The client address
+    addr: SocketAddr,
     /// The routing function
     router: Router,
     /// The static file serving service
@@ -174,9 +177,16 @@ pub struct Service {
 }
 
 impl Service {
-    pub fn new<P: Into<PathBuf>>(handle: &Handle, app: &Rc<Config>, router: Router, path: P) -> Service {
+    pub fn new<P: Into<PathBuf>>(
+        handle: &Handle,
+        app: &Rc<Config>,
+        addr: SocketAddr,
+        router: Router,
+        path: P
+    ) -> Service {
         Service {
             app: Rc::clone(app),
+            addr: addr,
             router: router,
             static_: Static::new(handle, path).with_cache_headers(app.static_ttl),
         }
@@ -190,11 +200,7 @@ impl HyperService for Service {
     type Future = BoxFuture<Self::Response, Self::Error>;
 
     fn call(&self, req: Request) -> Self::Future {
-        if let Some(addr) = req.remote_addr() {
-            info!("{} - {} {}", addr, req.method(), req.path());
-        } else {
-            info!("n/a - {} {}", req.method(), req.path());
-        }
+        info!("{} - {} {}", self.addr, req.method(), req.path());
 
         // Match route or serve static files.
         let handler = match (self.router)(&req) {
