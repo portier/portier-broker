@@ -16,6 +16,7 @@ use serde_json as json;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::error::Error;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::{fmt, io};
@@ -63,6 +64,7 @@ pub struct Session {
 pub struct SessionData {
     #[serde(with = "UrlDef")]
     pub redirect_uri: Url,
+    pub email: String,
     #[serde(deserialize_with = "EmailAddress::deserialize_trusted")]
     pub email_addr: EmailAddress,
     pub nonce: String,
@@ -106,15 +108,16 @@ impl Context {
     }
 
     /// Start a session by filling out the common part.
-    pub fn start_session(&mut self, client_id: &str, email_addr: EmailAddress, nonce: String) {
+    pub fn start_session(&mut self, client_id: &str, email: &str, email_addr: &EmailAddress, nonce: &str) {
         assert!(self.session_id.is_empty());
         assert!(self.session_data.is_none());
         let redirect_uri = self.redirect_uri.as_ref().expect("start_session called without redirect_uri");
-        self.session_id = crypto::session_id(&email_addr, client_id);
+        self.session_id = crypto::session_id(email_addr, client_id);
         self.session_data = Some(SessionData {
             redirect_uri: redirect_uri.clone(),
-            email_addr: email_addr,
-            nonce: nonce,
+            email: email.to_owned(),
+            email_addr: email_addr.clone(),
+            nonce: nonce.to_owned(),
         });
     }
 
@@ -165,6 +168,8 @@ pub type Router = fn(&Request) -> Option<Handler>;
 pub struct Service {
     /// The application configuration
     app: Rc<Config>,
+    /// The client address
+    addr: SocketAddr,
     /// The routing function
     router: Router,
     /// The static file serving service
@@ -172,9 +177,16 @@ pub struct Service {
 }
 
 impl Service {
-    pub fn new<P: Into<PathBuf>>(handle: &Handle, app: &Rc<Config>, router: Router, path: P) -> Service {
+    pub fn new<P: Into<PathBuf>>(
+        handle: &Handle,
+        app: &Rc<Config>,
+        addr: SocketAddr,
+        router: Router,
+        path: P
+    ) -> Service {
         Service {
             app: Rc::clone(app),
+            addr: addr,
             router: router,
             static_: Static::new(handle, path).with_cache_headers(app.static_ttl),
         }
@@ -188,11 +200,7 @@ impl HyperService for Service {
     type Future = BoxFuture<Self::Response, Self::Error>;
 
     fn call(&self, req: Request) -> Self::Future {
-        if let Some(addr) = req.remote_addr() {
-            info!("{} - {} {}", addr, req.method(), req.path());
-        } else {
-            info!("n/a - {} {}", req.method(), req.path());
-        }
+        info!("{} - {} {}", self.addr, req.method(), req.path());
 
         // Match route or serve static files.
         let handler = match (self.router)(&req) {

@@ -101,13 +101,14 @@ pub fn auth(ctx_handle: &ContextHandle) -> HandlerResult {
             "unsupported response_type, only id_token is supported".to_owned())));
     }
 
+    // Verify and normalize the email.
     let email_addr = match login_hint.parse::<EmailAddress>() {
         Ok(addr) => Rc::new(addr),
         Err(_) => return Box::new(future::err(BrokerError::Input(
             "login_hint is not a valid email address".to_owned()))),
     };
 
-    // Enforce ratelimit based on the login_hint.
+    // Enforce ratelimit based on the normalized email.
     match addr_limiter(&ctx.app.store, email_addr.as_str(), &ctx.app.limit_per_email) {
         Err(err) => return Box::new(future::err(err)),
         Ok(false) => return Box::new(future::err(BrokerError::RateLimited)),
@@ -115,7 +116,7 @@ pub fn auth(ctx_handle: &ContextHandle) -> HandlerResult {
     }
 
     // Create the session with common data, but do not yet save it.
-    ctx.start_session(&client_id, (*email_addr).clone(), nonce);
+    ctx.start_session(&client_id, &login_hint, &email_addr, &nonce);
 
     // Discover the authentication endpoints based on the email domain.
     let f = if let Some(mapped) = ctx.app.domain_overrides.get(email_addr.domain()) {

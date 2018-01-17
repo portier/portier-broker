@@ -7,10 +7,13 @@ extern crate gettext;
 extern crate hyper;
 extern crate hyper_staticfile;
 extern crate hyper_tls;
+extern crate idna;
 extern crate lettre;
 extern crate lettre_email;
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate matches;
 extern crate mustache;
 extern crate native_tls;
 extern crate openssl;
@@ -142,7 +145,8 @@ fn main() {
     let proto = Http::new();
     let server = listener.incoming().for_each(|(sock, addr)| {
         let res_path = Path::new("./res/");
-        let s = http::Service::new(&handle, &app, router, res_path);
+        let s = http::Service::new(&handle, &app, addr, router, res_path);
+        #[allow(deprecated)]  // TODO: https://github.com/hyperium/hyper/issues/1342
         proto.bind_connection(&handle, sock, addr, s);
         Ok(())
     });

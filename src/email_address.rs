@@ -1,6 +1,7 @@
+use idna;
 use std::fmt::{Display, Debug, Formatter, Result as FmtResult};
+use std::net::Ipv4Addr;
 use std::str::FromStr;
-use url::Host;
 use serde::{Deserialize, Deserializer};
 use serde::{Serialize, Serializer};
 
@@ -14,22 +15,21 @@ pub struct EmailAddress {
 impl FromStr for EmailAddress {
     type Err = ();
 
+    /// Parse and normalize an email address.
+    /// https://github.com/portier/portier.github.io/blob/master/specs/Email-Normalization.md
     fn from_str(input: &str) -> Result<EmailAddress, ()> {
         let local_end = input.find('@').ok_or(())?;
-        // Transform local part to lowercase, according to unicode
+        // Transform the local part to lowercase
         let local = input[..local_end].to_lowercase();
         if local == "" { return Err(()); }
-        // Verify and normalize domain to lowercase ASCII, according to WHATWG
-        let host = Host::parse(&input[local_end + 1..]).map_err(|_| ())?;
-        if let Host::Domain(domain) = host {
-            if domain == "" {
-                Err(())
-            } else {
-                Ok(EmailAddress::from_parts(&local, &domain))
-            }
-        } else {
-            Err(())
-        }
+        // Verify and normalize the domain
+        let domain = idna::domain_to_ascii(&input[local_end + 1..]).map_err(|_| ())?;
+        if domain == "" { return Err(()); }
+        if let Some(_) = domain.find(|c| matches!(c,
+            '\0' | '\t' | '\n' | '\r' | ' ' | '#' | '%' | '/' | ':' | '?' | '@' | '[' | '\\' | ']'
+        )) { return Err(()); }
+        if let Ok(_) = domain.parse::<Ipv4Addr>() { return Err(()); }
+        Ok(EmailAddress::from_parts(&local, &domain))
     }
 }
 
