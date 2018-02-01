@@ -10,7 +10,7 @@ pub struct UrlDef;
 impl UrlDef {
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Url, D::Error>
             where D: Deserializer<'de> {
-        <&str>::deserialize(deserializer).and_then(|s| {
+        <String>::deserialize(deserializer).and_then(|s| {
             s.parse().map_err(|e| DeserializeError::custom(format!("invalid URL: {}", e)))
         })
     }
