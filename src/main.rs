@@ -111,9 +111,8 @@ struct Args {
 
 /// The `main()` method. Will loop forever to serve HTTP requests.
 fn main() {
-    if let Err(err) = env_logger::init() {
-        panic!(format!("failed to initialize logger: {}", err));
-    }
+    env_logger::init();
+
     let args: Args = docopt::Docopt::new(USAGE)
         .map(|docopt| docopt.version(Some(VERSION.to_owned())))
         .and_then(|docopt| docopt.deserialize())
