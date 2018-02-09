@@ -252,6 +252,7 @@ pub fn callback(ctx_handle: &ContextHandle) -> HandlerResult {
         let iss = try_get_token_field!(jwt_payload, "iss", descr);
         let aud = try_get_token_field!(jwt_payload, "aud", descr);
         let token_addr = try_get_token_field!(jwt_payload, "email", descr);
+        let iat = try_get_token_field!(jwt_payload, "iat", |v| v.as_i64(), descr);
         let exp = try_get_token_field!(jwt_payload, "exp", |v| v.as_i64(), descr);
         let nonce = try_get_token_field!(jwt_payload, "nonce", descr);
 
@@ -270,6 +271,7 @@ pub fn callback(ctx_handle: &ContextHandle) -> HandlerResult {
 
         let now = now_utc().to_timespec().sec;
         check_token_field!(now < exp, "exp", descr);
+        check_token_field!(iat <= now, "iat", descr);
 
         // If everything is okay, build a new identity token and send it
         // to the relying party.
