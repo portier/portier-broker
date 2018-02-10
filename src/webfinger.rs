@@ -2,6 +2,7 @@ use config::Config;
 use email_address::EmailAddress;
 use error::BrokerError;
 use futures::future::{self, Future};
+use serde_helpers::UrlDef;
 use std::error::Error;
 use std::rc::Rc;
 use std::str::FromStr;
@@ -32,7 +33,7 @@ pub struct LinkDef {
 
 
 /// Parsed and validated webfinger relation
-#[derive(Clone,Copy,Debug)]
+#[derive(Clone,Copy,Debug,Eq,PartialEq,Serialize,Deserialize)]
 pub enum Relation {
     Portier,
     Google,
@@ -51,9 +52,10 @@ impl FromStr for Relation {
 
 
 /// Parsed and validated webfinger link
-#[derive(Clone,Debug)]
+#[derive(Clone,Debug,Eq,PartialEq,Serialize,Deserialize)]
 pub struct Link {
     pub rel: Relation,
+    #[serde(with = "UrlDef")]
     pub href: Url,
 }
 
@@ -74,7 +76,7 @@ impl Link {
 /// This queries the webfinger endpoint of the domain for the given email
 /// address. The resource queried is the email address itself, as an `acct` URL.
 /// Request failures of any kind simply result in an empty list.
-pub fn query(app: &Rc<Config>, email_addr: &Rc<EmailAddress>)
+pub fn query(app: &Rc<Config>, email_addr: &EmailAddress)
     -> Box<Future<Item=Vec<Link>, Error=BrokerError>> {
 
     // Look for a configuration override.
