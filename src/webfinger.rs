@@ -103,9 +103,12 @@ pub fn query(app: &Rc<Config>, email_addr: &Rc<EmailAddress>)
     let f = fetch_json_url(app, url, &CacheKey::Discovery { acct: email_addr.as_str() });
 
     // Parse the relations.
-    let f = f.map(|descriptor: DescriptorDef| {
+    let app = app.clone();
+    let f = f.map(move |descriptor: DescriptorDef| {
         descriptor.links.iter()
             .filter_map(|link| Link::from_de_link(link).ok())
+            // Sanity check: skip results that refer to ourselves.
+            .filter(|link| link.href.as_str() != app.public_url)
             .collect()
     });
 
