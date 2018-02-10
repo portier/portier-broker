@@ -24,7 +24,7 @@ pub fn discovery(ctx_handle: &ContextHandle) -> HandlerResult {
         "authorization_endpoint": format!("{}/auth", ctx.app.public_url),
         "jwks_uri": format!("{}/keys.json", ctx.app.public_url),
         "scopes_supported": vec!["openid", "email"],
-        "claims_supported": vec!["aud", "email", "email_verified", "exp", "iat", "iss", "sub"],
+        "claims_supported": vec!["iss", "aud", "exp", "iat", "email"],
         "response_types_supported": vec!["id_token"],
         "response_modes_supported": vec!["form_post"],
         "grant_types_supported": vec!["implicit"],
