@@ -77,6 +77,11 @@ impl Link {
 pub fn query(app: &Rc<Config>, email_addr: &Rc<EmailAddress>)
     -> Box<Future<Item=Vec<Link>, Error=BrokerError>> {
 
+    // Look for a configuration override.
+    if let Some(mapped) = app.domain_overrides.get(email_addr.domain()) {
+        return Box::new(future::ok(mapped.clone()));
+    }
+
     // Build the webfinger query URL. We can safely do string concatenation here, because the
     // domain has already been validated using the `url` crate.
     #[cfg(feature = "insecure")]

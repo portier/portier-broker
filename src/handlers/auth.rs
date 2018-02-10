@@ -125,11 +125,7 @@ pub fn auth(ctx_handle: &ContextHandle) -> HandlerResult {
     ctx.start_session(&client_id, &login_hint, &email_addr, &nonce);
 
     // Discover the authentication endpoints based on the email domain.
-    let f = if let Some(mapped) = ctx.app.domain_overrides.get(email_addr.domain()) {
-        Box::new(future::ok(mapped.clone()))
-    } else {
-        webfinger::query(&ctx.app, &email_addr)
-    };
+    let f = webfinger::query(&ctx.app, &email_addr);
 
     // Try to authenticate with the first provider.
     // TODO: Queue discovery of links and process in order, with individual timeouts.
