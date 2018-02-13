@@ -2,8 +2,9 @@ use bridges;
 use email_address::EmailAddress;
 use error::BrokerError;
 use futures::future::{self, Future, Either};
-use http::{ContextHandle, HandlerResult, json_response};
+use http::{ContextHandle, HandlerResult, ReturnParams, json_response};
 use hyper::Method;
+use serde_json::{Value, from_value};
 use std::rc::Rc;
 use std::time::Duration;
 use store_limits::addr_limiter;
@@ -26,7 +27,7 @@ pub fn discovery(ctx_handle: &ContextHandle) -> HandlerResult {
         "scopes_supported": vec!["openid", "email"],
         "claims_supported": vec!["iss", "aud", "exp", "iat", "email"],
         "response_types_supported": vec!["id_token"],
-        "response_modes_supported": vec!["form_post"],
+        "response_modes_supported": vec!["form_post", "fragment"],
         "grant_types_supported": vec!["implicit"],
         "subject_types_supported": vec!["public"],
         "id_token_signing_alg_values_supported": vec!["RS256"],
@@ -68,10 +69,7 @@ pub fn auth(ctx_handle: &ContextHandle) -> HandlerResult {
 
     let redirect_uri = try_get_input_param!(params, "redirect_uri");
     let client_id = try_get_input_param!(params, "client_id");
-    if try_get_input_param!(params, "response_mode", "fragment".to_owned()) != "form_post" {
-        return Box::new(future::err(BrokerError::Input(
-            "unsupported response_mode, only form_post is supported".to_owned())));
-    }
+    let response_mode = try_get_input_param!(params, "response_mode", "fragment".to_owned());
 
     let redirect_uri = match parse_redirect_uri(&redirect_uri, "redirect_uri") {
         Ok(url) => url,
@@ -83,9 +81,17 @@ pub fn auth(ctx_handle: &ContextHandle) -> HandlerResult {
             "the client_id must be the origin of the redirect_uri".to_owned())));
     }
 
+    // Parse response_mode by wrapping it a JSON Value.
+    // This has minimal overhead, and saves us a separate implementation.
+    let response_mode = match from_value(Value::String(response_mode)) {
+        Ok(response_mode) => response_mode,
+        Err(_) => return Box::new(future::err(BrokerError::Input(
+            "unsupported response_mode, must be fragment or form_post".to_owned()))),
+    };
+
     // Per the OAuth2 spec, we may redirect to the RP once we have validated client_id and
     // redirect_uri. In our case, this means we make redirect_uri available to error handling.
-    ctx.redirect_uri = Some(redirect_uri.clone());
+    ctx.return_params = Some(ReturnParams { redirect_uri, response_mode });
 
     if let Some(ref whitelist) = ctx.app.allowed_origins {
         if !whitelist.contains(&client_id) {

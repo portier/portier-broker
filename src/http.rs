@@ -6,8 +6,8 @@ use error::{BrokerError, BrokerResult};
 use futures::future::{self, Future, FutureResult};
 use futures::Stream;
 use gettext::Catalog;
-use hyper::{Method, Body, Chunk, Error as HyperError};
-use hyper::header::{AcceptLanguage, ContentType, StrictTransportSecurity, CacheControl, CacheDirective};
+use hyper::{Body, Chunk, Error as HyperError, Method, StatusCode};
+use hyper::header::{AcceptLanguage, ContentType, Location, StrictTransportSecurity, CacheControl, CacheDirective};
 use hyper::server::{Request, Response, Service as HyperService};
 use hyper_staticfile::Static;
 use mustache;
@@ -51,7 +51,7 @@ impl fmt::Display for SizeLimitExceeded {
 }
 
 
-// A session as stored in Redis.
+/// A session as stored in Redis.
 #[derive(Serialize,Deserialize)]
 pub struct Session {
     pub data: SessionData,
@@ -59,11 +59,29 @@ pub struct Session {
 }
 
 
-// Common session data.
-#[derive(Serialize,Deserialize)]
-pub struct SessionData {
+/// Response modes we support.
+#[derive(Clone,Copy,Serialize,Deserialize)]
+pub enum ResponseMode {
+    #[serde(rename = "fragment")]
+    Fragment,
+    #[serde(rename = "form_post")]
+    FormPost,
+}
+
+
+/// Parameters used to return to the relying party
+#[derive(Clone,Serialize,Deserialize)]
+pub struct ReturnParams {
     #[serde(with = "UrlDef")]
     pub redirect_uri: Url,
+    pub response_mode: ResponseMode,
+}
+
+
+/// Common session data.
+#[derive(Serialize,Deserialize)]
+pub struct SessionData {
+    pub return_params: ReturnParams,
     pub email: String,
     #[serde(deserialize_with = "EmailAddress::deserialize_trusted")]
     pub email_addr: EmailAddress,
@@ -87,8 +105,8 @@ pub struct Context {
     pub session_data: Option<SessionData>,
     /// Index into the config catalogs of the language to use
     pub catalog_idx: usize,
-    /// Redirect URI of the relying party
-    pub redirect_uri: Option<Url>,
+    /// Parameters used to return to the relying party
+    pub return_params: Option<ReturnParams>,
 }
 
 impl Context {
@@ -111,10 +129,10 @@ impl Context {
     pub fn start_session(&mut self, client_id: &str, email: &str, email_addr: &EmailAddress, nonce: &str) {
         assert!(self.session_id.is_empty());
         assert!(self.session_data.is_none());
-        let redirect_uri = self.redirect_uri.as_ref().expect("start_session called without redirect_uri");
+        let return_params = self.return_params.as_ref().expect("start_session called without return parameters");
         self.session_id = crypto::session_id(email_addr, client_id);
         self.session_data = Some(SessionData {
-            redirect_uri: redirect_uri.clone(),
+            return_params: return_params.clone(),
             email: email.to_owned(),
             email_addr: email_addr.clone(),
             nonce: nonce.to_owned(),
@@ -140,13 +158,13 @@ impl Context {
     pub fn load_session(&mut self, id: &str) -> BrokerResult<BridgeData> {
         assert!(self.session_id.is_empty());
         assert!(self.session_data.is_none());
-        assert!(self.redirect_uri.is_none());
+        assert!(self.return_params.is_none());
         let data = self.app.store.get_session(id)?;
         let (data, bridge_data) = match json::from_str(&data) {
             Ok(Session { data, bridge_data }) => (data, bridge_data),
             Err(e) => return Err(BrokerError::Internal(format!("could not deserialize session: {}", e))),
         };
-        self.redirect_uri = Some(data.redirect_uri.clone());
+        self.return_params = Some(data.return_params.clone());
         self.session_id = id.to_owned();
         self.session_data = Some(data);
         Ok(bridge_data)
@@ -239,7 +257,7 @@ impl HyperService for Service {
                 session_id: String::default(),
                 session_data: None,
                 catalog_idx: catalog_idx,
-                redirect_uri: None,
+                return_params: None,
             }));
 
             // Call the route handler.
@@ -285,7 +303,7 @@ fn handle_error(ctx: &Context, err: BrokerError) -> Response {
     let reference = err.log();
 
     let catalog = ctx.catalog();
-    match (err, ctx.redirect_uri.as_ref()) {
+    match (err, ctx.return_params.as_ref()) {
         // Redirects with description.
         (err @ BrokerError::Input(_), Some(_))
             | (err @ BrokerError::Provider(_), Some(_))
@@ -414,31 +432,47 @@ pub fn read_body(body: Body) -> BoxFuture<Chunk, HyperError> {
 
 /// Helper function for returning a result to the Relying Party.
 ///
-/// Takes an array of `(name, value)` parameter pairs to send to the relier and
-/// embeds them in a form in `tmpl/forward.html`, from where it's POSTed to the
-/// RP's `redirect_uri` as soon as the page has loaded.
-///
-/// The return value is a tuple of response modifiers.
+/// Takes an array of `(name, value)` parameter pairs and returns a response
+/// that sends them to the RP's `redirect_uri`. The method used to return to
+/// the RP depends on the `response_mode`.
 pub fn return_to_relier(ctx: &Context, params: &[(&str, &str)]) -> Response {
-    let redirect_uri = ctx.redirect_uri.as_ref()
-        .expect("return_to_relier called without redirect_uri set");
+    let &ReturnParams { ref redirect_uri, response_mode } = ctx.return_params.as_ref()
+        .expect("return_to_relier called without return parameters");
 
-    let data = mustache::MapBuilder::new()
-        .insert_str("redirect_uri", redirect_uri)
-        .insert_vec("params", |mut builder| {
-            for &param in params {
-                builder = builder.push_map(|builder| {
-                    let (name, value) = param;
-                    builder.insert_str("name", name).insert_str("value", value)
-                });
-            }
-            builder
-        })
-        .build();
+    match response_mode {
+        // Add params as fragment parameters and redirect.
+        ResponseMode::Fragment => {
+            let mut redirect_uri = redirect_uri.clone();
+            let fragment = redirect_uri.fragment().unwrap_or("").to_owned();
+            let fragment = form_urlencoded::Serializer::for_suffix(fragment, 0)
+                .extend_pairs(params)
+                .finish();
+            redirect_uri.set_fragment(Some(&fragment));
 
-    Response::new()
-        .with_header(ContentType::html())
-        .with_body(ctx.app.templates.forward.render_data(&data))
+            Response::new()
+                .with_status(StatusCode::SeeOther)
+                .with_header(Location::new(redirect_uri.into_string()))
+        },
+        // Render a form that submits a POST request.
+        ResponseMode::FormPost => {
+            let data = mustache::MapBuilder::new()
+                .insert_str("redirect_uri", redirect_uri)
+                .insert_vec("params", |mut builder| {
+                    for &param in params {
+                        builder = builder.push_map(|builder| {
+                            let (name, value) = param;
+                            builder.insert_str("name", name).insert_str("value", value)
+                        });
+                    }
+                    builder
+                })
+                .build();
+
+            Response::new()
+                .with_header(ContentType::html())
+                .with_body(ctx.app.templates.forward.render_data(&data))
+        },
+    }
 }
 
 

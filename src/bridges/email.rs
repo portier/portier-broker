@@ -47,9 +47,9 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>) -> Handle
                        utf8_percent_encode(&ctx.session_id, QUERY_ENCODE_SET),
                        utf8_percent_encode(&chars, QUERY_ENCODE_SET));
 
-    let display_origin = ctx.redirect_uri.as_ref()
+    let display_origin = ctx.return_params.as_ref()
         .expect("email::request called without redirect_uri set")
-        .origin().unicode_serialization();
+        .redirect_uri.origin().unicode_serialization();
     let email = {
         let catalog = ctx.catalog();
         let params = &[
