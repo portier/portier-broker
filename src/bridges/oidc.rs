@@ -12,7 +12,6 @@ use std::rc::Rc;
 use store_cache::{CacheKey, fetch_json_url};
 use time::now_utc;
 use url::Url;
-use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
 use validation;
 use webfinger::{Link, Relation};
 
@@ -58,6 +57,12 @@ struct ProviderConfig {
     authorization_endpoint: Url,
     #[serde(with = "UrlDef")]
     jwks_uri: Url,
+    #[serde(default = "default_response_modes_supported")]
+    response_modes_supported: Vec<String>,
+}
+
+fn default_response_modes_supported() -> Vec<String> {
+    vec!["fragment".to_owned()]
 }
 
 
@@ -145,31 +150,35 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>, link: &Li
     let email_addr = Rc::clone(email_addr);
     let f = f.and_then(move |provider_config: ProviderConfig| {
         let mut ctx = ctx_handle.borrow_mut();
+        let ProviderConfig {
+            authorization_endpoint: mut auth_url,
+            response_modes_supported: response_modes,
+            ..
+        } = provider_config;
 
-        // Create the URL to redirect to, properly escaping all parameters.
-        let result = Url::parse(&vec![
-            provider_config.authorization_endpoint.as_str(),
-            "?",
-            "client_id=",
-            &utf8_percent_encode(&bridge_data.client_id, QUERY_ENCODE_SET).to_string(),
-            "&response_type=id_token",
-            "&scope=",
-            &utf8_percent_encode("openid email", QUERY_ENCODE_SET).to_string(),
-            "&redirect_uri=",
-            &utf8_percent_encode(&format!("{}/callback", &ctx.app.public_url),
-                                 QUERY_ENCODE_SET).to_string(),
-            "&state=",
-            &utf8_percent_encode(&ctx.session_id, QUERY_ENCODE_SET).to_string(),
-            "&nonce=",
-            &utf8_percent_encode(&bridge_data.nonce, QUERY_ENCODE_SET).to_string(),
-            "&login_hint=",
-            &utf8_percent_encode(email_addr.as_str(), QUERY_ENCODE_SET).to_string(),
-        ].join(""));
-        let auth_url = result.map_err(|_| {
-            let domain = email_addr.domain();
-            BrokerError::Provider(
-                format!("failed to build valid authorization URL from {}'s 'authorization_endpoint'", domain))
-        })?;
+        {
+            // Create the URL to redirect to.
+            let mut query = auth_url.query_pairs_mut();
+            query.extend_pairs(&[
+                ("login_hint", email_addr.as_str()),
+                ("scope", "openid email"),
+                ("nonce", &bridge_data.nonce),
+                ("state", &ctx.session_id),
+                ("response_type", "id_token"),
+                ("client_id", &bridge_data.client_id),
+                ("redirect_uri", &format!("{}/callback", &ctx.app.public_url)),
+            ]);
+
+            // Prefer `form_post` response mode, otherwise use `fragment`.
+            if response_modes.iter().any(|mode| mode == "form_post") {
+                query.append_pair("response_mode", "form_post");
+            } else if !response_modes.iter().any(|mode| mode == "fragment") {
+                return Err(BrokerError::Provider(format!(
+                    "neither form_post nor fragment response modes supported by {}'s IdP ", email_addr.domain())))
+            }
+
+            query.finish();
+        }
 
         // Save session data, committing the session to this provider.
         let bridge_data = Rc::try_unwrap(bridge_data).map_err(|_| ()).expect("lingering oidc bridge data references");
