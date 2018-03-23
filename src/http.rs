@@ -205,8 +205,8 @@ impl Service {
     ) -> Service {
         Service {
             app: Rc::clone(app),
-            addr: addr,
-            router: router,
+            addr,
+            router,
             static_: Static::new(handle, path).with_cache_headers(app.static_ttl),
         }
     }
@@ -251,13 +251,13 @@ impl HyperService for Service {
 
             // Create the request context.
             let ctx_handle = Rc::new(RefCell::new(Context {
-                app: app,
-                method: method,
+                app,
+                method,
                 query: uri.query().unwrap_or("").to_owned(),
-                body: body,
+                body,
                 session_id: String::default(),
                 session_data: None,
-                catalog_idx: catalog_idx,
+                catalog_idx,
                 return_params: None,
             }));
 

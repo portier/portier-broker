@@ -25,10 +25,10 @@ impl FromStr for EmailAddress {
         // Verify and normalize the domain
         let domain = idna::domain_to_ascii(&input[local_end + 1..]).map_err(|_| ())?;
         if domain == "" { return Err(()); }
-        if let Some(_) = domain.find(|c| matches!(c,
+        if domain.find(|c| matches!(c,
             '\0' | '\t' | '\n' | '\r' | ' ' | '#' | '%' | '/' | ':' | '?' | '@' | '[' | '\\' | ']'
-        )) { return Err(()); }
-        if let Ok(_) = domain.parse::<Ipv4Addr>() { return Err(()); }
+        )).is_some() { return Err(()); }
+        if domain.parse::<Ipv4Addr>().is_ok() { return Err(()); }
         Ok(EmailAddress::from_parts(&local, &domain))
     }
 }
