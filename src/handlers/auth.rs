@@ -70,6 +70,7 @@ pub fn auth(ctx_handle: &ContextHandle) -> HandlerResult {
     let redirect_uri = try_get_input_param!(params, "redirect_uri");
     let client_id = try_get_input_param!(params, "client_id");
     let response_mode = try_get_input_param!(params, "response_mode", "fragment".to_owned());
+    let response_errors = try_get_input_param!(params, "response_errors", "true".to_owned());
 
     let redirect_uri = match parse_redirect_uri(&redirect_uri, "redirect_uri") {
         Ok(url) => url,
@@ -89,9 +90,15 @@ pub fn auth(ctx_handle: &ContextHandle) -> HandlerResult {
             "unsupported response_mode, must be fragment or form_post".to_owned()))),
     };
 
+    let response_errors = match response_errors.parse::<bool>() {
+        Ok(value) => value,
+        Err(_) => return Box::new(future::err(BrokerError::Input(
+            "response_errors must be true or false".to_owned()))),
+    };
+
     // Per the OAuth2 spec, we may redirect to the RP once we have validated client_id and
     // redirect_uri. In our case, this means we make redirect_uri available to error handling.
-    ctx.return_params = Some(ReturnParams { redirect_uri, response_mode });
+    ctx.return_params = Some(ReturnParams { redirect_uri, response_mode, response_errors });
 
     if let Some(ref whitelist) = ctx.app.allowed_origins {
         if !whitelist.contains(&client_id) {

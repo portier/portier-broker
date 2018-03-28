@@ -12,14 +12,9 @@ pub struct Store {
 impl Store {
     pub fn new(url: &str, expire_sessions: usize, expire_cache: usize)
                -> Result<Store, &'static str> {
-
         match redis::Client::open(url) {
             Err(_) => Err("error opening store connection"),
-            Ok(client) => Ok(Store {
-                client: client,
-                expire_sessions: expire_sessions,
-                expire_cache: expire_cache,
-            }),
+            Ok(client) => Ok(Store { client, expire_sessions, expire_cache }),
         }
     }
 

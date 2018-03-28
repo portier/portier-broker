@@ -1,6 +1,5 @@
 sudo: false
 language: rust
-env: RUSTFLAGS="-C link-dead-code"
 matrix:
     include:
         - rust: stable
@@ -11,22 +10,26 @@ matrix:
         - rust: nightly
     fast_finish: true
 
-# kcov dependencies
-addons:
-  apt:
-    packages:
-      - libcurl4-openssl-dev
-      - libelf-dev
-      - libdw-dev
-      - binutils-dev
-      - cmake
-    sources:
-      - kalakris-cmake
-
-before_script:
-  - |
-      cargo install --force cargo-travis &&
-      export PATH=$HOME/.cargo/bin:$PATH
+# kcov setup
+#
+# FIXME: Disabled while we wait for a Rust fix to land on stable:
+# https://github.com/rust-lang/rust/issues/47309
+#
+# env: RUSTFLAGS="-C link-dead-code"
+# addons:
+#   apt:
+#     packages:
+#       - libcurl4-openssl-dev
+#       - libelf-dev
+#       - libdw-dev
+#       - binutils-dev
+#       - cmake
+#     sources:
+#       - kalakris-cmake
+# before_script:
+#   - |
+#       cargo install --force cargo-travis &&
+#       export PATH=$HOME/.cargo/bin:$PATH
 
 script:
     - cargo build --verbose
@@ -36,5 +39,5 @@ script:
             cargo install clippy && cargo clippy -- -Dclippy
         fi
 
-after_success:
-    - cargo coveralls
+# after_success:
+#     - cargo coveralls

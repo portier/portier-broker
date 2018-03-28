@@ -75,6 +75,7 @@ pub struct ReturnParams {
     #[serde(with = "UrlDef")]
     pub redirect_uri: Url,
     pub response_mode: ResponseMode,
+    pub response_errors: bool,
 }
 
 
@@ -204,8 +205,8 @@ impl Service {
     ) -> Service {
         Service {
             app: Rc::clone(app),
-            addr: addr,
-            router: router,
+            addr,
+            router,
             static_: Static::new(handle, path).with_cache_headers(app.static_ttl),
         }
     }
@@ -250,13 +251,13 @@ impl HyperService for Service {
 
             // Create the request context.
             let ctx_handle = Rc::new(RefCell::new(Context {
-                app: app,
-                method: method,
+                app,
+                method,
                 query: uri.query().unwrap_or("").to_owned(),
-                body: body,
+                body,
                 session_id: String::default(),
                 session_data: None,
-                catalog_idx: catalog_idx,
+                catalog_idx,
                 return_params: None,
             }));
 
@@ -302,12 +303,19 @@ impl HyperService for Service {
 fn handle_error(ctx: &Context, err: BrokerError) -> Response {
     let reference = err.log();
 
+    // Check if we can redirect to the RP. We must have return parameters, and the RP must not have
+    // opted out from receiving errors in the redirect response.
+    let can_redirect = match ctx.return_params {
+        Some(ReturnParams { response_errors: true, .. }) => true,
+        _ => false,
+    };
+
     let catalog = ctx.catalog();
-    match (err, ctx.return_params.as_ref()) {
+    match (err, can_redirect) {
         // Redirects with description.
-        (err @ BrokerError::Input(_), Some(_))
-            | (err @ BrokerError::Provider(_), Some(_))
-            | (err @ BrokerError::ProviderInput(_), Some(_))
+        (err @ BrokerError::Input(_), true)
+            | (err @ BrokerError::Provider(_), true)
+            | (err @ BrokerError::ProviderInput(_), true)
             => {
             return_to_relier(ctx, &[
                 ("error", err.oauth_error_code()),
@@ -315,7 +323,7 @@ fn handle_error(ctx: &Context, err: BrokerError) -> Response {
             ])
         },
         // Friendly error pages for what we can't redirect.
-        (err @ BrokerError::Input(_), None) => {
+        (err @ BrokerError::Input(_), false) => {
             Response::new()
                 .with_status(err.http_status_code())
                 .with_header(ContentType::html())
@@ -326,8 +334,8 @@ fn handle_error(ctx: &Context, err: BrokerError) -> Response {
                     ("explanation", catalog.gettext("This indicates an issue with the site you're trying to login to. Contact the site administrator to get the issue resolved.")),
                 ]))
         },
-        (err @ BrokerError::Provider(_), None)
-            | (err @ BrokerError::ProviderInput(_), None)
+        (err @ BrokerError::Provider(_), false)
+            | (err @ BrokerError::ProviderInput(_), false)
             => {
             Response::new()
                 .with_status(err.http_status_code())
@@ -436,7 +444,7 @@ pub fn read_body(body: Body) -> BoxFuture<Chunk, HyperError> {
 /// that sends them to the RP's `redirect_uri`. The method used to return to
 /// the RP depends on the `response_mode`.
 pub fn return_to_relier(ctx: &Context, params: &[(&str, &str)]) -> Response {
-    let &ReturnParams { ref redirect_uri, response_mode } = ctx.return_params.as_ref()
+    let &ReturnParams { ref redirect_uri, response_mode, .. } = ctx.return_params.as_ref()
         .expect("return_to_relier called without return parameters");
 
     match response_mode {
