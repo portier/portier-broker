@@ -34,7 +34,7 @@ macro_rules! try_get_provider_param {
     ( $params:expr , $key:tt ) => {
         match $params.remove($key) {
             Some(value) => value,
-            None => return Box::new(future::err(BrokerError::Input(
+            None => return Box::new(future::err(BrokerError::ProviderInput(
                 concat!("missing request parameter ", $key).to_owned()))),
         }
     };
