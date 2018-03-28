@@ -13,7 +13,7 @@ use store_cache::{CacheKey, fetch_json_url};
 use time::now_utc;
 use url::Url;
 use validation;
-use webfinger::{Link, Relation};
+use webfinger::{self, Link, Relation};
 
 
 /// The origin of the Google identity provider.
@@ -22,31 +22,13 @@ pub const GOOGLE_IDP_ORIGIN: &str = "https://accounts.google.com";
 pub const LEEWAY: i64 = 30;
 
 
-/// Normalization to apply to an email address.
-#[derive(Serialize,Deserialize)]
-pub enum Normalization {
-    None,
-    Google,
-}
-
-impl Normalization {
-    /// Apply normalization to an email address.
-    pub fn apply(&self, email_addr: EmailAddress) -> EmailAddress {
-        match *self {
-            Normalization::None => email_addr,
-            Normalization::Google => email_addr.normalize_google(),
-        }
-    }
-}
-
-
 /// Data we store in the session.
 #[derive(Serialize,Deserialize)]
 pub struct OidcBridgeData {
+    pub link: Link,
     pub origin: String,
     pub client_id: String,
     pub nonce: String,
-    pub normalization: Normalization,
 }
 
 
@@ -118,10 +100,10 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>, link: &Li
                 }
             }
             OidcBridgeData {
+                link: link.clone(),
                 origin: provider_origin,
                 client_id: ctx.app.public_url.clone(),
                 nonce: provider_nonce,
-                normalization: Normalization::None,
             }
         },
         // Delegate to the OpenID Connect bridge for Google, if configured.
@@ -135,10 +117,10 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>, link: &Li
                     format!("invalid href: Google provider only supports {}", GOOGLE_IDP_ORIGIN))));
             }
             OidcBridgeData {
+                link: link.clone(),
                 origin: provider_origin,
                 client_id: client_id.clone(),
                 nonce: provider_nonce,
-                normalization: Normalization::Google,
             }
         },
     });
@@ -235,50 +217,39 @@ pub fn callback(ctx_handle: &ContextHandle) -> HandlerResult {
     let f = fetch_config(ctx_handle, &bridge_data);
 
     // Grab the keys from the provider, then verify the signature.
-    let ctx_handle2 = Rc::clone(ctx_handle);
-    let bridge_data2 = Rc::clone(&bridge_data);
+    let ctx_handle3 = Rc::clone(ctx_handle);
+    let bridge_data3 = Rc::clone(&bridge_data);
     let f = f.and_then(move |provider_config: ProviderConfig| {
-        let ctx = ctx_handle2.borrow();
+        let ctx = ctx_handle3.borrow();
         fetch_json_url(&ctx.app, provider_config.jwks_uri, &CacheKey::OidcKeySet {
-            origin: bridge_data2.origin.as_str(),
+            origin: bridge_data3.origin.as_str(),
         })
             .then(move |result| {
                 let key_set: ProviderKeys = result.map_err(|e| BrokerError::Provider(
-                    format!("could not fetch {}'s keys: {}", &bridge_data2.origin, e)))?;
+                    format!("could not fetch {}'s keys: {}", &bridge_data3.origin, e)))?;
                 crypto::verify_jws(&id_token, &key_set.keys).map_err(|_| BrokerError::ProviderInput(
-                    format!("could not verify the token received from {}", &bridge_data2.origin)))
+                    format!("could not verify the token received from {}", &bridge_data3.origin)))
             })
     });
 
-    let ctx_handle = Rc::clone(ctx_handle);
-    let f = f.and_then(move |jwt_payload| {
-        let ctx = ctx_handle.borrow();
+    let ctx_handle2 = Rc::clone(ctx_handle);
+    let f = f.and_then(move |jwt_payload| -> Box<Future<Item=EmailAddress, Error=BrokerError>> {
+        let ctx = ctx_handle2.borrow_mut();
         let data = ctx.session_data.as_ref().expect("session vanished");
 
-        // Normalize the email address according to provider rules.
-        let email_addr = bridge_data.normalization.apply(data.email_addr.clone());
-
         // Extract the token claims.
-        let descr = format!("{}'s token payload", email_addr.domain());
+        let descr = format!("{}'s token payload", data.email_addr.domain());
         let iss = try_get_token_field!(jwt_payload, "iss", descr);
         let aud = try_get_token_field!(jwt_payload, "aud", descr);
-        let token_addr = try_get_token_field!(jwt_payload, "email", descr);
+        let email = try_get_token_field!(jwt_payload, "email", descr);
         let iat = try_get_token_field!(jwt_payload, "iat", |v| v.as_i64(), descr);
         let exp = try_get_token_field!(jwt_payload, "exp", |v| v.as_i64(), descr);
         let nonce = try_get_token_field!(jwt_payload, "nonce", descr);
 
-        // Normalize the token email address too.
-        let token_addr: EmailAddress = match token_addr.parse() {
-            Ok(addr) => bridge_data.normalization.apply(addr),
-            Err(_) => return Err(BrokerError::ProviderInput(format!(
-                    "failed to parse email from {}", descr))),
-        };
-
         // Verify the token claims.
         check_token_field!(iss == bridge_data.origin, "iss", descr);
-        check_token_field!(aud == *bridge_data.client_id, "aud", descr);
-        check_token_field!(nonce == *bridge_data.nonce, "nonce", descr);
-        check_token_field!(token_addr == email_addr, "email", descr);
+        check_token_field!(aud == bridge_data.client_id, "aud", descr);
+        check_token_field!(nonce == bridge_data.nonce, "nonce", descr);
 
         let now = now_utc().to_timespec().sec;
         let exp = exp.checked_add(LEEWAY).unwrap_or(i64::min_value());
@@ -286,9 +257,59 @@ pub fn callback(ctx_handle: &ContextHandle) -> HandlerResult {
         check_token_field!(now < exp , "exp", descr);
         check_token_field!(iat <= now, "iat", descr);
 
-        // If everything is okay, build a new identity token and send it
-        // to the relying party.
-        complete_auth(&*ctx)
+        let email_addr: EmailAddress = match email.parse() {
+            Ok(email_addr) => email_addr,
+            Err(_) => return Box::new(future::err(BrokerError::ProviderInput(format!(
+                "failed to parse email in {}", descr)))),
+        };
+
+        match bridge_data.link.rel {
+            Relation::Portier => {
+                // A Portier IdP can change the email address, but must then set `email_original`.
+                if let Some(email_original) = jwt_payload.get("email_original").and_then(|v| v.as_str()) {
+                    // Check that `email_original` matches our original request.
+                    check_token_field!(email_original == data.email_addr.as_str(), "email_original", descr);
+                    // Verify the new `email` is in normalized form.
+                    check_token_field!(email == email_addr.as_str(), "email", descr);
+                } else {
+                    // No change, check that `email` matches our original request.
+                    check_token_field!(email == data.email_addr.as_str(), "email", descr);
+                }
+
+                // If the IdP actually changed the address, verify that it controls the new one.
+                if email_addr != data.email_addr {
+                    let f = webfinger::query(&ctx.app, &email_addr).and_then(move |links| {
+                        if links.contains(&bridge_data.link) {
+                            Ok(email_addr)
+                        } else {
+                            Err(BrokerError::ProviderInput(format!(
+                                "email domain {} claimed in {} is not controlled by the same provider",
+                                email_addr.domain(), descr)))
+                        }
+                    });
+                    Box::new(f)
+                } else {
+                    Box::new(future::ok(email_addr))
+                }
+            },
+            Relation::Google => {
+                // For Google, check `email` after additional normalization.
+                let email_addr = email_addr.normalize_google();
+                let expected = data.email_addr.normalize_google();
+                check_token_field!(email_addr == expected, "email", descr);
+
+                // Use the normalized address.
+                Box::new(future::ok(email_addr))
+            },
+        }
+    });
+
+    // If everything is okay, build a new identity token and send it
+    // to the relying party.
+    let ctx_handle = Rc::clone(ctx_handle);
+    let f = f.and_then(move |email_addr| {
+        let ctx = ctx_handle.borrow();
+        complete_auth(&*ctx, &email_addr)
     });
 
     Box::new(f)
