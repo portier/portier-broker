@@ -40,9 +40,6 @@ You will also need a Redis server and an outgoing SMTP server.
 
 .. _installed: https://doc.rust-lang.org/book/getting-started.html
 
-should be in the format ``<host>:<port>``. The ``username`` and ``password``
-fields are optional, and may be set to provide login credentials.
-
 Configuration
 -------------
 
