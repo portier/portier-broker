@@ -101,7 +101,7 @@ keytext         BROKER_KEYTEXT       (none)
 =============== ==================== ================
 ``config.toml`` Environment Variable Default
 =============== ==================== ================
-url             BROKER_REDIS_URL     (none)
+url             BROKER_REDIS_URL     (none) (example: redis://localhost:6379)
 session_ttl     BROKER_SESSION_TTL   900 (15 minutes)
 cache_ttl       BROKER_CACHE_TTL     3600 (1 hour)
 =============== ==================== ================

@@ -11,9 +11,18 @@ pub struct Store {
 
 impl Store {
     pub fn new(url: &str, expire_sessions: usize, expire_cache: usize)
-               -> Result<Store, &'static str> {
-        match redis::Client::open(url) {
-            Err(_) => Err("error opening store connection"),
+               -> Result<Store, String> {
+        let mut url = url.to_string();
+        if url.starts_with("http://") {
+            url = url.replace("http://", "redis://");
+        } else if !url.starts_with("redis://") {
+            url = format!("redis://{}", &url);
+        }
+        match redis::Client::open(url.as_str()) {
+            Err(e) => {
+                let f = format!("error opening store connection: {} (url={})", e, url);
+                Err(f)
+            },
             Ok(client) => Ok(Store { client, expire_sessions, expire_cache }),
         }
     }

@@ -28,7 +28,7 @@ keytext =
 
 
 [redis]
-# Redis connection URL - Default: (mandatory, CHANGE THIS)
+# Redis connection URL - Default: (mandatory, CHANGE THIS) (example: redis://localhost, redis://localhost:6379/0)
 url =
 # Time that users have to complete authentication - Default: 900 (15 minutes)
 session_ttl = 900
