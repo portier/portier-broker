@@ -21,7 +21,7 @@ pub fn complete_auth(ctx: &Context, email: &EmailAddress) -> BrokerResult<Respon
     ctx.app.store.remove_session(&ctx.session_id)?;
     let aud = data.return_params.redirect_uri.origin().ascii_serialization();
     let jwt = crypto::create_jwt(&ctx.app, &data.email, email, &aud, &data.nonce);
-    Ok(return_to_relier(ctx, &[("id_token", &jwt)]))
+    Ok(return_to_relier(ctx, &[("id_token", &jwt),("state", &data.return_params.state)]))
 }
 
 
