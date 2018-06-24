@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="/static/style.css">
+    <title>Portier &ndash; {{ title }} {{ display_origin }}</title>
+  </head>
+  <body>
+    <div class="container">
+      <main>
+        <h1 class="head">
+          {{ explanation }}
+        </h1>
+        <p>
+          {{ use }}<br>
+          <em>{{ display_origin }}</em>
+        </p>
+        <hr />
+        <div class="entry">
+          <form id="form" action="{{ form_action }}" method="{{ method }}">
+            {{# params }}
+              <input type="hidden" name="{{ name }}" value="{{ value }}">
+            {{/ params }}
+            <input type="text" name="login_hint" autofocus autocomplete="off" autocorrect="off" autocapitalize="off"><button type="submit">Login</button>
+          </form>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>

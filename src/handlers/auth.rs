@@ -4,6 +4,9 @@ use error::BrokerError;
 use futures::future::{self, Future, Either};
 use http::{ContextHandle, HandlerResult, ReturnParams, json_response};
 use hyper::Method;
+use hyper::header::ContentType;
+use hyper::server::Response;
+use mustache;
 use serde_json::{Value, from_value};
 use std::rc::Rc;
 use std::time::Duration;
@@ -67,6 +70,8 @@ pub fn auth(ctx_handle: &ContextHandle) -> HandlerResult {
         _ => unreachable!(),
     };
 
+    let original_params = params.clone();
+
     let redirect_uri = try_get_input_param!(params, "redirect_uri");
     let client_id = try_get_input_param!(params, "client_id");
     let response_mode = try_get_input_param!(params, "response_mode", "fragment".to_owned());
@@ -99,6 +104,7 @@ pub fn auth(ctx_handle: &ContextHandle) -> HandlerResult {
 
     // Per the OAuth2 spec, we may redirect to the RP once we have validated client_id and
     // redirect_uri. In our case, this means we make redirect_uri available to error handling.
+    let redirect_uri_ = redirect_uri.clone();
     ctx.return_params = Some(ReturnParams { redirect_uri, response_mode, response_errors, state });
 
     if let Some(ref whitelist) = ctx.app.allowed_origins {
@@ -109,10 +115,37 @@ pub fn auth(ctx_handle: &ContextHandle) -> HandlerResult {
     }
 
     let nonce = try_get_input_param!(params, "nonce");
-    let login_hint = try_get_input_param!(params, "login_hint");
     if try_get_input_param!(params, "response_type") != "id_token" {
         return Box::new(future::err(BrokerError::Input(
             "unsupported response_type, only id_token is supported".to_owned())));
+    }
+
+    let login_hint = try_get_input_param!(params, "login_hint", "".to_string());
+    if login_hint == "" {
+        let data = mustache::MapBuilder::new()
+            // TODO: catalog/localization?
+            .insert_str("display_origin", &redirect_uri_)
+            .insert_str("title", "Login with email to")
+            .insert_str("form_action", format!("{}/auth", &ctx.app.public_url))
+            .insert_str("method", &ctx.method)
+            .insert_str("explanation", "Login with your email.")
+            .insert_str("use", "Please specify the email you wish to use to login to ")
+            .insert_vec("params", |mut builder| {
+                for param in &original_params {
+                    builder = builder.push_map(|builder| {
+                        let (name, value) = param;
+                        builder.insert_str("name", name).insert_str("value", value)
+                    });
+                }
+                builder
+            })
+            .build();
+
+        let res = Response::new()
+            .with_header(ContentType::html())
+            .with_body(ctx.app.templates.login_hint.render_data(&data));
+        let bf = Box::new(future::ok(res));
+        return bf;
     }
 
     // Verify and normalize the email.
