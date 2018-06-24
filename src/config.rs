@@ -96,6 +96,8 @@ impl Template {
 pub struct Templates {
     /// Page displayed when the confirmation email was sent.
     pub confirm_email: Template,
+    /// Page displayed when the login_hint is missing.
+    pub login_hint: Template,
     /// HTML formatted email containing the one-type pad.
     pub email_html: Template,
     /// Plain text email containing the one-type pad.
@@ -122,6 +124,7 @@ impl Default for Templates {
             confirm_email: Self::compile_template("tmpl/confirm_email.mustache"),
             email_html: Self::compile_template("tmpl/email_html.mustache"),
             email_text: Self::compile_template("tmpl/email_text.mustache"),
+            login_hint: Self::compile_template("tmpl/login_hint.mustache"),
             error: Self::compile_template("tmpl/error.mustache"),
             forward: Self::compile_template("tmpl/forward.mustache"),
             fragment_callback: Self::compile_template("tmpl/fragment_callback.mustache"),
