@@ -71,6 +71,7 @@ pub fn auth(ctx_handle: &ContextHandle) -> HandlerResult {
     let client_id = try_get_input_param!(params, "client_id");
     let response_mode = try_get_input_param!(params, "response_mode", "fragment".to_owned());
     let response_errors = try_get_input_param!(params, "response_errors", "true".to_owned());
+    let state = try_get_input_param!(params, "state", "".to_owned());
 
     let redirect_uri = match parse_redirect_uri(&redirect_uri, "redirect_uri") {
         Ok(url) => url,
@@ -98,7 +99,7 @@ pub fn auth(ctx_handle: &ContextHandle) -> HandlerResult {
 
     // Per the OAuth2 spec, we may redirect to the RP once we have validated client_id and
     // redirect_uri. In our case, this means we make redirect_uri available to error handling.
-    ctx.return_params = Some(ReturnParams { redirect_uri, response_mode, response_errors });
+    ctx.return_params = Some(ReturnParams { redirect_uri, response_mode, response_errors, state });
 
     if let Some(ref whitelist) = ctx.app.allowed_origins {
         if !whitelist.contains(&client_id) {

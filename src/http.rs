@@ -76,6 +76,7 @@ pub struct ReturnParams {
     pub redirect_uri: Url,
     pub response_mode: ResponseMode,
     pub response_errors: bool,
+    pub state: String,
 }
 
 
