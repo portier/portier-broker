@@ -225,7 +225,7 @@ pub fn create_jwt(app: &Config, email: &str, email_addr: &EmailAddress, aud: &st
     let payload = json!({
         "aud": aud,
         "email": email_addr.as_str(),
-        "email_verified": email_addr.as_str(),
+        "email_verified": true,
         "email_original": email,
         "exp": now + i64::from(app.token_ttl),
         "iat": now,
