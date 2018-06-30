@@ -122,14 +122,15 @@ pub fn auth(ctx_handle: &ContextHandle) -> HandlerResult {
 
     let login_hint = try_get_input_param!(params, "login_hint", "".to_string());
     if login_hint == "" {
+        let catalog = ctx.catalog();
         let data = mustache::MapBuilder::new()
             // TODO: catalog/localization?
             .insert_str("display_origin", &redirect_uri_)
-            .insert_str("title", "Login with email to")
+            .insert_str("title", catalog.gettext("Finish logging in to"))
             .insert_str("form_action", format!("{}/auth", &ctx.app.public_url))
             .insert_str("method", &ctx.method)
-            .insert_str("explanation", "Login with your email.")
-            .insert_str("use", "Please specify the email you wish to use to login to ")
+            .insert_str("explanation", catalog.gettext("Login with your email."))
+            .insert_str("use", catalog.gettext("Please specify the email you wish to use to login with"))
             .insert_vec("params", |mut builder| {
                 for param in &original_params {
                     builder = builder.push_map(|builder| {
