@@ -54,3 +54,10 @@ msgstr "Your login attempt may have taken too long, or you tried to follow an ol
 
 msgid "Technical description"
 msgstr "Technical description"
+
+msgid "Login with your email address."
+msgstr "Login with your email address."
+
+msgid "Please specify the email you wish to use to login with"
+msgstr "Please specify the email you wish to use to login with"
+
