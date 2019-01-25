@@ -18,7 +18,7 @@ impl FromStr for EmailAddress {
     /// Parse and normalize an email address.
     /// https://github.com/portier/portier.github.io/blob/master/specs/Email-Normalization.md
     fn from_str(input: &str) -> Result<EmailAddress, ()> {
-        let local_end = input.find('@').ok_or(())?;
+        let local_end = input.rfind('@').ok_or(())?;
         // Transform the local part to lowercase
         let local = input[..local_end].to_lowercase();
         if local == "" { return Err(()); }
@@ -64,7 +64,7 @@ impl EmailAddress {
     pub fn from_trusted(input: &str) -> EmailAddress {
         EmailAddress {
             serialization: input.to_owned(),
-            local_end: input.find('@').expect("no @ found in input"),
+            local_end: input.rfind('@').expect("no @ found in input"),
         }
     }
 
@@ -157,6 +157,8 @@ mod tests {
               "björn@xn--gteborg-90a.test");
         parse("İⅢ@İⅢ.example",
               "i̇ⅲ@xn--iiii-qwc.example");
+        parse("\"ex@mple\"@example.com",
+              "\"ex@mple\"@example.com");
     }
 
     #[test]
