@@ -1,6 +1,35 @@
 sudo: false
-
 language: rust
+matrix:
+    include:
+        - rust: stable
+        - rust: beta
+        - rust: nightly
+    allow_failures:
+        - rust: beta
+        - rust: nightly
+    fast_finish: true
+
+# kcov setup
+#
+# FIXME: Disabled while we wait for a Rust fix to land on stable:
+# https://github.com/rust-lang/rust/issues/47309
+#
+# env: RUSTFLAGS="-C link-dead-code"
+# addons:
+#   apt:
+#     packages:
+#       - libcurl4-openssl-dev
+#       - libelf-dev
+#       - libdw-dev
+#       - binutils-dev
+#       - cmake
+#     sources:
+#       - kalakris-cmake
+# before_script:
+#   - |
+#       cargo install --force cargo-travis &&
+#       export PATH=$HOME/.cargo/bin:$PATH
 
 script:
     - cargo build --verbose
@@ -10,38 +39,5 @@ script:
             cargo install clippy && cargo clippy -- -Dclippy
         fi
 
-matrix:
-    fast_finish: true
-    # I'd love to just use travis-cargo for all this, but it's broken:
-    # https://github.com/huonw/travis-cargo/pull/58
-    include:
-        - rust: nightly
-        - rust: beta
-        - rust: stable
-          env: RUSTFLAGS="-C link-dead-code"
-          addons:
-              apt:
-                  packages:
-                      - libcurl4-openssl-dev
-                      - libelf-dev
-                      - libdw-dev
-                      - binutils-dev
-          after_success:
-             - |
-                 # Fetch and build kcov
-                 wget "https://github.com/SimonKagstrom/kcov/archive/master.zip"
-                 unzip master.zip
-                 mkdir kcov-master/build
-                 pushd kcov-master/build
-                 cmake ..
-                 make
-                 popd
-
-                 # Run each binary under kcov
-                 for binary in target/debug/portier_broker-*; do
-                     echo "Generating coverage for $binary"
-                     ./kcov-master/build/src/kcov --verify --exclude-pattern=/.cargo,target/debug target/kcov/ $binary
-                 done
-
-                 echo "Merging and uploading coverage"
-                 ./kcov-master/build/src/kcov --merge --coveralls-id="$TRAVIS_JOB_ID" target/kcov-merged target/kcov/portier_broker-*
+# after_success:
+#     - cargo coveralls

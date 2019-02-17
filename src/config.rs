@@ -1,35 +1,42 @@
-#![allow(unknown_lints, cyclomatic_complexity)]
-
-extern crate serde;
-extern crate toml;
-
-use std;
+use bridges::oidc::GOOGLE_IDP_ORIGIN;
+use crypto;
+use gettext::Catalog;
+use hyper;
+use hyper::header::LanguageTag;
+use hyper_tls::HttpsConnector;
+use mustache;
 use std::collections::HashMap;
 use std::env;
-use std::fmt::{self, Display};
 use std::error::Error;
+use std::fmt::{self, Display};
 use std::fs::File;
-use std::io::Read;
+use std::io::{Read, Error as IoError};
+use store;
+use store_limits::Ratelimit;
+use tokio_core::reactor::Handle;
+use toml;
+use webfinger::{Link, Relation, LinkDef};
 
-use super::{crypto, store, mustache};
-use super::gettext::Catalog;
-use super::hyper::LanguageTag;
-use super::store_limits::Ratelimit;
+
+/// The type of HTTP client we use, with TLS enabled.
+pub type HttpClient = hyper::Client<HttpsConnector<hyper::client::HttpConnector>>;
 
 
 /// Union of all possible error types seen while parsing.
 #[derive(Debug)]
 pub enum ConfigError {
     Custom(String),
-    Io(std::io::Error),
+    Io(IoError),
+    Toml(toml::de::Error),
     Store(&'static str),
 }
 
 impl Error for ConfigError {
     fn description(&self) -> &str {
         match *self {
-            ConfigError::Io(ref err) => err.description(),
             ConfigError::Custom(ref string) => string,
+            ConfigError::Io(ref err) => err.description(),
+            ConfigError::Toml(ref err) => err.description(),
             ConfigError::Store(static_str) => static_str,
         }
     }
@@ -37,9 +44,10 @@ impl Error for ConfigError {
 
 impl Display for ConfigError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self{
-            ConfigError::Io(ref err) => write!(f, "IO error: {}", err),
+        match *self {
             ConfigError::Custom(ref string) => write!(f, "Configuration error: {}", string),
+            ConfigError::Io(ref err) => write!(f, "IO error: {}", err),
+            ConfigError::Toml(ref err) => write!(f, "TOML error: {}", err),
             ConfigError::Store(static_str) => write!(f, "Store error: {}", static_str),
         }
     }
@@ -56,7 +64,8 @@ macro_rules! from_error {
 }
 
 from_error!(String, Custom);
-from_error!(std::io::Error, Io);
+from_error!(IoError, Io);
+from_error!(toml::de::Error, Toml);
 from_error!(&'static str, Store);
 
 
@@ -87,6 +96,8 @@ impl Template {
 pub struct Templates {
     /// Page displayed when the confirmation email was sent.
     pub confirm_email: Template,
+    /// Page displayed when the login_hint is missing.
+    pub login_hint: Template,
     /// HTML formatted email containing the one-type pad.
     pub email_html: Template,
     /// Plain text email containing the one-type pad.
@@ -113,6 +124,7 @@ impl Default for Templates {
             confirm_email: Self::compile_template("tmpl/confirm_email.mustache"),
             email_html: Self::compile_template("tmpl/email_html.mustache"),
             email_text: Self::compile_template("tmpl/email_text.mustache"),
+            login_hint: Self::compile_template("tmpl/login_hint.mustache"),
             error: Self::compile_template("tmpl/error.mustache"),
             forward: Self::compile_template("tmpl/forward.mustache"),
             fragment_callback: Self::compile_template("tmpl/fragment_callback.mustache"),
@@ -127,7 +139,7 @@ pub struct I18n {
 }
 
 
-const SUPPORTED_LANGUAGES: &'static [&'static str] = &["en", "de", "nl"];
+const SUPPORTED_LANGUAGES: &[&str] = &["en", "de", "nl"];
 
 impl Default for I18n {
     fn default() -> I18n {
@@ -145,11 +157,8 @@ impl Default for I18n {
 }
 
 
-pub struct Provider {
+pub struct GoogleConfig {
     pub client_id: String,
-    pub secret: String,
-    pub discovery_url: String,
-    pub issuer_domain: String,
 }
 
 
@@ -164,19 +173,21 @@ pub struct Config {
     pub token_ttl: u16,
     pub keys: Vec<crypto::NamedKey>,
     pub store: store::Store,
+    pub http_client: HttpClient,
     pub from_name: String,
     pub from_address: String,
     pub smtp_server: String,
     pub smtp_username: Option<String>,
     pub smtp_password: Option<String>,
     pub limit_per_email: Ratelimit,
-    pub providers: HashMap<String, Provider>,
+    pub domain_overrides: HashMap<String, Vec<Link>>,
+    pub google: Option<GoogleConfig>,
     pub templates: Templates,
     pub i18n: I18n,
+    pub handle: Handle,
 }
 
 
-#[derive(Clone, Debug, Default)]
 pub struct ConfigBuilder {
     pub listen_ip: String,
     pub listen_port: u16,
@@ -191,85 +202,41 @@ pub struct ConfigBuilder {
     pub redis_url: Option<String>,
     pub redis_session_ttl: u16,
     pub redis_cache_ttl: u16,
-    pub redis_cache_max_doc_size: u16,
     pub from_name: String,
     pub from_address: Option<String>,
     pub smtp_server: Option<String>,
     pub smtp_username: Option<String>,
     pub smtp_password: Option<String>,
     pub limit_per_email: String,
-    pub providers: HashMap<String, ProviderBuilder>,
-}
-
-
-#[derive(Clone, Debug, Default)]
-pub struct ProviderBuilder {
-    pub client_id: Option<String>,
-    pub secret: Option<String>,
-    pub discovery_url: Option<String>,
-    pub issuer_domain: Option<String>,
-}
-
-
-impl ProviderBuilder {
-    pub fn new() -> ProviderBuilder {
-        ProviderBuilder {
-            client_id: None,
-            secret: None,
-            discovery_url: None,
-            issuer_domain: None,
-        }
-    }
-
-    pub fn new_gmail() -> ProviderBuilder {
-        ProviderBuilder {
-            client_id: None,
-            secret: None,
-            discovery_url: Some("https://accounts.google.com/.well-known/openid-configuration".to_string()),
-            issuer_domain: Some("accounts.google.com".to_string()),
-        }
-    }
-
-    pub fn done(self) -> Option<Provider> {
-        match (self.client_id, self.secret, self.discovery_url, self.issuer_domain) {
-            (Some(id), Some(secret), Some(url), Some(iss)) => {
-                Some(Provider {
-                    client_id: id,
-                    secret: secret,
-                    discovery_url: url,
-                    issuer_domain: iss,
-                })
-            }
-            _ => None
-        }
-    }
+    pub domain_overrides: HashMap<String, Vec<Link>>,
+    pub google: Option<GoogleConfig>,
 }
 
 
 impl ConfigBuilder {
     pub fn new() -> ConfigBuilder {
         ConfigBuilder {
-            listen_ip: "127.0.0.1".to_string(),
+            listen_ip: "127.0.0.1".to_owned(),
             listen_port: 3333,
             public_url: None,
             allowed_origins: None,
-            static_ttl: 604800,
-            discovery_ttl: 604800,
-            keys_ttl: 86400,
+            static_ttl: 604_800,
+            discovery_ttl: 604_800,
+            keys_ttl: 86_400,
             token_ttl: 600,
             keyfiles: Vec::new(),
             keytext: None,
             redis_url: None,
             redis_session_ttl: 900,
             redis_cache_ttl: 3600,
-            redis_cache_max_doc_size: 8096,
-            from_name: "Portier".to_string(),
+            from_name: "Portier".to_owned(),
             from_address: None,
             smtp_username: None,
             smtp_password: None,
             smtp_server: None,
-            limit_per_email: "5/min".to_string(),
-            providers: HashMap::new(),
+            limit_per_email: "5/min".to_owned(),
+            domain_overrides: HashMap::new(),
+            google: None,
         }
     }
 
@@ -277,8 +244,7 @@ impl ConfigBuilder {
         let mut file = File::open(path)?;
         let mut file_contents = String::new();
         file.read_to_string(&mut file_contents)?;
-        let toml_config: TomlConfig =
-            toml::decode_str(&file_contents).ok_or("unable to parse config file")?;
+        let toml_config: TomlConfig = toml::from_str(&file_contents)?;
 
         if let Some(table) = toml_config.server {
             if let Some(val) = table.listen_ip { self.listen_ip = val; }
@@ -305,7 +271,6 @@ impl ConfigBuilder {
             self.redis_url = table.url.or_else(|| self.redis_url.clone());
             if let Some(val) = table.session_ttl { self.redis_session_ttl = val; }
             if let Some(val) = table.cache_ttl { self.redis_cache_ttl = val; }
-            if let Some(val) = table.cache_max_doc_size { self.redis_cache_max_doc_size = val; }
         }
 
         if let Some(table) = toml_config.smtp {
@@ -320,19 +285,20 @@ impl ConfigBuilder {
             if let Some(val) = table.per_email { self.limit_per_email = val; }
         }
 
-        if let Some(table) = toml_config.providers {
-            for (domain, values) in table {
-                let provider = self.providers.entry(domain.clone())
-                    .or_insert(match domain.as_str() {
-                        "gmail.com" => ProviderBuilder::new_gmail(),
-                        _ => ProviderBuilder::new(),
-                    });
-
-                if values.client_id.is_some() { provider.client_id = values.client_id; }
-                if values.secret.is_some() { provider.secret = values.secret; }
-                if values.discovery_url.is_some() { provider.discovery_url = values.discovery_url; }
-                if values.issuer_domain.is_some() { provider.issuer_domain = values.issuer_domain; }
+        if let Some(table) = toml_config.domain_overrides {
+            for (domain, links) in table {
+                let links = links.iter()
+                    .map(Link::from_de_link)
+                    .collect::<Result<_, _>>()
+                    .map_err(|e| e.to_owned())?;
+                self.domain_overrides.insert(domain, links);
             }
+        }
+
+        if let Some(table) = toml_config.google {
+            self.google = Some(GoogleConfig {
+                client_id: table.client_id
+            });
         }
 
         Ok(self)
@@ -341,7 +307,7 @@ impl ConfigBuilder {
     pub fn update_from_common_env(&mut self) -> &mut ConfigBuilder {
         if let Some(port) = env::var("PORT").ok().and_then(|s| s.parse().ok()) {
             // If $PORT is set, also bind to 0.0.0.0. Common PaaS convention.
-            self.listen_ip = "0.0.0.0".to_string();
+            self.listen_ip = "0.0.0.0".to_owned();
             self.listen_port = port;
         }
 
@@ -385,7 +351,6 @@ impl ConfigBuilder {
         if let Some(val) = env_config.broker_redis_url { self.redis_url = Some(val); }
         if let Some(val) = env_config.broker_session_ttl { self.redis_session_ttl = val; }
         if let Some(val) = env_config.broker_cache_ttl { self.redis_cache_ttl = val; }
-        if let Some(val) = env_config.broker_cache_max_doc_size { self.redis_cache_max_doc_size = val; }
 
         if let Some(val) = env_config.broker_from_name { self.from_name = val; }
         if let Some(val) = env_config.broker_from_address { self.from_address = Some(val); }
@@ -395,25 +360,18 @@ impl ConfigBuilder {
 
         if let Some(val) = env_config.broker_limit_per_email { self.limit_per_email = val; }
 
-        // New scope to avoid mutably borrowing `self` twice
-        {
-            let mut gmail_provider = self.providers.entry("gmail.com".to_string())
-                .or_insert_with(ProviderBuilder::new_gmail);
-
-            if let Some(val) = env_config.broker_gmail_secret { gmail_provider.secret = Some(val); }
-            if let Some(val) = env_config.broker_gmail_client { gmail_provider.client_id = Some(val); }
-            if let Some(val) = env_config.broker_gmail_discovery { gmail_provider.discovery_url = Some(val); }
-            if let Some(val) = env_config.broker_gmail_issuer { gmail_provider.issuer_domain = Some(val); }
+        if let Some(client_id) = env_config.broker_google_client_id {
+            self.google = Some(GoogleConfig { client_id });
         }
 
         self
     }
 
-    pub fn done(self) -> Result<Config, ConfigError> {
+    pub fn done(self, handle: &Handle) -> Result<Config, ConfigError> {
         // Additional validations
         if self.smtp_username.is_none() != self.smtp_password.is_none() {
             return Err(ConfigError::Custom(
-                "only one of smtp username and password specified; provide both or neither".to_string()
+                "only one of smtp username and password specified; provide both or neither".to_owned()
             ));
         }
 
@@ -432,8 +390,12 @@ impl ConfigBuilder {
             &self.redis_url.expect("no redis url configured"),
             self.redis_cache_ttl as usize,
             self.redis_session_ttl as usize,
-            self.redis_cache_max_doc_size as u64,
         ).expect("unable to instantiate new redis store");
+
+        let http_connector = HttpsConnector::new(4, handle)
+            .expect("could not initialize https connector");
+        let http_client = hyper::Client::configure()
+            .connector(http_connector).build(handle);
 
         let idx = self.limit_per_email.find('/')
             .expect("unable to parse limit.per_email format");
@@ -446,11 +408,19 @@ impl ConfigBuilder {
             }
         };
 
-        let mut providers = HashMap::new();
-        for (domain, builder) in self.providers {
-            if let Some(provider) = builder.done() {
-                providers.insert(domain.clone(), provider);
-            }
+        // Configure default domain overrides for hosted Google
+        let mut domain_overrides = HashMap::new();
+        if self.google.is_some() {
+            let links = vec![Link {
+                rel: Relation::Google,
+                href: GOOGLE_IDP_ORIGIN.parse().expect("failed to parse the Google URL"),
+            }];
+            domain_overrides.insert("gmail.com".to_owned(), links.clone());
+            domain_overrides.insert("googlemail.com".to_owned(), links);
+        }
+
+        for (domain, links) in self.domain_overrides {
+            domain_overrides.insert(domain, links);
         }
 
         Ok(Config {
@@ -462,17 +432,20 @@ impl ConfigBuilder {
             discovery_ttl: self.discovery_ttl,
             keys_ttl: self.keys_ttl,
             token_ttl: self.token_ttl,
-            keys: keys,
-            store: store,
+            keys,
+            store,
+            http_client,
             from_name: self.from_name,
             from_address: self.from_address.expect("no smtp from address configured"),
             smtp_server: self.smtp_server.expect("no smtp outserver address configured"),
             smtp_username: self.smtp_username,
             smtp_password: self.smtp_password,
             limit_per_email: ratelimit,
-            providers: providers,
+            domain_overrides,
+            google: self.google,
             templates: Templates::default(),
             i18n: I18n::default(),
+            handle: handle.clone(),
         })
     }
 }
@@ -487,7 +460,8 @@ struct TomlConfig {
     redis: Option<TomlRedisTable>,
     smtp: Option<TomlSmtpTable>,
     limit: Option<TomlLimitTable>,
-    providers: Option<HashMap<String, TomlProviderTable>>,
+    domain_overrides: Option<HashMap<String, Vec<LinkDef>>>,
+    google: Option<TomlGoogleTable>,
 }
 
 #[derive(Clone,Debug,Deserialize)]
@@ -517,7 +491,6 @@ struct TomlRedisTable {
     url: Option<String>,
     session_ttl: Option<u16>,
     cache_ttl: Option<u16>,
-    cache_max_doc_size: Option<u16>,
 }
 
 #[derive(Clone,Debug,Deserialize)]
@@ -535,11 +508,8 @@ struct TomlLimitTable {
 }
 
 #[derive(Clone,Debug,Deserialize)]
-struct TomlProviderTable {
-    client_id: Option<String>,
-    secret: Option<String>,
-    discovery_url: Option<String>,
-    issuer_domain: Option<String>,
+struct TomlGoogleTable {
+    client_id: String,
 }
 
 
@@ -562,17 +532,13 @@ struct EnvConfig {
     broker_redis_url: Option<String>,
     broker_session_ttl: Option<u16>,
     broker_cache_ttl: Option<u16>,
-    broker_cache_max_doc_size: Option<u16>,
     broker_from_name: Option<String>,
     broker_from_address: Option<String>,
     broker_smtp_server: Option<String>,
     broker_smtp_username: Option<String>,
     broker_smtp_password: Option<String>,
     broker_limit_per_email: Option<String>,
-    broker_gmail_client: Option<String>,
-    broker_gmail_secret: Option<String>,
-    broker_gmail_discovery: Option<String>,
-    broker_gmail_issuer: Option<String>,
+    broker_google_client_id: Option<String>,
 }
 
 impl EnvConfig {
@@ -584,20 +550,19 @@ impl EnvConfig {
             broker_ip: env::var("BROKER_IP").ok(),
             broker_port: env::var("BROKER_PORT").ok().and_then(|x| x.parse().ok()),
             broker_public_url: env::var("BROKER_PUBLIC_URL").ok(),
-            broker_allowed_origins: env::var("BROKER_ALLOWED_ORIGINS").ok().map(|x| x.split(',').map(|x| x.to_string()).collect()),
+            broker_allowed_origins: env::var("BROKER_ALLOWED_ORIGINS").ok().map(|x| x.split(',').map(|x| x.to_owned()).collect()),
 
             broker_static_ttl: env::var("BROKER_STATIC_TTL").ok().and_then(|x| x.parse().ok()),
             broker_discovery_ttl: env::var("BROKER_DISCOVERY_TTL").ok().and_then(|x| x.parse().ok()),
             broker_keys_ttl: env::var("BROKER_KEYS_TTL").ok().and_then(|x| x.parse().ok()),
 
             broker_token_ttl: env::var("BROKER_TOKEN_TTL").ok().and_then(|x| x.parse().ok()),
-            broker_keyfiles: env::var("BROKER_KEYFILES").ok().map(|x| x.split(',').map(|x| x.to_string()).collect()),
+            broker_keyfiles: env::var("BROKER_KEYFILES").ok().map(|x| x.split(',').map(|x| x.to_owned()).collect()),
             broker_keytext: env::var("BROKER_KEYTEXT").ok().and_then(|x| x.parse().ok()),
 
             broker_redis_url: env::var("BROKER_REDIS_URL").ok(),
             broker_session_ttl: env::var("BROKER_SESSION_TTL").ok().and_then(|x| x.parse().ok()),
             broker_cache_ttl: env::var("BROKER_CACHE_TTL").ok().and_then(|x| x.parse().ok()),
-            broker_cache_max_doc_size: env::var("BROKER_CACHE_MAX_DOC_SIZE").ok().and_then(|x| x.parse().ok()),
 
             broker_from_name: env::var("BROKER_FROM_NAME").ok(),
             broker_from_address: env::var("BROKER_FROM_ADDRESS").ok(),
@@ -607,10 +572,7 @@ impl EnvConfig {
 
             broker_limit_per_email: env::var("BROKER_LIMIT_PER_EMAIL").ok(),
 
-            broker_gmail_client: env::var("BROKER_GMAIL_CLIENT").ok(),
-            broker_gmail_secret: env::var("BROKER_GMAIL_SECRET").ok(),
-            broker_gmail_discovery: env::var("BROKER_GMAIL_DISCOVERY").ok(),
-            broker_gmail_issuer: env::var("BROKER_GMAIL_ISSUER").ok(),
+            broker_google_client_id: env::var("BROKER_GOOGLE_CLIENT_ID").ok(),
         }
     }
 }

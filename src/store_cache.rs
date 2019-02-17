@@ -1,31 +1,36 @@
+use error::BrokerError;
+use futures::{Future, future};
+use config::Config;
+use http;
+use hyper::StatusCode;
+use hyper::header::{CacheControl, CacheDirective};
+use redis::Commands;
+use serde::de::DeserializeOwned;
+use serde_json as json;
 use std::cmp::max;
-use std::io::Read;
-use super::hyper::client::Client as HttpClient;
-use super::hyper::header::{
-    CacheControl as HyCacheControl,
-    CacheDirective as HyCacheDirective
-};
-use super::redis::Commands;
-use super::error::{BrokerError, BrokerResult};
-use super::store::Store;
-use serde_json::de::from_str;
-use serde_json::value::Value;
+use std::rc::Rc;
+use std::str::from_utf8;
+use url::Url;
 
 
 /// Represents a Redis key.
 pub enum CacheKey<'a> {
-    Discovery { domain: &'a str },
-    KeySet { domain: &'a str },
+    Discovery { acct: &'a str },
+    OidcConfig { origin: &'a str },
+    OidcKeySet { origin: &'a str },
 }
 
 impl<'a> CacheKey<'a> {
     fn to_string(&self) -> String {
         match *self {
-            CacheKey::Discovery { domain } => {
-                format!("cache:discovery:{}", domain)
+            CacheKey::Discovery { acct } => {
+                format!("cache:discovery:{}", acct)
             },
-            CacheKey::KeySet { domain } => {
-                format!("cache:key-set:{}", domain)
+            CacheKey::OidcConfig { origin } => {
+                format!("cache:configuration:{}", origin)
+            },
+            CacheKey::OidcKeySet { origin } => {
+                format!("cache:key-set:{}", origin)
             }
         }
     }
@@ -33,51 +38,85 @@ impl<'a> CacheKey<'a> {
 
 
 /// Fetch `url` from cache or using a HTTP GET request, and parse the response as JSON. The
-/// cache is stored in `store` with `key`. The `session` is used to make the HTTP GET request,
+/// cache is stored in `app.store` with `key`. The `client` is used to make the HTTP GET request,
 /// if necessary.
-pub fn fetch_json_url(store: &Store, key: CacheKey, session: &HttpClient, url: &str)
-                      -> BrokerResult<Value> {
+pub fn fetch_json_url<T>(app: &Rc<Config>, url: Url, key: &CacheKey)
+    -> Box<Future<Item=T, Error=BrokerError>>
+    where T: 'static + DeserializeOwned {
+
+    let url = Rc::new(url);
 
     // Try to retrieve the result from cache.
     let key_str = key.to_string();
-    let stored: Option<String> = store.client.get(&key_str)?;
-    stored.map_or_else(|| {
+    let data: Option<String> = match app.store.client.get(&key_str) {
+        Ok(data) => data,
+        Err(e) => return Box::new(future::err(BrokerError::Internal(
+            format!("cache lookup failed: {}", e)))),
+    };
 
+    let f: Box<Future<Item=String, Error=BrokerError>> = if let Some(data) = data {
+        info!("HIT {} - {}", key_str, url);
+        Box::new(future::ok(data))
+    } else {
         // Cache miss, make a request.
-        let rsp = session.get(url).send()?;
+        // TODO: Also cache failed requests, perhaps for a shorter time.
+        info!("MISS {} - {}", key_str, url);
 
-        // Grab the max-age directive from the Cache-Control header.
-        let max_age = rsp.headers.get().map_or(0, |header: &HyCacheControl| {
-            for dir in header.iter() {
-                if let HyCacheDirective::MaxAge(seconds) = *dir {
-                    return seconds;
-                }
+        let url2 = Rc::clone(&url);
+        let hyper_url = url.as_str().parse().expect("failed to convert Url to Hyper Url");
+        let f = app.http_client.get(hyper_url)
+            .map_err(move |e| BrokerError::Provider(format!("fetch failed ({}): {}", e, url2)));
+
+        let url2 = Rc::clone(&url);
+        let f = f.and_then(move |res| {
+            if res.status() != StatusCode::Ok {
+                Err(BrokerError::Provider(
+                    format!("fetch failed ({}): {}", res.status(), url2)))
+            } else {
+                Ok(res)
             }
-            0
         });
 
-        // We read up to size+1, because we use the extra byte as a
-        // sentinel to detect responses that exceed our maximum size.
-        let mut data = String::new();
-        let bytes_read = rsp.take(store.max_response_size + 1).read_to_string(&mut data)?;
-        if bytes_read as u64 > store.max_response_size {
-            return Err(BrokerError::Custom("response exceeded the size limit".to_string()))
-        }
+        let url2 = Rc::clone(&url);
+        let f = f.and_then(move |res| {
+            // Grab the max-age directive from the Cache-Control header.
+            let max_age = res.headers().get().map_or(0, |header: &CacheControl| {
+                for dir in header.iter() {
+                    if let CacheDirective::MaxAge(seconds) = *dir {
+                        return seconds;
+                    }
+                }
+                0
+            });
 
-        // Cache the response for at least `expire_cache`, but honor longer `max-age`.
-        let seconds = max(store.expire_cache, max_age as usize);
-        store.client.set_ex(&key_str, &data, seconds)?;
+            // Receive the body.
+            http::read_body(res.body())
+                .map_err(move |e| BrokerError::Provider(format!("fetch failed ({}): {}", e, url2)))
+                .map(move |chunk| (chunk, max_age))
+        });
 
-        Ok(data)
+        let app = Rc::clone(app);
+        let url2 = Rc::clone(&url);
+        let f = f.and_then(move |(chunk, max_age)| {
+            from_utf8(&chunk)
+                .map_err(|e| BrokerError::Provider(format!("fetch failed ({}): {}", e, url2)))
+                .map(|data| data.to_owned())
+                .and_then(move |data| {
+                    // Cache the response for at least `expire_cache`, but honor longer `max-age`.
+                    let seconds = max(app.store.expire_cache, max_age as usize);
+                    app.store.client.set_ex::<_, _, ()>(&key_str, &data, seconds)
+                        .map_err(|e| BrokerError::Internal(format!("cache write failed: {}", e)))
+                        .map(|_| data)
+                })
+        });
 
-    }, |data| {
-        Ok(data)
-    }).and_then(|data| {
+        Box::new(f)
+    };
 
-        from_str(&data).map_err(|_| {
-            BrokerError::Custom("failed to parse response as JSON".to_string())
-        })
+    let f = f.and_then(move |data| {
+        json::from_str(&data)
+            .map_err(|e| BrokerError::Provider(format!("fetch failed ({}): {}", e, url)))
+    });
 
-    })
-
+    Box::new(f)
 }

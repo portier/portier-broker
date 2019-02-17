@@ -1,8 +1,3 @@
-// Stable Rust doesn't yet support the custom_derive feature, so we generate
-// code for structures which #[derive] Serde's Serialize/Deserialize traits.
-//
-// See https://serde.rs/codegen-stable.html for more information.
-
 extern crate glob;
 
 use glob::glob;

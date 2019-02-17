@@ -42,17 +42,33 @@ You will also need a Redis server and an outgoing SMTP server.
 
 .. _installed: https://doc.rust-lang.org/book/getting-started.html
 
-should be in the format ``<host>:<port>``. The ``username`` and ``password``
-fields are optional, and may be set to provide login credentials.
-
 .. |HerokuDeploy| image:: https://www.herokucdn.com/deploy/button.svg
 .. _HerokuDeploy: https://heroku.com/deploy?template=https://github.com/eallrich/portier-broker/tree/issue-88
 
 Configuration
 -------------
 
-See ``config.toml.dist`` for an example configuration file. The available values
-are:
+See ``config.toml.dist`` for an example configuration file. This file includes
+reasonable default values for most settings, but you must explicitly set:
+
+* ``server.public_url``: The server's public-facing URL.
+* ``crypto.keyfiles``: An array of paths to encryption keys, or
+* ``crypto.keytext``: The text of an encryption key in PEM format (takes precedence over keyfiles).
+* ``redis.url``: The URL of a Redis server for temporary session storage.
+* ``smtp.from_address``: The email address that outgoing mail is from.
+* ``smtp.server``: The host and port of the outgoing mail server.
+
+If necessary, set ``smtp.username`` and ``smtp.password`` to your SMTP server's
+username and password.
+
+To support in-browser Google Authentication for Gmail users, you must also
+specify:
+
+* ``google.client_id``: Your Google OAuth API Client ID
+
+You can create encryption keys with ``openssl genrsa 4096 > private.pem``
+
+The complete list of available values are:
 
 **[server] section:**
 
@@ -87,14 +103,13 @@ keytext         BROKER_KEYTEXT       (none)
 
 **[redis] section:**
 
-================== ========================= ================
-``config.toml``    Environment Variable       Default
-================== ========================= ================
-url                BROKER_REDIS_URL          (none)
-session_ttl        BROKER_SESSION_TTL        900 (15 minutes)
-cache_ttl          BROKER_CACHE_TTL          3600 (1 hour)
-cache_max_doc_size BROKER_CACHE_MAX_DOC_SIZE 8096 (8 KiB)
-================== ========================= ================
+=============== ==================== ================
+``config.toml`` Environment Variable Default
+=============== ==================== ================
+url             BROKER_REDIS_URL     (none) (example: redis://localhost:6379)
+session_ttl     BROKER_SESSION_TTL   900 (15 minutes)
+cache_ttl       BROKER_CACHE_TTL     3600 (1 hour)
+=============== ==================== ================
 
 **[smtp] section:**
 
@@ -116,52 +131,52 @@ password        BROKER_SMTP_PASSWORD (none)
 per_email       BROKER_LIMIT_PER_EMAIL "5/min"
 =============== ====================== =======
 
-**[providers."gmail.com"] section:**
+**[google] section:**
 
-=============== ====================== ==============================================================
-``config.toml`` Environment Variable   Default
-=============== ====================== ==============================================================
-client_id       BROKER_GMAIL_CLIENT    (none)
-secret          BROKER_GMAIL_SECRET    (none)
-discovery_url   BROKER_GMAIL_DISCOVERY "https://accounts.google.com/.well-known/openid-configuration"
-issuer_domain   BROKER_GMAIL_ISSUER    "accounts.google.com"
-=============== ====================== ==============================================================
+=============== ======================= =======
+``config.toml`` Environment Variable    Default
+=============== ======================= =======
+client_id       BROKER_GOOGLE_CLIENT_ID (none)
+=============== ======================= =======
 
-The example configuration file, ``config.toml.dist``, includes reasonable default
-values for most settings, but you must explicitly set:
+**[domain_overrides] section:**
 
-* ``server.public_url``: The server's public-facing URL.
-* ``crypto.keyfiles``: An array of paths to encryption keys, or
-* ``crypto.keytext``: The text of an encryption key in PEM format (takes precedence over keyfiles).
-* ``redis.url``: The URL of a Redis server for temporary session storage.
-* ``smtp.from_address``: The email address that outgoing mail is from.
-* ``smtp.server``: The host and port of the outgoing mail server.
+This section contains arbitrary domain names, mapped to a list of
+WebFinger-like links, allowing local configuration on the broker to skip and
+override WebFinger queries for some domains.
 
-If necessary, set ``smtp.username`` and ``smtp.password`` to your SMTP server's
-username and password.
+This is currently most useful for G Suite domains that don't respond to
+WebFinger, which can be specified as:
 
-To support in-browser Google Authentication for Gmail users, you must also
-specify:
+.. code-block:: toml
 
-* ``providers."gmail.com".client_id``: Your Google OAuth API Client ID
-* ``providers."gmail.com".secret``: Your Google OAuth API Secret Key
+   [[domain_overrides."my-apps-domain.example"]]
+   rel = "https://portier.io/specs/auth/1.0/idp/google"
+   href = "https://accounts.google.com"
 
-You can create encryption keys with ``openssl genrsa 4096 > private.pem``
+When the ``[google]`` section is present, default overrides are added for
+``gmail.com`` and ``googlemail.com``.
 
 Contributing
 ------------
 
 If you want to hack on the broker code, clone this repository. If you have the
 Rust toolchain installed (see above), you can run ``cargo build`` to build the
-project in debug mode. ``cargo run <config-file>`` will run the project. You
-will have to set up your own configuration file; use ``config.toml.dist``
-as a template.
+project in debug mode. ``cargo run -- <config-file>`` will run the project. You
+will have to set up your own configuration file; use ``config.toml.dist`` as a
+template.
 
 The broker binds to ``127.0.0.1:3333`` by default. It only speaks HTTP, so you
 must run it behind a reverse proxy like nginx to expose it to the web via TLS.
 Note that the broker will serve up files from the ``.well-known`` directory
 in the current working directory when executed; this makes it relatively easy
 to request a certificate from `Let's Encrypt`_.
+
+If you want to test a custom identity provider, you may want to do so locally
+over plain HTTP, without TLS. This can be enabled with a compile-time flag as
+follows: ``cargo run --features insecure -- <config-file>``. With this flag,
+WebFinger queries are sent over plain HTTP, and plain HTTP links in the
+WebFinger response are allowed.
 
 If you want to test support for well-known identity providers, you will need
 to configure them. For Google, you can request credentials through their

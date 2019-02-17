@@ -1,6 +1,6 @@
-use super::redis::Script;
-use super::error::BrokerResult;
-use super::store::Store;
+use error::{BrokerError, BrokerResult};
+use redis::Script;
+use store::Store;
 
 
 /// Represents a ratelimit
@@ -30,7 +30,8 @@ fn incr_and_test_limits(store: &Store, key: &str, ratelimit: &Ratelimit) -> Brok
         return count
     ");
 
-    let count: usize = script.key(key).arg(ratelimit.duration).invoke(&store.client)?;
+    let count: usize = script.key(key).arg(ratelimit.duration).invoke(&store.client)
+        .map_err(|e| BrokerError::Internal(format!("could not test rate limit: {}", e)))?;
 
     Ok(count <= ratelimit.count)
 }

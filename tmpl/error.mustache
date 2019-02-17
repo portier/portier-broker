@@ -8,13 +8,17 @@
   </head>
   <body>
     <div class="container">
-      <p class="head">
-        Something went wrong, and we cannot
-        complete your request at this time.
-      </p>
-      <p>
-        Technical description: {{ error }}
-      </p>
+      <p class="head">{{ intro }}</p>
+
+      {{# error }}
+        <p>{{ reason }}: {{ error }}</p>
+      {{/ error }}
+
+      <p>{{ explanation }}</p>
+
+      {{# ref }}
+        <p><code>[REF:{{ ref }}]</code></p>
+      {{/ ref }}
     </div>
   </body>
 </html>

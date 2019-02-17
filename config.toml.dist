@@ -4,9 +4,9 @@ listen_ip = "127.0.0.1"
 # Port to bind to - Default: 3333
 listen_port = 3333
 # Server's user-facing URL (mandatory, CHANGE THIS)
-public_url = 
+public_url =
 # Whitelist of client origins to allow - Default: (none (unrestricted))
-allowed_origins = 
+allowed_origins =
 
 
 [headers]
@@ -24,31 +24,29 @@ token_ttl = 600
 # Array of file paths to PEM-formatted signing keys - (mandatory, CHANGE THIS)
 keyfiles = []
 # Text of the key file in PEM format (set either this or keyfiles) - Default: (none)
-keytext = 
+keytext =
 
 
 [redis]
-# Redis connection URL - Default: (mandatory, CHANGE THIS)
-url = 
+# Redis connection URL - Default: (mandatory, CHANGE THIS) (example: redis://localhost, redis://localhost:6379/0)
+url =
 # Time that users have to complete authentication - Default: 900 (15 minutes)
 session_ttl = 900
 # Time that provider discovery documents are cached - Default: 3600 (1 hour)
 cache_ttl = 3600
-# Maximum size of each cached discovery document - Default: 8096 (8 KiB)
-cache_max_doc_size = 8096
 
 
 [smtp]
 # Display name for confirmation emails - Default: "Portier"
 from_name = "Portier"
 # Sender address for confirmation emails - (mandatory, CHANGE THIS)
-from_address = 
+from_address =
 # Outgoing mailserver address - (mandatory, CHANGE THIS)
-server = 
+server =
 # Outgoing mailserver username - Default: (none)
-username = 
+username =
 # Outgoing mailserver password - Default: (none)
-password = 
+password =
 
 
 [limit]
@@ -59,9 +57,7 @@ per_email = "5/min"
 
 [providers."gmail.com"]
 # Google OAuth API Client ID - Default: (none)
-client_id = 
-# Google OAuth API Secret Key - Default: (none)
-secret = 
+client_id =
 # Google OpenID Connect discovery URL - Default: "https://accounts.google.com/.well-known/openid-configuration"
 discovery_url = "https://accounts.google.com/.well-known/openid-configuration"
 # Google OpenID Connect id_token issuer domain - Default: "accounts.google.com"

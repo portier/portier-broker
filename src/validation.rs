@@ -2,30 +2,34 @@ use std::error::Error;
 use std::fmt;
 use url::{self, Url};
 
-// -- Errors --
 
-/// Union type for errors encountered during validation
 #[derive(Debug)]
 pub enum ValidationError {
     Parse(url::ParseError),
-    MismatchedOrigin,
-    NotBareOrigin,
-    BadScheme,
-    UserinfoPresent,
-    InconsistentSerialization,
-    BadPort,
+    BadScheme(String),
+    UserinfoPresent(String),
+    InconsistentSerialization(String),
+    BadPort(String),
 }
 
 impl fmt::Display for ValidationError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            ValidationError::Parse(ref err) => err.fmt(f),
-            ValidationError::MismatchedOrigin => write!(f, "origins did not match"),
-            ValidationError::NotBareOrigin => write!(f, "uri was not a bare origin"),
-            ValidationError::BadScheme => write!(f, "scheme was not http(s)"),
-            ValidationError::UserinfoPresent => write!(f, "a username or password was specified in the uri"),
-            ValidationError::InconsistentSerialization => write!(f, "parsing and re-serializing the uri changed its representation, check for unnecessary information like default ports"),
-            ValidationError::BadPort => write!(f, "invalid port specified"),
+            ValidationError::Parse(ref err) => {
+                err.fmt(f)
+            },
+            ValidationError::BadScheme(ref param) => {
+                write!(f, "the {} scheme was not http(s)", param)
+            },
+            ValidationError::UserinfoPresent(ref param) => {
+                write!(f, "the {} must not contain username or password", param)
+            },
+            ValidationError::InconsistentSerialization(ref param) => {
+                write!(f, "parsing and re-serializing the {} changed its representation, check for unnecessary information like default ports", param)
+            },
+            ValidationError::BadPort(ref param) => {
+                write!(f, "the {} contains an invalid port", param)
+            },
         }
     }
 }
@@ -34,24 +38,20 @@ impl Error for ValidationError {
     fn description(&self) -> &str {
         match *self {
             ValidationError::Parse(ref err) => err.description(),
-            ValidationError::MismatchedOrigin => "origins did not match",
-            ValidationError::NotBareOrigin => "uri was not a bare origin",
-            ValidationError::BadScheme => "scheme was not http(s)",
-            ValidationError::UserinfoPresent => "a username or password was specified in the uri",
-            ValidationError::InconsistentSerialization => "parsing and re-serializing the uri changed its representation, check for unnecessary information like default ports",
-            ValidationError::BadPort => "invalid port specified",
+            ValidationError::BadScheme(_) => "scheme was not http(s)",
+            ValidationError::UserinfoPresent(_) => "must not contain a username or password",
+            ValidationError::InconsistentSerialization(_) => "parsing and re-serializing changed its representation, check for unnecessary information like default ports",
+            ValidationError::BadPort(_) => "contains an invalid port",
         }
     }
 
     fn cause(&self) -> Option<&Error> {
         match *self {
             ValidationError::Parse(ref err) => Some(err),
-            ValidationError::MismatchedOrigin
-                | ValidationError::NotBareOrigin
-                | ValidationError::BadScheme
-                | ValidationError::UserinfoPresent
-                | ValidationError::InconsistentSerialization
-                | ValidationError::BadPort
+            ValidationError::BadScheme(_)
+                | ValidationError::UserinfoPresent(_)
+                | ValidationError::InconsistentSerialization(_)
+                | ValidationError::BadPort(_)
                 => None,
         }
     }
@@ -63,64 +63,64 @@ impl From<url::ParseError> for ValidationError {
     }
 }
 
-// -- Validation Functions --
 
-/// Test that a URI is valid and conforms to our expetations.
-pub fn valid_uri(raw_uri: &str) -> Result<(), ValidationError> {
-    let uri = Url::parse(raw_uri)?;
-
-    if !raw_uri.starts_with("http://") && !raw_uri.starts_with("https://") {
-        return Err(ValidationError::BadScheme)
+/// Test that a `redirect_uri` is valid. Returns the parsed `Url` if successful.
+pub fn parse_redirect_uri(input: &str, param: &str) -> Result<Url, ValidationError> {
+    if !input.starts_with("http://") && !input.starts_with("https://") {
+        return Err(ValidationError::BadScheme(param.to_owned()));
     }
 
-    if uri.username() != "" || uri.password().is_some() {
-        return Err(ValidationError::UserinfoPresent)
+    let url = Url::parse(input)?;
+    if url.username() != "" || url.password().is_some() {
+        return Err(ValidationError::UserinfoPresent(param.to_owned()));
+    }
+    if url.port() == Some(0) {
+        return Err(ValidationError::BadPort(param.to_owned()));
     }
 
-    if let Some(port) = uri.port() {
-        if port == 0 {
-            return Err(ValidationError::BadPort)
-        }
+    // Make sure the input origin matches the serialized origin.
+    let origin = url.origin().ascii_serialization();
+    if !input.starts_with(&origin) {
+        return Err(ValidationError::InconsistentSerialization(param.to_owned()));
+    }
+    match input.as_bytes().get(origin.len()) {
+        Some(&b'/') | None => {},
+        _ => return Err(ValidationError::InconsistentSerialization(param.to_owned())),
     }
 
-    if uri.as_str() != raw_uri && uri.origin().ascii_serialization() != raw_uri {
-        return Err(ValidationError::InconsistentSerialization)
-    }
-
-    Ok(())
+    Ok(url)
 }
 
-/// Test that a URI is is valid and only has a scheme, host, and port.
-pub fn only_origin(raw_uri: &str) -> Result<(), ValidationError> {
-    let uri = Url::parse(raw_uri)?;
 
-    if uri.origin().ascii_serialization() != raw_uri {
-        return Err(ValidationError::NotBareOrigin)
+/// Test that a OpenID Connect endpoint is valid.
+///
+/// This method is more tolerant than `parse_redirect_uri`, because we're in control of all
+/// validation on the identity provider side. Note that this method also assumes the scheme was
+/// already checked.
+///
+/// Returns the origin if successful.
+pub fn parse_oidc_href(input: &Url) -> Option<String> {
+    if input.port() == Some(0) {
+        return None;
     }
 
-    Ok(())
-}
-
-/// Test that two URIs fall within the same origin.
-pub fn same_origin(raw_a: &str, raw_b: &str) -> Result<(), ValidationError> {
-    let a = Url::parse(raw_a)?;
-    let b = Url::parse(raw_b)?;
-
-    if a.origin() != b.origin() {
-        return Err(ValidationError::MismatchedOrigin)
+    // Simple check to see if it's just an origin.
+    // The input should be the same, with only a trailing slash.
+    let origin = input.origin().ascii_serialization();
+    if input.as_str().len() != origin.len() + 1 {
+        return None;
     }
 
-    Ok(())
+    Some(origin)
 }
 
-// -- Unit Tests --
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn accepts_valid_uris() {
+    fn valid_redirect_uris() {
         for uri in &[
             // HTTP
             "http://example.com",
@@ -145,14 +145,14 @@ mod tests {
             "http://example.com:8080/path#baz",
             "http://example.com:8080/path?foo=bar",
         ] {
-            if let Err(err) = valid_uri(uri) {
+            if let Err(err) = parse_redirect_uri(uri, "input") {
                 panic!(format!("unexpectedly rejected uri: {}. Reported: {}", uri, err))
             }
         }
     }
 
     #[test]
-    fn rejects_invalid_uris() {
+    fn invalid_redirect_uris() {
         for uri in &[
             // Incomplete strings
             "",
@@ -195,14 +195,14 @@ mod tests {
             "http://:8080:8080",
             "http://»",
         ] {
-            if valid_uri(uri).is_ok() {
+            if parse_redirect_uri(uri, "input").is_ok() {
                 panic!(format!("did not reject uri: {}", uri))
             }
         }
     }
 
     #[test]
-    fn accepts_valid_origins() {
+    fn valid_oidc_endpoints() {
         for uri in &[
             // HTTP
             "http://example.com",
@@ -214,96 +214,48 @@ mod tests {
             "https://localhost",
             "https://127.0.0.1",
 
+            // Odd notations
+            "http:example.com",
+            "http://@example.com",
+
+            // Redundant default ports
+            "http://example.com:80",
+            "https://example.com:443",
+
             // Non-default ports
             "http://example.com:8080",
             "http://127.0.0.1:8080",
             "http://example.com:443",
             "https://example.com:80",
         ] {
-            if let Err(err) = only_origin(uri) {
-                panic!(format!("unexpectedly rejected: {}: {}", uri, err))
+            let uri = uri.parse().expect("could not parse a test uri");
+            if parse_oidc_href(&uri).is_none() {
+                panic!(format!("unexpectedly rejected uri: {}", uri))
             }
         }
     }
 
     #[test]
-    fn rejects_invalid_origins() {
+    fn invalid_oidc_endpoints() {
         for uri in &[
-            // Opaque Data
-            "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
-            "http:example.com",
-
-            // Default ports
-            "http://example.com:80",
-            "https://example.com:443",
-
             // Userinfo
             "http://user:pass@example.com",
             "http://user@example.com",
-            "http://@example.com",
-
-            // Missing host
-            "http://",
-            "http:///path",
-            "http://:8080",
-            "http://:8080/path",
-
-            // Invalid IPv6 literals
-            "http://::1",
-            "http://::1:8080",
-
-            // Weird strings
-            "http://example.com:8080:8080",
-            "http://:8080:8080",
 
             // Paths, query strings, and fragments
-            "http://example.com:8080/",
             "http://example.com:8080/path?foo=bar#baz",
             "http://example.com:8080/?foo=bar#baz",
             "http://example.com:8080/#baz",
             "http://example.com:8080/path#baz",
             "http://example.com:8080/path?foo=bar",
+
+            // Invalid ports
+            "http://example.com:0",
         ] {
-            if only_origin(uri).is_ok() {
-                panic!(format!("unexpectedly accepted: {}", uri))
-            }
-        }
-    }
-
-    #[test]
-    fn accepts_same_origin() {
-        for &(a, b) in &[
-            ("http://example.com", "http://example.com"),
-            ("http://example.com:80", "http://example.com"),
-            ("https://example.com:443", "https://example.com"),
-            ("http://example.com/foo", "http://example.com"),
-            ("http://user:pass@example.com", "http://example.com"),
-        ] {
-            if same_origin(a, b).is_err() != same_origin(b, a).is_err() {
-                panic!(format!("same_origin() was not symmetric for: {}, {}", a, b))
-            }
-
-            if let Err(err) = same_origin(a, b) {
-                panic!(format!("unexpectedly rejected: {}, {}: {}", a, b, err))
-            }
-        }
-    }
-
-    #[test]
-    fn rejects_different_origin() {
-        for &(a, b) in &[
-            ("http://example.com`", "http://example.com"),
-            ("http://example.com.evil.com", "http://example.com"),
-            ("http://example.com@evil.com", "http://example.com"),
-            ("https://example.com", "http://example.com"),
-            ("http://example.com:8080", "http://example.com"),
-        ] {
-            if same_origin(a, b).is_err() != same_origin(b, a).is_err() {
-                panic!(format!("same_origin() was not symmetric for: {}, {}", a, b))
-            }
-
-            if same_origin(a, b).is_ok() {
-                panic!(format!("unexpectedly accepted: {}, {}", a, b))
+            println!("{}", uri);
+            let uri = uri.parse().expect("could not parse a test uri");
+            if parse_oidc_href(&uri).is_some() {
+                panic!(format!("did not reject uri: {}", uri))
             }
         }
     }
