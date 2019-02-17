@@ -43,7 +43,7 @@ You will also need a Redis server and an outgoing SMTP server.
 .. _installed: https://doc.rust-lang.org/book/getting-started.html
 
 .. |HerokuDeploy| image:: https://www.herokucdn.com/deploy/button.svg
-.. _HerokuDeploy: https://heroku.com/deploy?template=https://github.com/eallrich/portier-broker/tree/issue-88
+.. _HerokuDeploy: https://heroku.com/deploy?template=https://github.com/eallrich/portier-broker/tree/issue-88-update
 
 Configuration
 -------------
