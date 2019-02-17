@@ -12,6 +12,8 @@ protocol `specification`_. Feedback is welcome on `GitHub`_.
 How to run your own broker
 --------------------------
 
+|HerokuDeploy|_
+
 Portier is specified such that everyone can run their own Broker instance. You
 can point your Relying Parties at your own broker, so that you do not have to
 depend on the broker run by the Portier project.
@@ -39,6 +41,9 @@ completely omit the configuration file.
 You will also need a Redis server and an outgoing SMTP server.
 
 .. _installed: https://doc.rust-lang.org/book/getting-started.html
+
+.. |HerokuDeploy| image:: https://www.herokucdn.com/deploy/button.svg
+.. _HerokuDeploy: https://heroku.com/deploy?template=https://github.com/portier/portier-broker/tree/master
 
 Configuration
 -------------

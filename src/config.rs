@@ -322,6 +322,13 @@ impl ConfigBuilder {
             }
         }
 
+        let sendgrid_creds = (env::var("SENDGRID_USERNAME"), env::var("SENDGRID_PASSWORD"));
+        if let (Ok(smtp_username), Ok(smtp_password)) = sendgrid_creds {
+            self.smtp_username = Some(smtp_username);
+            self.smtp_password = Some(smtp_password);
+            self.smtp_server   = Some("smtp.sendgrid.net:587".to_string());
+        }
+
         self
     }
 
