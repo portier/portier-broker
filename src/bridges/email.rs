@@ -130,8 +130,7 @@ pub fn confirmation(ctx_handle: &ContextHandle) -> HandlerResult {
         return Box::new(future::err(BrokerError::ProviderInput("incorrect code".to_owned())));
     }
 
-    let data = ctx.session_data.as_ref().expect("session vanished");
-    Box::new(future::result(complete_auth(&*ctx, &data.email_addr)))
+    Box::new(future::result(complete_auth(&*ctx)))
 }
 
 

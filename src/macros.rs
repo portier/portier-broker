@@ -53,8 +53,8 @@ macro_rules! try_get_token_field {
     ( $input:expr, $key:tt, $conv:expr, $descr:expr ) => {
         match $input.get($key).and_then($conv) {
             Some(v) => v,
-            None => return Box::new(future::err(BrokerError::ProviderInput(
-                format!("{} missing from {}", $key, $descr)))),
+            None => return Err(BrokerError::ProviderInput(
+                format!("{} missing from {}", $key, $descr))),
         }
     };
     ( $input:expr, $key:tt, $descr:expr ) => {
@@ -74,8 +74,8 @@ macro_rules! try_get_token_field {
 macro_rules! check_token_field {
     ( $check:expr, $key:expr, $descr:expr ) => {
         if !$check {
-            return Box::new(future::err(BrokerError::ProviderInput(
-                format!("{} has incorrect value in {}", $key, $descr))));
+            return Err(BrokerError::ProviderInput(
+                format!("{} has incorrect value in {}", $key, $descr)));
         }
     }
 }
