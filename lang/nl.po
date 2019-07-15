@@ -54,3 +54,9 @@ msgstr "Uw inlogpoging heeft wellicht te lang geduurd, of u probeerde een oude l
 
 msgid "Technical description"
 msgstr "Technische omschrijving"
+
+msgid "Login with your email address."
+msgstr "Login met uw email adres."
+
+msgid "Please specify the email you wish to use to login with"
+msgstr "Vul het email adres in waarmee u wilt inloggen op"
