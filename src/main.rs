@@ -149,7 +149,7 @@ fn main() {
     let proto = Http::new();
     let server = listener.incoming().for_each(|(sock, addr)| {
         let res_path = Path::new("./res/");
-        let s = http::Service::new(&handle, &app, addr, router, res_path);
+        let s = http::Service::new(&app, addr, router, res_path);
         #[allow(deprecated)]  // TODO: https://github.com/hyperium/hyper/issues/1342
         proto.bind_connection(&handle, sock, addr, s);
         Ok(())

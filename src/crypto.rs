@@ -8,7 +8,7 @@ use openssl::hash::{Hasher, MessageDigest};
 use openssl::rsa::Rsa;
 use openssl::pkey::{PKey, Public, Private};
 use openssl::sign::{Signer, Verifier};
-use rand::{OsRng, Rng, random};
+use rand::random;
 use serde_json as json;
 use std::fs::File;
 use std::io::{Read, Error as IoError};
@@ -132,9 +132,7 @@ impl NamedKey {
 /// a SHA256 hash, and encode it with URL-safe bas64 encoding. This is used
 /// as the key in Redis, as well as the state for OAuth authentication.
 pub fn session_id(email: &EmailAddress, client_id: &str) -> String {
-    let mut rng = OsRng::new().expect("unable to create rng");
-    let rand_bytes: Vec<u8> = (0..16).map(|_| rng.gen()).collect();
-
+    let rand_bytes: [u8; 16] = random();
     let mut hasher = Hasher::new(MessageDigest::sha256())
         .expect("couldn't initialize SHA256 hasher");
     let hash = hasher.update(email.as_str().as_bytes())
@@ -148,8 +146,7 @@ pub fn session_id(email: &EmailAddress, client_id: &str) -> String {
 
 /// Helper function to create a secure nonce.
 pub fn nonce() -> String {
-    let mut rng = OsRng::new().expect("unable to create rng");
-    let rand_bytes: Vec<u8> = (0..16).map(|_| rng.gen()).collect();
+    let rand_bytes: [u8; 16] = random();
     base64url_encode(&rand_bytes)
 }
 

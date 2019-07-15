@@ -125,10 +125,10 @@ pub fn auth(ctx_handle: &ContextHandle) -> HandlerResult {
         let catalog = ctx.catalog();
         let data = mustache::MapBuilder::new()
             // TODO: catalog/localization?
-            .insert_str("display_origin", &redirect_uri_)
+            .insert_str("display_origin", redirect_uri_.to_string())
             .insert_str("title", catalog.gettext("Finish logging in to"))
             .insert_str("form_action", format!("{}/auth", &ctx.app.public_url))
-            .insert_str("method", &ctx.method)
+            .insert_str("method", ctx.method.to_string())
             .insert_str("explanation", catalog.gettext("Login with your email."))
             .insert_str("use", catalog.gettext("Please specify the email you wish to use to login with"))
             .insert_vec("params", |mut builder| {

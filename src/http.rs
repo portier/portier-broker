@@ -20,7 +20,6 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::{fmt, io};
-use tokio_core::reactor::Handle;
 use url::{Url, form_urlencoded};
 
 
@@ -198,7 +197,6 @@ pub struct Service {
 
 impl Service {
     pub fn new<P: Into<PathBuf>>(
-        handle: &Handle,
         app: &Rc<Config>,
         addr: SocketAddr,
         router: Router,
@@ -208,7 +206,7 @@ impl Service {
             app: Rc::clone(app),
             addr,
             router,
-            static_: Static::new(handle, path).with_cache_headers(app.static_ttl),
+            static_: Static::new(path).with_cache_headers(app.static_ttl),
         }
     }
 }
@@ -465,7 +463,7 @@ pub fn return_to_relier(ctx: &Context, params: &[(&str, &str)]) -> Response {
         // Render a form that submits a POST request.
         ResponseMode::FormPost => {
             let data = mustache::MapBuilder::new()
-                .insert_str("redirect_uri", redirect_uri)
+                .insert_str("redirect_uri", redirect_uri.to_string())
                 .insert_vec("params", |mut builder| {
                     for &param in params {
                         builder = builder.push_map(|builder| {
