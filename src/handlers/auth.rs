@@ -129,7 +129,7 @@ pub fn auth(ctx_handle: &ContextHandle) -> HandlerResult {
             // TODO: catalog/localization?
             .insert_str("display_origin", display_origin)
             .insert_str("title", catalog.gettext("Finish logging in to"))
-            .insert_str("explanation", catalog.gettext("Login with your email."))
+            .insert_str("explanation", catalog.gettext("Login with your email address."))
             .insert_str("use", catalog.gettext("Please specify the email you wish to use to login with"))
             .insert_vec("params", |mut builder| {
                 for param in &original_params {
