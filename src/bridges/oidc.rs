@@ -6,7 +6,7 @@ use error::BrokerError;
 use futures::{Future, future};
 use http::{ContextHandle, HandlerResult};
 use hyper::{Response, StatusCode};
-use hyper::header::{ContentType, Location};
+use hyper::header::Location;
 use serde_helpers::UrlDef;
 use std::rc::Rc;
 use store_cache::{CacheKey, fetch_json_url};
@@ -175,20 +175,6 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>, link: &Li
     });
 
     Box::new(f)
-}
-
-
-/// Request handler for OpenID Connect callbacks with response mode 'fragment'
-///
-/// For providers that don't support `response_mode=form_post`, we capture the fragment parameters
-/// in javascript and emulate the POST request.
-pub fn fragment_callback(ctx_handle: &ContextHandle) -> HandlerResult {
-    let ctx = ctx_handle.borrow();
-
-    let res = Response::new()
-        .with_header(ContentType::html())
-        .with_body(ctx.app.templates.fragment_callback.render(&[]));
-    Box::new(future::ok(res))
 }
 
 

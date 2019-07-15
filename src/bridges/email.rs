@@ -115,7 +115,7 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>) -> Handle
 /// returns the resulting token to the relying party.
 pub fn confirmation(ctx_handle: &ContextHandle) -> HandlerResult {
     let mut ctx = ctx_handle.borrow_mut();
-    let mut params = ctx.query_params();
+    let mut params = ctx.form_params();
 
     let session_id = try_get_provider_param!(params, "session");
     let bridge_data = match ctx.load_session(&session_id) {
