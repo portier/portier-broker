@@ -63,12 +63,17 @@ fn router(req: &Request) -> Option<http::Handler> {
         (&Method::Get, "/auth") | (&Method::Post, "/auth") => handlers::auth::auth,
         (&Method::Post, "/normalize") => handlers::normalize::normalize,
 
-        // Identity provider endpoints
-        (&Method::Get, "/callback") => bridges::oidc::fragment_callback,
+        // OpenID Connect endpoints
+        // For providers that don't support `response_mode=form_post`, we capture the fragment
+        // parameters in javascript and emulate the POST request.
+        (&Method::Get, "/callback") => handlers::rewrite_to_post::rewrite_to_post,
         (&Method::Post, "/callback") => bridges::oidc::callback,
 
         // Email loop endpoints
-        (&Method::Get, "/confirm") => bridges::email::confirmation,
+        // To thwart automated scanners that follow email links, we capture the query parameter in
+        // javascripts and rewrite to a POST request.
+        (&Method::Get, "/confirm") => handlers::rewrite_to_post::rewrite_to_post,
+        (&Method::Post, "/confirm") => bridges::email::confirmation,
 
         // Misc endpoints
         (&Method::Get, "/") => handlers::pages::index,
@@ -144,7 +149,7 @@ fn main() {
     let proto = Http::new();
     let server = listener.incoming().for_each(|(sock, addr)| {
         let res_path = Path::new("./res/");
-        let s = http::Service::new(&handle, &app, addr, router, res_path);
+        let s = http::Service::new(&app, addr, router, res_path);
         #[allow(deprecated)]  // TODO: https://github.com/hyperium/hyper/issues/1342
         proto.bind_connection(&handle, sock, addr, s);
         Ok(())

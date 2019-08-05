@@ -8,8 +8,8 @@ use http::{ContextHandle, HandlerResult};
 use hyper::Response;
 use hyper::header::ContentType;
 use lettre_email::EmailBuilder;
-use lettre::EmailTransport;
-use lettre::smtp::{ClientSecurity, SmtpTransport};
+use lettre::Transport;
+use lettre::smtp::{ClientSecurity, SmtpClient, SmtpTransport};
 use lettre::smtp::client::net::ClientTlsParameters;
 use lettre::smtp::authentication::Credentials;
 use native_tls::TlsConnector;
@@ -87,7 +87,7 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>) -> Handle
         Ok(mailer) => mailer,
         Err(reason) => return Box::new(future::err(BrokerError::Internal(reason))),
     };
-    if let Err(err) = mailer.send(&email) {
+    if let Err(err) = mailer.send(email.into()) {
         return Box::new(future::err(BrokerError::Internal(
             format!("could not send mail: {}", err))))
     }
@@ -115,7 +115,7 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>) -> Handle
 /// returns the resulting token to the relying party.
 pub fn confirmation(ctx_handle: &ContextHandle) -> HandlerResult {
     let mut ctx = ctx_handle.borrow_mut();
-    let mut params = ctx.query_params();
+    let mut params = ctx.form_params();
 
     let session_id = try_get_provider_param!(params, "session");
     let bridge_data = match ctx.load_session(&session_id) {
@@ -146,13 +146,13 @@ fn build_transport(app: &Config) -> Result<SmtpTransport, String> {
     };
 
     // TODO: Configurable security.
-    let tls_connector = TlsConnector::builder().and_then(|builder| builder.build())
+    let tls_connector = TlsConnector::new()
         .map_err(|e| format!("could not initialize tls: {}", e))?;
     let security = ClientSecurity::Opportunistic(ClientTlsParameters::new(domain, tls_connector));
-    let mut builder = SmtpTransport::builder(&addr, security)
+    let mut client = SmtpClient::new(&addr, security)
         .map_err(|e| format!("could not create the smtp transport: {}", e))?;
     if let (&Some(ref username), &Some(ref password)) = (&app.smtp_username, &app.smtp_password) {
-        builder = builder.credentials(Credentials::new(username.to_owned(), password.to_owned()));
+        client = client.credentials(Credentials::new(username.to_owned(), password.to_owned()));
     }
-    Ok(builder.build())
+    Ok(client.transport())
 }
