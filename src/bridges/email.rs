@@ -13,8 +13,10 @@ use lettre::smtp::{ClientSecurity, SmtpClient, SmtpTransport};
 use lettre::Transport;
 use lettre_email::EmailBuilder;
 use native_tls::TlsConnector;
+use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
 use std::rc::Rc;
-use url::percent_encoding::{utf8_percent_encode, QUERY_ENCODE_SET};
+
+const QUERY_ESCAPE: &AsciiSet = &CONTROLS.add(b' ').add(b'"').add(b'#').add(b'<').add(b'>');
 
 /// Data we store in the session.
 #[derive(Serialize, Deserialize)]
@@ -43,8 +45,8 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>) -> Handle
     let href = format!(
         "{}/confirm?session={}&code={}",
         ctx.app.public_url,
-        utf8_percent_encode(&ctx.session_id, QUERY_ENCODE_SET),
-        utf8_percent_encode(&chars, QUERY_ENCODE_SET)
+        utf8_percent_encode(&ctx.session_id, QUERY_ESCAPE),
+        utf8_percent_encode(&chars, QUERY_ESCAPE)
     );
 
     let display_origin = ctx

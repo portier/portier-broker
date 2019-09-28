@@ -17,6 +17,7 @@ extern crate matches;
 extern crate mustache;
 extern crate native_tls;
 extern crate openssl;
+extern crate percent_encoding;
 extern crate rand;
 extern crate redis;
 extern crate serde;
