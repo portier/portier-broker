@@ -233,7 +233,6 @@ pub fn auth(ctx_handle: &ContextHandle) -> HandlerResult {
                         .handle
                         .spawn(f.map(|_| ()).map_err(|e| {
                             e.log();
-                            ()
                         }));
                     Err(BrokerError::Provider(format!(
                         "discovery timed out for {}",

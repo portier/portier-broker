@@ -5,6 +5,13 @@ use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use std::net::Ipv4Addr;
 use std::str::FromStr;
 
+fn is_invalid_domain_char(c: char) -> bool {
+    matches!(
+        c,
+        '\0' | '\t' | '\n' | '\r' | ' ' | '#' | '%' | '/' | ':' | '?' | '@' | '[' | '\\' | ']'
+    )
+}
+
 #[derive(Clone, PartialEq, Eq)]
 pub struct EmailAddress {
     serialization: String,
@@ -28,27 +35,7 @@ impl FromStr for EmailAddress {
         if domain == "" {
             return Err(());
         }
-        if domain
-            .find(|c| {
-                matches!(
-                    c,
-                    '\0' | '\t'
-                        | '\n'
-                        | '\r'
-                        | ' '
-                        | '#'
-                        | '%'
-                        | '/'
-                        | ':'
-                        | '?'
-                        | '@'
-                        | '['
-                        | '\\'
-                        | ']'
-                )
-            })
-            .is_some()
-        {
+        if domain.find(is_invalid_domain_char).is_some() {
             return Err(());
         }
         if domain.parse::<Ipv4Addr>().is_ok() {

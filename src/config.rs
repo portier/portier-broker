@@ -111,7 +111,7 @@ impl Templates {
     fn compile_template(path: &str) -> Template {
         Template(
             mustache::compile_path(path)
-                .expect(&format!("unable to compile template at: {}", path)),
+                .unwrap_or_else(|err| panic!("unable to compile template '{}': {:?}", path, err)),
         )
     }
 }

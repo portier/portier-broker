@@ -7,9 +7,7 @@ use hyper::StatusCode;
 use redis::Commands;
 use serde::de::DeserializeOwned;
 use serde_json as json;
-use std::cmp::max;
-use std::rc::Rc;
-use std::str::from_utf8;
+use std::{cmp::max, fmt, rc::Rc, str::from_utf8};
 use url::Url;
 
 /// Represents a Redis key.
@@ -19,12 +17,12 @@ pub enum CacheKey<'a> {
     OidcKeySet { origin: &'a str },
 }
 
-impl<'a> CacheKey<'a> {
-    fn to_string(&self) -> String {
+impl<'a> fmt::Display for CacheKey<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            CacheKey::Discovery { acct } => format!("cache:discovery:{}", acct),
-            CacheKey::OidcConfig { origin } => format!("cache:configuration:{}", origin),
-            CacheKey::OidcKeySet { origin } => format!("cache:key-set:{}", origin),
+            CacheKey::Discovery { acct } => write!(f, "cache:discovery:{}", acct),
+            CacheKey::OidcConfig { origin } => write!(f, "cache:configuration:{}", origin),
+            CacheKey::OidcKeySet { origin } => write!(f, "cache:key-set:{}", origin),
         }
     }
 }
