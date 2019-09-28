@@ -2,7 +2,6 @@ use std::error::Error;
 use std::fmt;
 use url::{self, Url};
 
-
 #[derive(Debug)]
 pub enum ValidationError {
     Parse(url::ParseError),
@@ -49,10 +48,9 @@ impl Error for ValidationError {
         match *self {
             ValidationError::Parse(ref err) => Some(err),
             ValidationError::BadScheme(_)
-                | ValidationError::UserinfoPresent(_)
-                | ValidationError::InconsistentSerialization(_)
-                | ValidationError::BadPort(_)
-                => None,
+            | ValidationError::UserinfoPresent(_)
+            | ValidationError::InconsistentSerialization(_)
+            | ValidationError::BadPort(_) => None,
         }
     }
 }
@@ -62,7 +60,6 @@ impl From<url::ParseError> for ValidationError {
         ValidationError::Parse(err)
     }
 }
-
 
 /// Test that a `redirect_uri` is valid. Returns the parsed `Url` if successful.
 pub fn parse_redirect_uri(input: &str, param: &str) -> Result<Url, ValidationError> {
@@ -84,13 +81,12 @@ pub fn parse_redirect_uri(input: &str, param: &str) -> Result<Url, ValidationErr
         return Err(ValidationError::InconsistentSerialization(param.to_owned()));
     }
     match input.as_bytes().get(origin.len()) {
-        Some(&b'/') | None => {},
+        Some(&b'/') | None => {}
         _ => return Err(ValidationError::InconsistentSerialization(param.to_owned())),
     }
 
     Ok(url)
 }
-
 
 /// Test that a OpenID Connect endpoint is valid.
 ///
@@ -114,7 +110,6 @@ pub fn parse_oidc_href(input: &Url) -> Option<String> {
     Some(origin)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -126,18 +121,15 @@ mod tests {
             "http://example.com",
             "http://localhost",
             "http://127.0.0.1",
-
             // HTTPS
             "https://example.com",
             "https://localhost",
             "https://127.0.0.1",
-
             // Non-default ports
             "http://example.com:8080",
             "http://127.0.0.1:8080",
             "http://example.com:443",
             "https://example.com:80",
-
             // Paths, query strings, and fragments
             "http://example.com:8080/path?foo=bar#baz",
             "http://example.com:8080/?foo=bar#baz",
@@ -146,7 +138,10 @@ mod tests {
             "http://example.com:8080/path?foo=bar",
         ] {
             if let Err(err) = parse_redirect_uri(uri, "input") {
-                panic!(format!("unexpectedly rejected uri: {}. Reported: {}", uri, err))
+                panic!(format!(
+                    "unexpectedly rejected uri: {}. Reported: {}",
+                    uri, err
+                ))
             }
         }
     }
@@ -158,38 +153,30 @@ mod tests {
             "",
             "/",
             "/index.html",
-
             // Other or missing schemes
             "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==",
             "ws://example.com",
             "//example.com",
-
             // Opaque data
             "http:example.com",
-
             // Redundant default ports
             "http://example.com:80",
             "https://example.com:443",
-
             // Userinfo
             "http://user:pass@example.com",
             "http://user@example.com",
             "http://@example.com",
-
             // Missing host
             "http://",
             "http:///path",
             "http://:8080",
             "http://:8080/path",
-
             // Invalid ports
             "http://example.com:0",
             "http://example.com:65536",
-
             // Invalid IPv6 literals
             "http://::1",
             "http://::1:8080",
-
             // Weird strings
             "http://example.com:8080:8080",
             "http://:8080:8080",
@@ -208,20 +195,16 @@ mod tests {
             "http://example.com",
             "http://localhost",
             "http://127.0.0.1",
-
             // HTTPS
             "https://example.com",
             "https://localhost",
             "https://127.0.0.1",
-
             // Odd notations
             "http:example.com",
             "http://@example.com",
-
             // Redundant default ports
             "http://example.com:80",
             "https://example.com:443",
-
             // Non-default ports
             "http://example.com:8080",
             "http://127.0.0.1:8080",
@@ -241,14 +224,12 @@ mod tests {
             // Userinfo
             "http://user:pass@example.com",
             "http://user@example.com",
-
             // Paths, query strings, and fragments
             "http://example.com:8080/path?foo=bar#baz",
             "http://example.com:8080/?foo=bar#baz",
             "http://example.com:8080/#baz",
             "http://example.com:8080/path#baz",
             "http://example.com:8080/path?foo=bar",
-
             // Invalid ports
             "http://example.com:0",
         ] {

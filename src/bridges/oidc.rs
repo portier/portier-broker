@@ -1,36 +1,33 @@
-use bridges::{BridgeData, complete_auth};
+use bridges::{complete_auth, BridgeData};
 use config::GoogleConfig;
 use crypto;
 use email_address::EmailAddress;
 use error::BrokerError;
-use futures::{Future, future};
+use futures::{future, Future};
 use http::{ContextHandle, HandlerResult};
-use hyper::{Response, StatusCode};
 use hyper::header::Location;
+use hyper::{Response, StatusCode};
 use serde_helpers::UrlDef;
 use std::rc::Rc;
-use store_cache::{CacheKey, fetch_json_url};
+use store_cache::{fetch_json_url, CacheKey};
 use time::now_utc;
 use url::Url;
 use validation;
 use webfinger::{Link, Relation};
-
 
 /// The origin of the Google identity provider.
 pub const GOOGLE_IDP_ORIGIN: &str = "https://accounts.google.com";
 /// The leeway allowed when verifying iat & exp claims, in seconds.
 pub const LEEWAY: i64 = 30;
 
-
 /// Data we store in the session.
-#[derive(Serialize,Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct OidcBridgeData {
     pub link: Link,
     pub origin: String,
     pub client_id: String,
     pub nonce: String,
 }
-
 
 /// OpenID Connect configuration document.
 #[derive(Deserialize)]
@@ -46,7 +43,6 @@ struct ProviderConfig {
 fn default_response_modes_supported() -> Vec<String> {
     vec!["fragment".to_owned()]
 }
-
 
 /// OpenID Connect key set document.
 #[derive(Deserialize)]
@@ -68,7 +64,6 @@ pub struct ProviderKey {
     pub e: String,
 }
 
-
 /// Provide authentication using OpenID Connect.
 ///
 /// Redirect the user agent to the provider authorization endpoint, which we discover by reading
@@ -77,9 +72,11 @@ pub struct ProviderKey {
 ///
 /// This function handles both Portier providers, which works without registration, as well as
 /// the Google provider, for which we have a preregistered `client_id`.
-pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>, link: &Link)
-    -> HandlerResult {
-
+pub fn auth(
+    ctx_handle: &ContextHandle,
+    email_addr: &Rc<EmailAddress>,
+    link: &Link,
+) -> HandlerResult {
     let ctx = ctx_handle.borrow();
 
     // Generate a nonce for the provider.
@@ -88,15 +85,22 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>, link: &Li
     // Determine the parameters to use, based on the webfinger link.
     let provider_origin = match validation::parse_oidc_href(&link.href) {
         Some(origin) => origin,
-        None => return Box::new(future::err(BrokerError::Provider(
-            format!("invalid href (validation failed): {}", link.href)))),
+        None => {
+            return Box::new(future::err(BrokerError::Provider(format!(
+                "invalid href (validation failed): {}",
+                link.href
+            ))))
+        }
     };
     let bridge_data = Rc::new(match link.rel {
         Relation::Portier => {
-            #[cfg(not(feature = "insecure"))] {
+            #[cfg(not(feature = "insecure"))]
+            {
                 if link.href.scheme() != "https" {
-                    return Box::new(future::err(BrokerError::Provider(
-                        format!("invalid href (not HTTPS): {}", link.href))));
+                    return Box::new(future::err(BrokerError::Provider(format!(
+                        "invalid href (not HTTPS): {}",
+                        link.href
+                    ))));
                 }
             }
             OidcBridgeData {
@@ -105,7 +109,7 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>, link: &Li
                 client_id: ctx.app.public_url.clone(),
                 nonce: provider_nonce,
             }
-        },
+        }
         // Delegate to the OpenID Connect bridge for Google, if configured.
         Relation::Google => {
             let client_id = match ctx.app.google {
@@ -113,8 +117,10 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>, link: &Li
                 None => return Box::new(future::err(BrokerError::ProviderCancelled)),
             };
             if provider_origin != GOOGLE_IDP_ORIGIN {
-                return Box::new(future::err(BrokerError::Provider(
-                    format!("invalid href: Google provider only supports {}", GOOGLE_IDP_ORIGIN))));
+                return Box::new(future::err(BrokerError::Provider(format!(
+                    "invalid href: Google provider only supports {}",
+                    GOOGLE_IDP_ORIGIN
+                ))));
             }
             OidcBridgeData {
                 link: link.clone(),
@@ -122,7 +128,7 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>, link: &Li
                 client_id: client_id.clone(),
                 nonce: provider_nonce,
             }
-        },
+        }
     });
 
     // Retrieve the provider's configuration.
@@ -156,14 +162,18 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>, link: &Li
                 query.append_pair("response_mode", "form_post");
             } else if !response_modes.iter().any(|mode| mode == "fragment") {
                 return Err(BrokerError::Provider(format!(
-                    "neither form_post nor fragment response modes supported by {}'s IdP ", email_addr.domain())))
+                    "neither form_post nor fragment response modes supported by {}'s IdP ",
+                    email_addr.domain()
+                )));
             }
 
             query.finish();
         }
 
         // Save session data, committing the session to this provider.
-        let bridge_data = Rc::try_unwrap(bridge_data).map_err(|_| ()).expect("lingering oidc bridge data references");
+        let bridge_data = Rc::try_unwrap(bridge_data)
+            .map_err(|_| ())
+            .expect("lingering oidc bridge data references");
         if !ctx.save_session(BridgeData::Oidc(bridge_data))? {
             return Err(BrokerError::ProviderCancelled);
         }
@@ -176,7 +186,6 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>, link: &Li
 
     Box::new(f)
 }
-
 
 /// Request handler for OpenID Connect callbacks.
 ///
@@ -191,7 +200,11 @@ pub fn callback(ctx_handle: &ContextHandle) -> HandlerResult {
         let session_id = try_get_provider_param!(params, "state");
         let bridge_data = match ctx.load_session(&session_id) {
             Ok(BridgeData::Oidc(bridge_data)) => Rc::new(bridge_data),
-            Ok(_) => return Box::new(future::err(BrokerError::ProviderInput("invalid session".to_owned()))),
+            Ok(_) => {
+                return Box::new(future::err(BrokerError::ProviderInput(
+                    "invalid session".to_owned(),
+                )))
+            }
             Err(e) => return Box::new(future::err(e)),
         };
 
@@ -207,15 +220,27 @@ pub fn callback(ctx_handle: &ContextHandle) -> HandlerResult {
     let bridge_data2 = Rc::clone(&bridge_data);
     let f = f.and_then(move |provider_config: ProviderConfig| {
         let ctx = ctx_handle2.borrow();
-        fetch_json_url(&ctx.app, provider_config.jwks_uri, &CacheKey::OidcKeySet {
-            origin: bridge_data2.origin.as_str(),
-        })
-            .then(move |result| {
-                let key_set: ProviderKeys = result.map_err(|e| BrokerError::Provider(
-                    format!("could not fetch {}'s keys: {}", &bridge_data2.origin, e)))?;
-                crypto::verify_jws(&id_token, &key_set.keys).map_err(|_| BrokerError::ProviderInput(
-                    format!("could not verify the token received from {}", &bridge_data2.origin)))
+        fetch_json_url(
+            &ctx.app,
+            provider_config.jwks_uri,
+            &CacheKey::OidcKeySet {
+                origin: bridge_data2.origin.as_str(),
+            },
+        )
+        .then(move |result| {
+            let key_set: ProviderKeys = result.map_err(|e| {
+                BrokerError::Provider(format!(
+                    "could not fetch {}'s keys: {}",
+                    &bridge_data2.origin, e
+                ))
+            })?;
+            crypto::verify_jws(&id_token, &key_set.keys).map_err(|_| {
+                BrokerError::ProviderInput(format!(
+                    "could not verify the token received from {}",
+                    &bridge_data2.origin
+                ))
             })
+        })
     });
 
     let ctx_handle = Rc::clone(ctx_handle);
@@ -240,7 +265,7 @@ pub fn callback(ctx_handle: &ContextHandle) -> HandlerResult {
         let now = now_utc().to_timespec().sec;
         let exp = exp.checked_add(LEEWAY).unwrap_or(i64::min_value());
         let iat = iat.checked_sub(LEEWAY).unwrap_or(i64::max_value());
-        check_token_field!(now < exp , "exp", descr);
+        check_token_field!(now < exp, "exp", descr);
         check_token_field!(iat <= now, "iat", descr);
 
         match bridge_data.link.rel {
@@ -248,21 +273,31 @@ pub fn callback(ctx_handle: &ContextHandle) -> HandlerResult {
                 // `email` should match the normalized email, as we sent it to the IdP.
                 check_token_field!(email == data.email_addr.as_str(), "email", descr);
                 // `email_original` should not be necessary for Broker -> IdP, but verify it any way.
-                if let Some(email_original) = jwt_payload.get("email_original").and_then(|v| v.as_str()) {
-                    check_token_field!(email_original == data.email_addr.as_str(), "email_original", descr);
+                if let Some(email_original) =
+                    jwt_payload.get("email_original").and_then(|v| v.as_str())
+                {
+                    check_token_field!(
+                        email_original == data.email_addr.as_str(),
+                        "email_original",
+                        descr
+                    );
                 }
-            },
+            }
             Relation::Google => {
                 // Check `email` after additional Google-specific normalization.
                 let email_addr: EmailAddress = match email.parse() {
                     Ok(email_addr) => email_addr,
-                    Err(_) => return Err(BrokerError::ProviderInput(format!(
-                        "failed to parse email in {}", descr))),
+                    Err(_) => {
+                        return Err(BrokerError::ProviderInput(format!(
+                            "failed to parse email in {}",
+                            descr
+                        )))
+                    }
                 };
                 let google_email_addr = email_addr.normalize_google();
                 let expected = data.email_addr.normalize_google();
                 check_token_field!(google_email_addr == expected, "email", descr);
-            },
+            }
         }
 
         // Everything is okay. Build a new identity token and send it to the relying party.
@@ -273,30 +308,45 @@ pub fn callback(ctx_handle: &ContextHandle) -> HandlerResult {
 }
 
 // Retrieve and verify the provider's configuration.
-fn fetch_config(ctx_handle: &ContextHandle, bridge_data: &Rc<OidcBridgeData>)
-    -> Box<Future<Item=ProviderConfig, Error=BrokerError>> {
-
-    let config_url = format!("{}/.well-known/openid-configuration", bridge_data.origin).parse()
+fn fetch_config(
+    ctx_handle: &ContextHandle,
+    bridge_data: &Rc<OidcBridgeData>,
+) -> Box<Future<Item = ProviderConfig, Error = BrokerError>> {
+    let config_url = format!("{}/.well-known/openid-configuration", bridge_data.origin)
+        .parse()
         .expect("could not build the OpenID Connect configuration URL");
 
     let ctx = ctx_handle.borrow();
     let bridge_data = Rc::clone(bridge_data);
-    let f = fetch_json_url::<ProviderConfig>(&ctx.app, config_url, &CacheKey::OidcConfig {
-        origin: bridge_data.origin.as_str(),
-    });
+    let f = fetch_json_url::<ProviderConfig>(
+        &ctx.app,
+        config_url,
+        &CacheKey::OidcConfig {
+            origin: bridge_data.origin.as_str(),
+        },
+    );
 
     let f = f.then(move |result| {
-        let provider_config = result.map_err(|e| BrokerError::Provider(
-            format!("could not fetch {}'s configuration: {}", bridge_data.origin, e)))?;
+        let provider_config = result.map_err(|e| {
+            BrokerError::Provider(format!(
+                "could not fetch {}'s configuration: {}",
+                bridge_data.origin, e
+            ))
+        })?;
 
-        #[cfg(not(feature = "insecure"))] {
+        #[cfg(not(feature = "insecure"))]
+        {
             if provider_config.authorization_endpoint.scheme() != "https" {
-                return Err(BrokerError::Provider(
-                    format!("{}'s authorization_endpoint is not HTTPS", bridge_data.origin)));
+                return Err(BrokerError::Provider(format!(
+                    "{}'s authorization_endpoint is not HTTPS",
+                    bridge_data.origin
+                )));
             }
             if provider_config.jwks_uri.scheme() != "https" {
-                return Err(BrokerError::Provider(
-                    format!("{}'s jwks_uri is not HTTPS", bridge_data.origin)));
+                return Err(BrokerError::Provider(format!(
+                    "{}'s jwks_uri is not HTTPS",
+                    bridge_data.origin
+                )));
             }
         }
 

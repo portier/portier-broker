@@ -1,9 +1,9 @@
-use error::BrokerError;
-use futures::{Future, future};
 use config::Config;
+use error::BrokerError;
+use futures::{future, Future};
 use http;
-use hyper::StatusCode;
 use hyper::header::{CacheControl, CacheDirective};
+use hyper::StatusCode;
 use redis::Commands;
 use serde::de::DeserializeOwned;
 use serde_json as json;
@@ -11,7 +11,6 @@ use std::cmp::max;
 use std::rc::Rc;
 use std::str::from_utf8;
 use url::Url;
-
 
 /// Represents a Redis key.
 pub enum CacheKey<'a> {
@@ -23,38 +22,39 @@ pub enum CacheKey<'a> {
 impl<'a> CacheKey<'a> {
     fn to_string(&self) -> String {
         match *self {
-            CacheKey::Discovery { acct } => {
-                format!("cache:discovery:{}", acct)
-            },
-            CacheKey::OidcConfig { origin } => {
-                format!("cache:configuration:{}", origin)
-            },
-            CacheKey::OidcKeySet { origin } => {
-                format!("cache:key-set:{}", origin)
-            }
+            CacheKey::Discovery { acct } => format!("cache:discovery:{}", acct),
+            CacheKey::OidcConfig { origin } => format!("cache:configuration:{}", origin),
+            CacheKey::OidcKeySet { origin } => format!("cache:key-set:{}", origin),
         }
     }
 }
 
-
 /// Fetch `url` from cache or using a HTTP GET request, and parse the response as JSON. The
 /// cache is stored in `app.store` with `key`. The `client` is used to make the HTTP GET request,
 /// if necessary.
-pub fn fetch_json_url<T>(app: &Rc<Config>, url: Url, key: &CacheKey)
-    -> Box<Future<Item=T, Error=BrokerError>>
-    where T: 'static + DeserializeOwned {
-
+pub fn fetch_json_url<T>(
+    app: &Rc<Config>,
+    url: Url,
+    key: &CacheKey,
+) -> Box<Future<Item = T, Error = BrokerError>>
+where
+    T: 'static + DeserializeOwned,
+{
     let url = Rc::new(url);
 
     // Try to retrieve the result from cache.
     let key_str = key.to_string();
     let data: Option<String> = match app.store.client.get(&key_str) {
         Ok(data) => data,
-        Err(e) => return Box::new(future::err(BrokerError::Internal(
-            format!("cache lookup failed: {}", e)))),
+        Err(e) => {
+            return Box::new(future::err(BrokerError::Internal(format!(
+                "cache lookup failed: {}",
+                e
+            ))))
+        }
     };
 
-    let f: Box<Future<Item=String, Error=BrokerError>> = if let Some(data) = data {
+    let f: Box<Future<Item = String, Error = BrokerError>> = if let Some(data) = data {
         info!("HIT {} - {}", key_str, url);
         Box::new(future::ok(data))
     } else {
@@ -63,15 +63,23 @@ pub fn fetch_json_url<T>(app: &Rc<Config>, url: Url, key: &CacheKey)
         info!("MISS {} - {}", key_str, url);
 
         let url2 = Rc::clone(&url);
-        let hyper_url = url.as_str().parse().expect("failed to convert Url to Hyper Url");
-        let f = app.http_client.get(hyper_url)
+        let hyper_url = url
+            .as_str()
+            .parse()
+            .expect("failed to convert Url to Hyper Url");
+        let f = app
+            .http_client
+            .get(hyper_url)
             .map_err(move |e| BrokerError::Provider(format!("fetch failed ({}): {}", e, url2)));
 
         let url2 = Rc::clone(&url);
         let f = f.and_then(move |res| {
             if res.status() != StatusCode::Ok {
-                Err(BrokerError::Provider(
-                    format!("fetch failed ({}): {}", res.status(), url2)))
+                Err(BrokerError::Provider(format!(
+                    "fetch failed ({}): {}",
+                    res.status(),
+                    url2
+                )))
             } else {
                 Ok(res)
             }
@@ -104,7 +112,9 @@ pub fn fetch_json_url<T>(app: &Rc<Config>, url: Url, key: &CacheKey)
                 .and_then(move |data| {
                     // Cache the response for at least `expire_cache`, but honor longer `max-age`.
                     let seconds = max(app.store.expire_cache, max_age as usize);
-                    app.store.client.set_ex::<_, _, ()>(&key_str, &data, seconds)
+                    app.store
+                        .client
+                        .set_ex::<_, _, ()>(&key_str, &data, seconds)
                         .map_err(|e| BrokerError::Internal(format!("cache write failed: {}", e)))
                         .map(|_| data)
                 })

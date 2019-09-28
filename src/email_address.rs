@@ -1,12 +1,11 @@
 use idna;
-use std::fmt::{Display, Debug, Formatter, Result as FmtResult};
-use std::net::Ipv4Addr;
-use std::str::FromStr;
 use serde::{Deserialize, Deserializer};
 use serde::{Serialize, Serializer};
+use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
+use std::net::Ipv4Addr;
+use std::str::FromStr;
 
-
-#[derive(Clone,PartialEq,Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct EmailAddress {
     serialization: String,
     local_end: usize,
@@ -21,14 +20,40 @@ impl FromStr for EmailAddress {
         let local_end = input.rfind('@').ok_or(())?;
         // Transform the local part to lowercase
         let local = input[..local_end].to_lowercase();
-        if local == "" { return Err(()); }
+        if local == "" {
+            return Err(());
+        }
         // Verify and normalize the domain
         let domain = idna::domain_to_ascii(&input[local_end + 1..]).map_err(|_| ())?;
-        if domain == "" { return Err(()); }
-        if domain.find(|c| matches!(c,
-            '\0' | '\t' | '\n' | '\r' | ' ' | '#' | '%' | '/' | ':' | '?' | '@' | '[' | '\\' | ']'
-        )).is_some() { return Err(()); }
-        if domain.parse::<Ipv4Addr>().is_ok() { return Err(()); }
+        if domain == "" {
+            return Err(());
+        }
+        if domain
+            .find(|c| {
+                matches!(
+                    c,
+                    '\0' | '\t'
+                        | '\n'
+                        | '\r'
+                        | ' '
+                        | '#'
+                        | '%'
+                        | '/'
+                        | ':'
+                        | '?'
+                        | '@'
+                        | '['
+                        | '\\'
+                        | ']'
+                )
+            })
+            .is_some()
+        {
+            return Err(());
+        }
+        if domain.parse::<Ipv4Addr>().is_ok() {
+            return Err(());
+        }
         Ok(EmailAddress::from_parts(&local, &domain))
     }
 }
@@ -43,7 +68,9 @@ impl AsRef<str> for EmailAddress {
 impl Serialize for EmailAddress {
     /// Serialize this email address as a string.
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-            where S: Serializer {
+    where
+        S: Serializer,
+    {
         self.as_str().serialize(serializer)
     }
 }
@@ -73,7 +100,9 @@ impl EmailAddress {
     /// Because this assumes input is valid, it must be explicitely selected using
     /// `#[serde(deserialize_with = "EmailAddress::deserialize_trusted")]`
     pub fn deserialize_trusted<'de, D>(deserializer: D) -> Result<EmailAddress, D::Error>
-            where D: Deserializer<'de> {
+    where
+        D: Deserializer<'de>,
+    {
         <&str>::deserialize(deserializer).map(|s| EmailAddress::from_trusted(s))
     }
 
@@ -136,7 +165,6 @@ impl Debug for EmailAddress {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::EmailAddress;
@@ -149,16 +177,11 @@ mod tests {
                 EmailAddress::from_trusted(output)
             );
         }
-        parse("example.foo+bar@example.com",
-              "example.foo+bar@example.com");
-        parse("EXAMPLE.FOO+BAR@EXAMPLE.COM",
-              "example.foo+bar@example.com");
-        parse("BJÖRN@göteborg.test",
-              "björn@xn--gteborg-90a.test");
-        parse("İⅢ@İⅢ.example",
-              "i̇ⅲ@xn--iiii-qwc.example");
-        parse("\"ex@mple\"@example.com",
-              "\"ex@mple\"@example.com");
+        parse("example.foo+bar@example.com", "example.foo+bar@example.com");
+        parse("EXAMPLE.FOO+BAR@EXAMPLE.COM", "example.foo+bar@example.com");
+        parse("BJÖRN@göteborg.test", "björn@xn--gteborg-90a.test");
+        parse("İⅢ@İⅢ.example", "i̇ⅲ@xn--iiii-qwc.example");
+        parse("\"ex@mple\"@example.com", "\"ex@mple\"@example.com");
     }
 
     #[test]
@@ -181,19 +204,12 @@ mod tests {
                 EmailAddress::from_trusted(output)
             );
         }
-        parse("example@gmail.com",
-              "example@gmail.com");
-        parse("example@googlemail.com",
-              "example@gmail.com");
-        parse("example.foo@gmail.com",
-              "examplefoo@gmail.com");
-        parse("example+bar@gmail.com",
-              "example@gmail.com");
-        parse("example.foo+bar@googlemail.com",
-              "examplefoo@gmail.com");
-        parse("EXAMPLE@GOOGLEMAIL.COM",
-              "example@gmail.com");
-        parse("EXAMPLE.FOO+BAR@GOOGLEMAIL.COM",
-              "examplefoo@gmail.com");
+        parse("example@gmail.com", "example@gmail.com");
+        parse("example@googlemail.com", "example@gmail.com");
+        parse("example.foo@gmail.com", "examplefoo@gmail.com");
+        parse("example+bar@gmail.com", "example@gmail.com");
+        parse("example.foo+bar@googlemail.com", "examplefoo@gmail.com");
+        parse("EXAMPLE@GOOGLEMAIL.COM", "example@gmail.com");
+        parse("EXAMPLE.FOO+BAR@GOOGLEMAIL.COM", "examplefoo@gmail.com");
     }
 }
