@@ -36,7 +36,7 @@ pub fn fetch_json_url<T>(
     app: &Rc<Config>,
     url: Url,
     key: &CacheKey,
-) -> Box<Future<Item = T, Error = BrokerError>>
+) -> Box<dyn Future<Item = T, Error = BrokerError>>
 where
     T: 'static + DeserializeOwned,
 {
@@ -54,7 +54,7 @@ where
         }
     };
 
-    let f: Box<Future<Item = String, Error = BrokerError>> = if let Some(data) = data {
+    let f: Box<dyn Future<Item = String, Error = BrokerError>> = if let Some(data) = data {
         info!("HIT {} - {}", key_str, url);
         Box::new(future::ok(data))
     } else {

@@ -44,7 +44,7 @@ impl Error for ValidationError {
         }
     }
 
-    fn cause(&self) -> Option<&Error> {
+    fn cause(&self) -> Option<&dyn Error> {
         match *self {
             ValidationError::Parse(ref err) => Some(err),
             ValidationError::BadScheme(_)

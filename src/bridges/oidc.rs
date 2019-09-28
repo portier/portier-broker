@@ -311,7 +311,7 @@ pub fn callback(ctx_handle: &ContextHandle) -> HandlerResult {
 fn fetch_config(
     ctx_handle: &ContextHandle,
     bridge_data: &Rc<OidcBridgeData>,
-) -> Box<Future<Item = ProviderConfig, Error = BrokerError>> {
+) -> Box<dyn Future<Item = ProviderConfig, Error = BrokerError>> {
     let config_url = format!("{}/.well-known/openid-configuration", bridge_data.origin)
         .parse()
         .expect("could not build the OpenID Connect configuration URL");

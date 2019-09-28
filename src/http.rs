@@ -32,7 +32,7 @@ header! { (XFrameOptions, "X-Frame-Options") => [String] }
 
 /// A boxed future. Unlike the regular `BoxFuture`, this is not `Send`.
 /// This means we also do not use the `boxed()` method.
-pub type BoxFuture<T, E> = Box<Future<Item = T, Error = E>>;
+pub type BoxFuture<T, E> = Box<dyn Future<Item = T, Error = E>>;
 
 /// Error type used within an `io::Error`, to indicate a size limit was exceeded.
 #[derive(Debug)]
