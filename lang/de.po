@@ -54,3 +54,9 @@ msgstr "Dein Loginversuch brauchte wohl zu lange, oder du bist einem alten Link 
 
 msgid "Technical description"
 msgstr "Technische Beschreibung"
+
+msgid "Login with your email address."
+msgstr "Mit deiner E-Mail-Adresse einloggen."
+
+msgid "Please specify the email you wish to use to login with"
+msgstr "Bitte gebe die E-Mail-Adresse an, mit der du dich einloggen willst"
