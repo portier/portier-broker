@@ -41,6 +41,7 @@
     "heroku-redis:hobby-dev",
     "sendgrid:starter"
   ],
+  "stack": "heroku-16",
   "buildpacks": [
     {
       "url": "https://github.com/heroku/heroku-buildpack-apt"
