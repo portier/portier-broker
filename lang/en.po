@@ -60,4 +60,3 @@ msgstr "Login with your email address."
 
 msgid "Please specify the email you wish to use to login with"
 msgstr "Please specify the email you wish to use to login with"
-

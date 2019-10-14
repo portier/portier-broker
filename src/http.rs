@@ -238,11 +238,11 @@ impl HyperService for Service {
             // Determine the language catalog to use.
             let mut catalog_idx = 0;
             if let Some(&AcceptLanguage(ref list)) = headers.get() {
-                for entry in list {
+                'lang: for entry in list {
                     for (idx, &(ref tag, _)) in app.i18n.catalogs.iter().enumerate() {
                         if tag.matches(&entry.item) {
                             catalog_idx = idx;
-                            break;
+                            break 'lang;
                         }
                     }
                 }
