@@ -13,11 +13,9 @@ pub fn normalize(ctx_handle: &ContextHandle) -> HandlerResult {
 
     let result = String::from_utf8_lossy(&ctx.body)
         .lines()
-        .map(|s| {
-            match s.parse::<EmailAddress>() {
-                Ok(addr) => addr.to_string(),
-                Err(_) => "".to_owned(),
-            }
+        .map(|s| match s.parse::<EmailAddress>() {
+            Ok(addr) => addr.to_string(),
+            Err(_) => "".to_owned(),
         })
         .collect::<Vec<_>>()
         .join("\n");

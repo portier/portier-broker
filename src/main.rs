@@ -17,6 +17,7 @@ extern crate matches;
 extern crate mustache;
 extern crate native_tls;
 extern crate openssl;
+extern crate percent_encoding;
 extern crate rand;
 extern crate redis;
 extern crate serde;
@@ -47,12 +48,11 @@ mod validation;
 mod webfinger;
 
 use futures::Stream;
-use hyper::Method;
 use hyper::server::{Http, Request};
+use hyper::Method;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::rc::Rc;
-
 
 /// Route the request, returning a handler
 fn router(req: &Request) -> Option<http::Handler> {
@@ -84,10 +84,8 @@ fn router(req: &Request) -> Option<http::Handler> {
     })
 }
 
-
 /// Defines the program's version, as set by Cargo at compile time.
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-
 
 /// Defines the program's usage string.
 ///
@@ -105,14 +103,12 @@ Options:
   --help          Print this help message and exit
 "#;
 
-
 /// Holds parsed command line parameters.
 #[derive(Deserialize)]
 #[allow(non_snake_case)]
 struct Args {
     arg_CONFIG: Option<String>,
 }
-
 
 /// The `main()` method. Will loop forever to serve HTTP requests.
 fn main() {
@@ -123,36 +119,40 @@ fn main() {
         .and_then(|docopt| docopt.deserialize())
         .unwrap_or_else(|e| e.exit());
 
-    let mut core = tokio_core::reactor::Core::new()
-        .expect("Could not start the event loop");
+    let mut core = tokio_core::reactor::Core::new().expect("Could not start the event loop");
     let handle = core.handle();
 
     let mut builder = config::ConfigBuilder::new();
     if let Some(ref path) = args.arg_CONFIG {
-        builder.update_from_file(path).unwrap_or_else(|err| {
-            panic!(format!("failed to read config file: {}", err))
-        });
+        builder
+            .update_from_file(path)
+            .unwrap_or_else(|err| panic!(format!("failed to read config file: {}", err)));
     }
     builder.update_from_common_env();
     builder.update_from_broker_env();
-    let app = Rc::new(builder.done(&handle).unwrap_or_else(|err| {
-        panic!(format!("failed to build configuration: {}", err))
-    }));
+    let app = Rc::new(
+        builder
+            .done(&handle)
+            .unwrap_or_else(|err| panic!(format!("failed to build configuration: {}", err))),
+    );
 
-    let ip_addr = app.listen_ip.parse()
+    let ip_addr = app
+        .listen_ip
+        .parse()
         .expect("Unable to parse listen address");
     let addr = SocketAddr::new(ip_addr, app.listen_port);
-    let listener = tokio_core::net::TcpListener::bind(&addr, &handle)
-        .expect("Unable to bind listen address");
+    let listener =
+        tokio_core::net::TcpListener::bind(&addr, &handle).expect("Unable to bind listen address");
     info!("Listening on http://{}", addr);
 
     let proto = Http::new();
     let server = listener.incoming().for_each(|(sock, addr)| {
         let res_path = Path::new("./res/");
         let s = http::Service::new(&app, addr, router, res_path);
-        #[allow(deprecated)]  // TODO: https://github.com/hyperium/hyper/issues/1342
+        #[allow(deprecated)] // TODO: https://github.com/hyperium/hyper/issues/1342
         proto.bind_connection(&handle, sock, addr, s);
         Ok(())
     });
-    core.run(server).expect("error while running the event loop");
+    core.run(server)
+        .expect("error while running the event loop");
 }

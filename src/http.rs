@@ -6,9 +6,11 @@ use error::{BrokerError, BrokerResult};
 use futures::future::{self, Future, FutureResult};
 use futures::Stream;
 use gettext::Catalog;
-use hyper::{Body, Chunk, Error as HyperError, Method, StatusCode};
-use hyper::header::{AcceptLanguage, ContentType, Location, StrictTransportSecurity, CacheControl, CacheDirective};
+use hyper::header::{
+    AcceptLanguage, CacheControl, CacheDirective, ContentType, Location, StrictTransportSecurity,
+};
 use hyper::server::{Request, Response, Service as HyperService};
+use hyper::{Body, Chunk, Error as HyperError, Method, StatusCode};
 use hyper_staticfile::Static;
 use mustache;
 use serde_helpers::UrlDef;
@@ -20,8 +22,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::{fmt, io};
-use url::{Url, form_urlencoded};
-
+use url::{form_urlencoded, Url};
 
 header! { (ContentSecurityPolicy, "Content-Security-Policy") => [String] }
 header! { (XContentSecurityPolicy, "X-Content-Security-Policy") => [String] }
@@ -29,11 +30,9 @@ header! { (XContentTypeOptions, "X-Content-Type-Options") => [String] }
 header! { (XXSSProtection, "X-XSS-Protection") => [String] }
 header! { (XFrameOptions, "X-Frame-Options") => [String] }
 
-
 /// A boxed future. Unlike the regular `BoxFuture`, this is not `Send`.
 /// This means we also do not use the `boxed()` method.
-pub type BoxFuture<T, E> = Box<Future<Item=T, Error=E>>;
-
+pub type BoxFuture<T, E> = Box<dyn Future<Item = T, Error = E>>;
 
 /// Error type used within an `io::Error`, to indicate a size limit was exceeded.
 #[derive(Debug)]
@@ -49,17 +48,15 @@ impl fmt::Display for SizeLimitExceeded {
     }
 }
 
-
 /// A session as stored in Redis.
-#[derive(Serialize,Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct Session {
     pub data: SessionData,
     pub bridge_data: BridgeData,
 }
 
-
 /// Response modes we support.
-#[derive(Clone,Copy,Serialize,Deserialize)]
+#[derive(Clone, Copy, Serialize, Deserialize)]
 pub enum ResponseMode {
     #[serde(rename = "fragment")]
     Fragment,
@@ -67,9 +64,8 @@ pub enum ResponseMode {
     FormPost,
 }
 
-
 /// Parameters used to return to the relying party
-#[derive(Clone,Serialize,Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ReturnParams {
     #[serde(with = "UrlDef")]
     pub redirect_uri: Url,
@@ -78,9 +74,8 @@ pub struct ReturnParams {
     pub state: String,
 }
 
-
 /// Common session data.
-#[derive(Serialize,Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct SessionData {
     pub return_params: ReturnParams,
     pub email: String,
@@ -88,7 +83,6 @@ pub struct SessionData {
     pub email_addr: EmailAddress,
     pub nonce: String,
 }
-
 
 /// Context for a request
 pub struct Context {
@@ -127,10 +121,19 @@ impl Context {
     }
 
     /// Start a session by filling out the common part.
-    pub fn start_session(&mut self, client_id: &str, email: &str, email_addr: &EmailAddress, nonce: &str) {
+    pub fn start_session(
+        &mut self,
+        client_id: &str,
+        email: &str,
+        email_addr: &EmailAddress,
+        nonce: &str,
+    ) {
         assert!(self.session_id.is_empty());
         assert!(self.session_data.is_none());
-        let return_params = self.return_params.as_ref().expect("start_session called without return parameters");
+        let return_params = self
+            .return_params
+            .as_ref()
+            .expect("start_session called without return parameters");
         self.session_id = crypto::session_id(email_addr, client_id);
         self.session_data = Some(SessionData {
             return_params: return_params.clone(),
@@ -149,8 +152,8 @@ impl Context {
             Some(data) => data,
             None => return Ok(false),
         };
-        let data = json::to_string(&Session { data, bridge_data }).map_err(|e| BrokerError::Internal(
-            format!("could not serialize session: {}", e)))?;
+        let data = json::to_string(&Session { data, bridge_data })
+            .map_err(|e| BrokerError::Internal(format!("could not serialize session: {}", e)))?;
         self.app.store.store_session(&self.session_id, &data)?;
         Ok(true)
     }
@@ -163,7 +166,12 @@ impl Context {
         let data = self.app.store.get_session(id)?;
         let (data, bridge_data) = match json::from_str(&data) {
             Ok(Session { data, bridge_data }) => (data, bridge_data),
-            Err(e) => return Err(BrokerError::Internal(format!("could not deserialize session: {}", e))),
+            Err(e) => {
+                return Err(BrokerError::Internal(format!(
+                    "could not deserialize session: {}",
+                    e
+                )))
+            }
         };
         self.return_params = Some(data.return_params.clone());
         self.session_id = id.to_owned();
@@ -171,7 +179,6 @@ impl Context {
         Ok(bridge_data)
     }
 }
-
 
 /// Short-hand
 pub type ContextHandle = Rc<RefCell<Context>>;
@@ -181,7 +188,6 @@ pub type HandlerResult = BoxFuture<Response, BrokerError>;
 pub type Handler = fn(&ContextHandle) -> HandlerResult;
 /// Router function type
 pub type Router = fn(&Request) -> Option<Handler>;
-
 
 // HTTP service
 pub struct Service {
@@ -200,7 +206,7 @@ impl Service {
         app: &Rc<Config>,
         addr: SocketAddr,
         router: Router,
-        path: P
+        path: P,
     ) -> Service {
         Service {
             app: Rc::clone(app),
@@ -280,7 +286,6 @@ impl HyperService for Service {
     }
 }
 
-
 /// Handle an `BrokerError` and create a response.
 ///
 /// Our service calls this on error. We handle all these errors, and always
@@ -305,7 +310,10 @@ fn handle_error(ctx: &Context, err: BrokerError) -> Response {
     // Check if we can redirect to the RP. We must have return parameters, and the RP must not have
     // opted out from receiving errors in the redirect response.
     let can_redirect = match ctx.return_params {
-        Some(ReturnParams { response_errors: true, .. }) => true,
+        Some(ReturnParams {
+            response_errors: true,
+            ..
+        }) => true,
         _ => false,
     };
 
@@ -382,7 +390,6 @@ fn handle_error(ctx: &Context, err: BrokerError) -> Response {
     }
 }
 
-
 /// Mutate a response to set common headers.
 fn set_headers(res: &mut Response) {
     let headers = res.headers_mut();
@@ -395,7 +402,8 @@ fn set_headers(res: &mut Response) {
         "script-src 'self'",
         "style-src 'self'",
         "form-action *",
-    ].join("; ");
+    ]
+    .join("; ");
 
     headers.set(StrictTransportSecurity::excluding_subdomains(31_536_000u64));
     headers.set(ContentSecurityPolicy(csp.clone()));
@@ -413,7 +421,6 @@ fn set_headers(res: &mut Response) {
     }
 }
 
-
 /// Parse a form-encoded string into a `HashMap`.
 pub fn parse_form_encoded(input: &[u8]) -> HashMap<String, String> {
     let mut map = HashMap::new();
@@ -422,7 +429,6 @@ pub fn parse_form_encoded(input: &[u8]) -> HashMap<String, String> {
     }
     map
 }
-
 
 /// Read the request or response body up to a fixed size.
 pub fn read_body(body: Body) -> BoxFuture<Chunk, HyperError> {
@@ -436,14 +442,19 @@ pub fn read_body(body: Body) -> BoxFuture<Chunk, HyperError> {
     }))
 }
 
-
 /// Helper function for returning a result to the Relying Party.
 ///
 /// Takes an array of `(name, value)` parameter pairs and returns a response
 /// that sends them to the RP's `redirect_uri`. The method used to return to
 /// the RP depends on the `response_mode`.
 pub fn return_to_relier(ctx: &Context, params: &[(&str, &str)]) -> Response {
-    let &ReturnParams { ref redirect_uri, response_mode, .. } = ctx.return_params.as_ref()
+    let &ReturnParams {
+        ref redirect_uri,
+        response_mode,
+        ..
+    } = ctx
+        .return_params
+        .as_ref()
         .expect("return_to_relier called without return parameters");
 
     match response_mode {
@@ -459,7 +470,7 @@ pub fn return_to_relier(ctx: &Context, params: &[(&str, &str)]) -> Response {
             Response::new()
                 .with_status(StatusCode::SeeOther)
                 .with_header(Location::new(redirect_uri.into_string()))
-        },
+        }
         // Render a form that submits a POST request.
         ResponseMode::FormPost => {
             let data = mustache::MapBuilder::new()
@@ -478,10 +489,9 @@ pub fn return_to_relier(ctx: &Context, params: &[(&str, &str)]) -> Response {
             Response::new()
                 .with_header(ContentType::html())
                 .with_body(ctx.app.templates.forward.render_data(&data))
-        },
+        }
     }
 }
-
 
 /// Helper function for returning a response with JSON data.
 ///
@@ -499,11 +509,10 @@ pub fn json_response<E>(obj: &json::Value, max_age: u32) -> FutureResult<Respons
     future::ok(res)
 }
 
-
 #[cfg(test)]
 mod tests {
-    use hyper::server::Response;
     use super::set_headers;
+    use hyper::server::Response;
 
     #[test]
     fn sets_expected_headers() {

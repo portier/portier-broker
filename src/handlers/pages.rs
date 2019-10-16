@@ -1,10 +1,9 @@
 use futures::future;
 use http::{ContextHandle, HandlerResult};
-use hyper::{StatusCode};
 use hyper::header::{ContentType, Location};
 use hyper::server::Response;
+use hyper::StatusCode;
 use std::env;
-
 
 /// Handler for the root path, redirects to the Portier homepage.
 pub fn index(_: &ContextHandle) -> HandlerResult {
@@ -13,7 +12,6 @@ pub fn index(_: &ContextHandle) -> HandlerResult {
         .with_header(Location::new("https://portier.github.io"));
     Box::new(future::ok(res))
 }
-
 
 /// Version information for the broker
 pub fn version(_: &ContextHandle) -> HandlerResult {

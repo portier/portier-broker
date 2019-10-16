@@ -10,17 +10,15 @@ use std::env;
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::fs::File;
-use std::io::{Read, Error as IoError};
+use std::io::{Error as IoError, Read};
 use store;
 use store_limits::Ratelimit;
 use tokio_core::reactor::Handle;
 use toml;
-use webfinger::{Link, Relation, LinkDef};
-
+use webfinger::{Link, LinkDef, Relation};
 
 /// The type of HTTP client we use, with TLS enabled.
 pub type HttpClient = hyper::Client<HttpsConnector<hyper::client::HttpConnector>>;
-
 
 /// Union of all possible error types seen while parsing.
 #[derive(Debug)]
@@ -60,7 +58,7 @@ macro_rules! from_error {
                 ConfigError::$enum_type(err)
             }
         }
-    }
+    };
 }
 
 from_error!(String, Custom);
@@ -68,11 +66,9 @@ from_error!(IoError, Io);
 from_error!(toml::de::Error, Toml);
 from_error!(&'static str, Store);
 
-
 // Newtype so we can implement helpers for templates.
 #[derive(Clone)]
 pub struct Template(mustache::Template);
-
 
 impl Template {
     pub fn render(&self, params: &[(&str, &str)]) -> String {
@@ -86,11 +82,12 @@ impl Template {
 
     pub fn render_data(&self, data: &mustache::Data) -> String {
         let mut out: Vec<u8> = Vec::new();
-        self.0.render_data(&mut out, data).expect("unable to render template");
+        self.0
+            .render_data(&mut out, data)
+            .expect("unable to render template");
         String::from_utf8(out).expect("unable to render template as string")
     }
 }
-
 
 // Contains all templates we use in compiled form.
 pub struct Templates {
@@ -110,11 +107,12 @@ pub struct Templates {
     pub rewrite_to_post: Template,
 }
 
-
 impl Templates {
     fn compile_template(path: &str) -> Template {
-        Template(mustache::compile_path(path)
-                 .expect(&format!("unable to compile template at: {}", path)))
+        Template(
+            mustache::compile_path(path)
+                .unwrap_or_else(|err| panic!("unable to compile template '{}': {:?}", path, err)),
+        )
     }
 }
 
@@ -132,35 +130,33 @@ impl Default for Templates {
     }
 }
 
-
 // Contains all gettext catalogs we use in compiled form.
 pub struct I18n {
     pub catalogs: Vec<(LanguageTag, Catalog)>,
 }
-
 
 const SUPPORTED_LANGUAGES: &[&str] = &["en", "de", "nl"];
 
 impl Default for I18n {
     fn default() -> I18n {
         I18n {
-            catalogs: SUPPORTED_LANGUAGES.iter().map(|lang| {
-                let tag = lang.parse().expect("could not parse language tag");
-                let file = File::open(format!("lang/{}.mo", lang))
-                    .expect("could not open catalog file");
-                let catalog = Catalog::parse(file)
-                    .expect("could not parse catalog file");
-                (tag, catalog)
-            }).collect(),
+            catalogs: SUPPORTED_LANGUAGES
+                .iter()
+                .map(|lang| {
+                    let tag = lang.parse().expect("could not parse language tag");
+                    let file = File::open(format!("lang/{}.mo", lang))
+                        .expect("could not open catalog file");
+                    let catalog = Catalog::parse(file).expect("could not parse catalog file");
+                    (tag, catalog)
+                })
+                .collect(),
         }
     }
 }
 
-
 pub struct GoogleConfig {
     pub client_id: String,
 }
-
 
 pub struct Config {
     pub listen_ip: String,
@@ -187,7 +183,6 @@ pub struct Config {
     pub handle: Handle,
 }
 
-
 pub struct ConfigBuilder {
     pub listen_ip: String,
     pub listen_port: u16,
@@ -211,7 +206,6 @@ pub struct ConfigBuilder {
     pub domain_overrides: HashMap<String, Vec<Link>>,
     pub google: Option<GoogleConfig>,
 }
-
 
 impl ConfigBuilder {
     pub fn new() -> ConfigBuilder {
@@ -247,20 +241,34 @@ impl ConfigBuilder {
         let toml_config: TomlConfig = toml::from_str(&file_contents)?;
 
         if let Some(table) = toml_config.server {
-            if let Some(val) = table.listen_ip { self.listen_ip = val; }
-            if let Some(val) = table.listen_port { self.listen_port = val; }
+            if let Some(val) = table.listen_ip {
+                self.listen_ip = val;
+            }
+            if let Some(val) = table.listen_port {
+                self.listen_port = val;
+            }
             self.public_url = table.public_url.or_else(|| self.public_url.clone());
-            if let Some(val) = table.allowed_origins { self.allowed_origins = Some(val) };
+            if let Some(val) = table.allowed_origins {
+                self.allowed_origins = Some(val)
+            };
         }
 
         if let Some(table) = toml_config.headers {
-            if let Some(val) = table.static_ttl { self.static_ttl = val; }
-            if let Some(val) = table.discovery_ttl { self.discovery_ttl = val; }
-            if let Some(val) = table.keys_ttl { self.keys_ttl = val; }
+            if let Some(val) = table.static_ttl {
+                self.static_ttl = val;
+            }
+            if let Some(val) = table.discovery_ttl {
+                self.discovery_ttl = val;
+            }
+            if let Some(val) = table.keys_ttl {
+                self.keys_ttl = val;
+            }
         }
 
         if let Some(table) = toml_config.crypto {
-            if let Some(val) = table.token_ttl { self.token_ttl = val; }
+            if let Some(val) = table.token_ttl {
+                self.token_ttl = val;
+            }
             if let Some(val) = table.keyfiles {
                 self.keyfiles.append(&mut val.clone());
             }
@@ -269,8 +277,12 @@ impl ConfigBuilder {
 
         if let Some(table) = toml_config.redis {
             self.redis_url = table.url.or_else(|| self.redis_url.clone());
-            if let Some(val) = table.session_ttl { self.redis_session_ttl = val; }
-            if let Some(val) = table.cache_ttl { self.redis_cache_ttl = val; }
+            if let Some(val) = table.session_ttl {
+                self.redis_session_ttl = val;
+            }
+            if let Some(val) = table.cache_ttl {
+                self.redis_cache_ttl = val;
+            }
         }
 
         if let Some(table) = toml_config.smtp {
@@ -278,16 +290,21 @@ impl ConfigBuilder {
             self.from_address = table.from_address;
             self.smtp_username = table.username.or_else(|| self.smtp_username.clone());
             self.smtp_password = table.password.or_else(|| self.smtp_password.clone());
-            if let Some(val) = table.from_name { self.from_name = val; }
+            if let Some(val) = table.from_name {
+                self.from_name = val;
+            }
         }
 
         if let Some(table) = toml_config.limit {
-            if let Some(val) = table.per_email { self.limit_per_email = val; }
+            if let Some(val) = table.per_email {
+                self.limit_per_email = val;
+            }
         }
 
         if let Some(table) = toml_config.domain_overrides {
             for (domain, links) in table {
-                let links = links.iter()
+                let links = links
+                    .iter()
                     .map(Link::from_de_link)
                     .collect::<Result<_, _>>()
                     .map_err(|e| e.to_owned())?;
@@ -297,7 +314,7 @@ impl ConfigBuilder {
 
         if let Some(table) = toml_config.google {
             self.google = Some(GoogleConfig {
-                client_id: table.client_id
+                client_id: table.client_id,
             });
         }
 
@@ -315,7 +332,13 @@ impl ConfigBuilder {
             self.public_url = Some(format!("https://{}.herokuapp.com", val));
         }
 
-        for var in &["REDISTOGO_URL", "REDISGREEN_URL", "REDISCLOUD_URL", "REDIS_URL", "OPENREDIS_URL"] {
+        for var in &[
+            "REDISTOGO_URL",
+            "REDISGREEN_URL",
+            "REDISCLOUD_URL",
+            "REDIS_URL",
+            "OPENREDIS_URL",
+        ] {
             if let Ok(val) = env::var(var) {
                 self.redis_url = Some(val);
                 break;
@@ -326,7 +349,7 @@ impl ConfigBuilder {
         if let (Ok(smtp_username), Ok(smtp_password)) = sendgrid_creds {
             self.smtp_username = Some(smtp_username);
             self.smtp_password = Some(smtp_password);
-            self.smtp_server   = Some("smtp.sendgrid.net:587".to_string());
+            self.smtp_server = Some("smtp.sendgrid.net:587".to_string());
         }
 
         self
@@ -335,30 +358,68 @@ impl ConfigBuilder {
     pub fn update_from_broker_env(&mut self) -> &mut ConfigBuilder {
         let env_config = EnvConfig::from_env();
 
-        if let Some(val) = env_config.broker_ip { self.listen_ip = val }
-        if let Some(val) = env_config.broker_port { self.listen_port = val; }
-        if let Some(val) = env_config.broker_public_url { self.public_url = Some(val); }
-        if let Some(val) = env_config.broker_allowed_origins { self.allowed_origins = Some(val); }
+        if let Some(val) = env_config.broker_ip {
+            self.listen_ip = val
+        }
+        if let Some(val) = env_config.broker_port {
+            self.listen_port = val;
+        }
+        if let Some(val) = env_config.broker_public_url {
+            self.public_url = Some(val);
+        }
+        if let Some(val) = env_config.broker_allowed_origins {
+            self.allowed_origins = Some(val);
+        }
 
-        if let Some(val) = env_config.broker_static_ttl { self.static_ttl = val; }
-        if let Some(val) = env_config.broker_discovery_ttl { self.discovery_ttl = val; }
-        if let Some(val) = env_config.broker_keys_ttl { self.keys_ttl = val; }
+        if let Some(val) = env_config.broker_static_ttl {
+            self.static_ttl = val;
+        }
+        if let Some(val) = env_config.broker_discovery_ttl {
+            self.discovery_ttl = val;
+        }
+        if let Some(val) = env_config.broker_keys_ttl {
+            self.keys_ttl = val;
+        }
 
-        if let Some(val) = env_config.broker_token_ttl { self.token_ttl = val; }
-        if let Some(val) = env_config.broker_keyfiles { self.keyfiles = val; }
-        if let Some(val) = env_config.broker_keytext { self.keytext = Some(val); }
+        if let Some(val) = env_config.broker_token_ttl {
+            self.token_ttl = val;
+        }
+        if let Some(val) = env_config.broker_keyfiles {
+            self.keyfiles = val;
+        }
+        if let Some(val) = env_config.broker_keytext {
+            self.keytext = Some(val);
+        }
 
-        if let Some(val) = env_config.broker_redis_url { self.redis_url = Some(val); }
-        if let Some(val) = env_config.broker_session_ttl { self.redis_session_ttl = val; }
-        if let Some(val) = env_config.broker_cache_ttl { self.redis_cache_ttl = val; }
+        if let Some(val) = env_config.broker_redis_url {
+            self.redis_url = Some(val);
+        }
+        if let Some(val) = env_config.broker_session_ttl {
+            self.redis_session_ttl = val;
+        }
+        if let Some(val) = env_config.broker_cache_ttl {
+            self.redis_cache_ttl = val;
+        }
 
-        if let Some(val) = env_config.broker_from_name { self.from_name = val; }
-        if let Some(val) = env_config.broker_from_address { self.from_address = Some(val); }
-        if let Some(val) = env_config.broker_smtp_server { self.smtp_server = Some(val); }
-        if let Some(val) = env_config.broker_smtp_username { self.smtp_username = Some(val); }
-        if let Some(val) = env_config.broker_smtp_password { self.smtp_password = Some(val); }
+        if let Some(val) = env_config.broker_from_name {
+            self.from_name = val;
+        }
+        if let Some(val) = env_config.broker_from_address {
+            self.from_address = Some(val);
+        }
+        if let Some(val) = env_config.broker_smtp_server {
+            self.smtp_server = Some(val);
+        }
+        if let Some(val) = env_config.broker_smtp_username {
+            self.smtp_username = Some(val);
+        }
+        if let Some(val) = env_config.broker_smtp_password {
+            self.smtp_password = Some(val);
+        }
 
-        if let Some(val) = env_config.broker_limit_per_email { self.limit_per_email = val; }
+        if let Some(val) = env_config.broker_limit_per_email {
+            self.limit_per_email = val;
+        }
 
         if let Some(client_id) = env_config.broker_google_client_id {
             self.google = Some(GoogleConfig { client_id });
@@ -371,14 +432,17 @@ impl ConfigBuilder {
         // Additional validations
         if self.smtp_username.is_none() != self.smtp_password.is_none() {
             return Err(ConfigError::Custom(
-                "only one of smtp username and password specified; provide both or neither".to_owned()
+                "only one of smtp username and password specified; provide both or neither"
+                    .to_owned(),
             ));
         }
 
         // Child structs
-        let mut keys: Vec<crypto::NamedKey> = self.keyfiles.iter().filter_map(|path| {
-            crypto::NamedKey::from_file(path).ok()
-        }).collect();
+        let mut keys: Vec<crypto::NamedKey> = self
+            .keyfiles
+            .iter()
+            .filter_map(|path| crypto::NamedKey::from_file(path).ok())
+            .collect();
 
         if let Some(keytext) = self.keytext {
             if let Ok(pkey) = crypto::NamedKey::from_pem_str(&keytext) {
@@ -390,14 +454,18 @@ impl ConfigBuilder {
             &self.redis_url.expect("no redis url configured"),
             self.redis_cache_ttl as usize,
             self.redis_session_ttl as usize,
-        ).expect("unable to instantiate new redis store");
+        )
+        .expect("unable to instantiate new redis store");
 
-        let http_connector = HttpsConnector::new(4, handle)
-            .expect("could not initialize https connector");
+        let http_connector =
+            HttpsConnector::new(4, handle).expect("could not initialize https connector");
         let http_client = hyper::Client::configure()
-            .connector(http_connector).build(handle);
+            .connector(http_connector)
+            .build(handle);
 
-        let idx = self.limit_per_email.find('/')
+        let idx = self
+            .limit_per_email
+            .find('/')
             .expect("unable to parse limit.per_email format");
         let (count, unit) = self.limit_per_email.split_at(idx);
         let ratelimit = Ratelimit {
@@ -405,7 +473,7 @@ impl ConfigBuilder {
             duration: match unit {
                 "/min" | "/minute" => 60,
                 _ => return Err(From::from("unrecognized limit duration")),
-            }
+            },
         };
 
         // Configure default domain overrides for hosted Google
@@ -413,7 +481,9 @@ impl ConfigBuilder {
         if self.google.is_some() {
             let links = vec![Link {
                 rel: Relation::Google,
-                href: GOOGLE_IDP_ORIGIN.parse().expect("failed to parse the Google URL"),
+                href: GOOGLE_IDP_ORIGIN
+                    .parse()
+                    .expect("failed to parse the Google URL"),
             }];
             domain_overrides.insert("gmail.com".to_owned(), links.clone());
             domain_overrides.insert("googlemail.com".to_owned(), links);
@@ -437,7 +507,9 @@ impl ConfigBuilder {
             http_client,
             from_name: self.from_name,
             from_address: self.from_address.expect("no smtp from address configured"),
-            smtp_server: self.smtp_server.expect("no smtp outserver address configured"),
+            smtp_server: self
+                .smtp_server
+                .expect("no smtp outserver address configured"),
             smtp_username: self.smtp_username,
             smtp_password: self.smtp_password,
             limit_per_email: ratelimit,
@@ -450,9 +522,8 @@ impl ConfigBuilder {
     }
 }
 
-
 /// Intermediate structure for deserializing TOML files
-#[derive(Clone,Debug,Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 struct TomlConfig {
     server: Option<TomlServerTable>,
     headers: Option<TomlHeadersTable>,
@@ -464,7 +535,7 @@ struct TomlConfig {
     google: Option<TomlGoogleTable>,
 }
 
-#[derive(Clone,Debug,Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 struct TomlServerTable {
     listen_ip: Option<String>,
     listen_port: Option<u16>,
@@ -472,28 +543,28 @@ struct TomlServerTable {
     allowed_origins: Option<Vec<String>>,
 }
 
-#[derive(Clone,Debug,Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 struct TomlHeadersTable {
     static_ttl: Option<u32>,
     discovery_ttl: Option<u32>,
     keys_ttl: Option<u32>,
 }
 
-#[derive(Clone,Debug,Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 struct TomlCryptoTable {
     token_ttl: Option<u16>,
     keyfiles: Option<Vec<String>>,
     keytext: Option<String>,
 }
 
-#[derive(Clone,Debug,Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 struct TomlRedisTable {
     url: Option<String>,
     session_ttl: Option<u16>,
     cache_ttl: Option<u16>,
 }
 
-#[derive(Clone,Debug,Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 struct TomlSmtpTable {
     from_name: Option<String>,
     from_address: Option<String>,
@@ -502,22 +573,21 @@ struct TomlSmtpTable {
     password: Option<String>,
 }
 
-#[derive(Clone,Debug,Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 struct TomlLimitTable {
     per_email: Option<String>,
 }
 
-#[derive(Clone,Debug,Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 struct TomlGoogleTable {
     client_id: String,
 }
-
 
 /// Intermediate structure for deserializing environment variables
 ///
 /// Environment variable `FOO_BAR` deserializes in to struct member `foo_bar`.
 /// These vars have high precendence and must be prefixed to avoid collisions.
-#[derive(Clone,Debug,Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 struct EnvConfig {
     broker_ip: Option<String>,
     broker_port: Option<u16>,
@@ -550,19 +620,35 @@ impl EnvConfig {
             broker_ip: env::var("BROKER_IP").ok(),
             broker_port: env::var("BROKER_PORT").ok().and_then(|x| x.parse().ok()),
             broker_public_url: env::var("BROKER_PUBLIC_URL").ok(),
-            broker_allowed_origins: env::var("BROKER_ALLOWED_ORIGINS").ok().map(|x| x.split(',').map(|x| x.to_owned()).collect()),
+            broker_allowed_origins: env::var("BROKER_ALLOWED_ORIGINS")
+                .ok()
+                .map(|x| x.split(',').map(|x| x.to_owned()).collect()),
 
-            broker_static_ttl: env::var("BROKER_STATIC_TTL").ok().and_then(|x| x.parse().ok()),
-            broker_discovery_ttl: env::var("BROKER_DISCOVERY_TTL").ok().and_then(|x| x.parse().ok()),
-            broker_keys_ttl: env::var("BROKER_KEYS_TTL").ok().and_then(|x| x.parse().ok()),
+            broker_static_ttl: env::var("BROKER_STATIC_TTL")
+                .ok()
+                .and_then(|x| x.parse().ok()),
+            broker_discovery_ttl: env::var("BROKER_DISCOVERY_TTL")
+                .ok()
+                .and_then(|x| x.parse().ok()),
+            broker_keys_ttl: env::var("BROKER_KEYS_TTL")
+                .ok()
+                .and_then(|x| x.parse().ok()),
 
-            broker_token_ttl: env::var("BROKER_TOKEN_TTL").ok().and_then(|x| x.parse().ok()),
-            broker_keyfiles: env::var("BROKER_KEYFILES").ok().map(|x| x.split(',').map(|x| x.to_owned()).collect()),
+            broker_token_ttl: env::var("BROKER_TOKEN_TTL")
+                .ok()
+                .and_then(|x| x.parse().ok()),
+            broker_keyfiles: env::var("BROKER_KEYFILES")
+                .ok()
+                .map(|x| x.split(',').map(|x| x.to_owned()).collect()),
             broker_keytext: env::var("BROKER_KEYTEXT").ok().and_then(|x| x.parse().ok()),
 
             broker_redis_url: env::var("BROKER_REDIS_URL").ok(),
-            broker_session_ttl: env::var("BROKER_SESSION_TTL").ok().and_then(|x| x.parse().ok()),
-            broker_cache_ttl: env::var("BROKER_CACHE_TTL").ok().and_then(|x| x.parse().ok()),
+            broker_session_ttl: env::var("BROKER_SESSION_TTL")
+                .ok()
+                .and_then(|x| x.parse().ok()),
+            broker_cache_ttl: env::var("BROKER_CACHE_TTL")
+                .ok()
+                .and_then(|x| x.parse().ok()),
 
             broker_from_name: env::var("BROKER_FROM_NAME").ok(),
             broker_from_address: env::var("BROKER_FROM_ADDRESS").ok(),
