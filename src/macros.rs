@@ -10,14 +10,9 @@
 #[macro_export]
 macro_rules! try_get_input_param {
     ( $params:expr , $key:tt ) => {
-        match $params.remove($key) {
-            Some(value) => value,
-            None => {
-                return Box::new(future::err(BrokerError::Input(
-                    concat!("missing request parameter ", $key).to_owned(),
-                )))
-            }
-        }
+        $params.remove($key).ok_or_else(|| {
+            crate::error::BrokerError::Input(concat!("missing request parameter ", $key).to_owned())
+        })?
     };
     ( $params:expr , $key:tt , $default:expr ) => {
         $params.remove($key).unwrap_or($default)
@@ -35,14 +30,11 @@ macro_rules! try_get_input_param {
 #[macro_export]
 macro_rules! try_get_provider_param {
     ( $params:expr , $key:tt ) => {
-        match $params.remove($key) {
-            Some(value) => value,
-            None => {
-                return Box::new(future::err(BrokerError::ProviderInput(
-                    concat!("missing request parameter ", $key).to_owned(),
-                )))
-            }
-        }
+        $params.remove($key).ok_or_else(|| {
+            crate::error::BrokerError::ProviderInput(
+                concat!("missing request parameter ", $key).to_owned(),
+            )
+        })?
     };
 }
 
@@ -56,15 +48,9 @@ macro_rules! try_get_provider_param {
 /// ```
 macro_rules! try_get_token_field {
     ( $input:expr, $key:tt, $conv:expr, $descr:expr ) => {
-        match $input.get($key).and_then($conv) {
-            Some(v) => v,
-            None => {
-                return Err(BrokerError::ProviderInput(format!(
-                    "{} missing from {}",
-                    $key, $descr
-                )))
-            }
-        }
+        $input.get($key).and_then($conv).ok_or_else(|| {
+            crate::error::BrokerError::ProviderInput(format!("{} missing from {}", $key, $descr))
+        })?
     };
     ( $input:expr, $key:tt, $descr:expr ) => {
         try_get_token_field!($input, $key, |v| v.as_str(), $descr)
@@ -82,7 +68,7 @@ macro_rules! try_get_token_field {
 macro_rules! check_token_field {
     ( $check:expr, $key:expr, $descr:expr ) => {
         if !$check {
-            return Err(BrokerError::ProviderInput(format!(
+            return Err(crate::error::BrokerError::ProviderInput(format!(
                 "{} has incorrect value in {}",
                 $key, $descr
             )));

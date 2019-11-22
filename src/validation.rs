@@ -34,17 +34,7 @@ impl fmt::Display for ValidationError {
 }
 
 impl Error for ValidationError {
-    fn description(&self) -> &str {
-        match *self {
-            ValidationError::Parse(ref err) => err.description(),
-            ValidationError::BadScheme(_) => "scheme was not http(s)",
-            ValidationError::UserinfoPresent(_) => "must not contain a username or password",
-            ValidationError::InconsistentSerialization(_) => "parsing and re-serializing changed its representation, check for unnecessary information like default ports",
-            ValidationError::BadPort(_) => "contains an invalid port",
-        }
-    }
-
-    fn cause(&self) -> Option<&dyn Error> {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
         match *self {
             ValidationError::Parse(ref err) => Some(err),
             ValidationError::BadScheme(_)

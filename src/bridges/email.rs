@@ -3,10 +3,7 @@ use crate::config::Config;
 use crate::crypto::random_zbase32;
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
-use crate::http::{ContextHandle, HandlerResult};
-use futures::future;
-use hyper::header::ContentType;
-use hyper::Response;
+use crate::web::{html_response, Context, HandlerResult};
 use lettre::smtp::authentication::Credentials;
 use lettre::smtp::client::net::ClientTlsParameters;
 use lettre::smtp::{ClientSecurity, SmtpClient, SmtpTransport};
@@ -15,7 +12,6 @@ use lettre_email::EmailBuilder;
 use native_tls::TlsConnector;
 use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
 use serde_derive::{Deserialize, Serialize};
-use std::rc::Rc;
 
 const QUERY_ESCAPE: &AsciiSet = &CONTROLS.add(b' ').add(b'"').add(b'#').add(b'<').add(b'>');
 
@@ -34,20 +30,18 @@ pub struct EmailBridgeData {
 ///
 /// A form is rendered as an alternative way to confirm, without following the link. Submitting the
 /// form results in the same callback as the email link.
-pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>) -> HandlerResult {
-    let mut ctx = ctx_handle.borrow_mut();
-
+pub async fn auth(ctx: &mut Context, email_addr: &EmailAddress) -> HandlerResult {
     // Generate a 12-character one-time pad.
-    let chars = random_zbase32(12);
+    let code = random_zbase32(12);
     // For display, we split it in two groups of 6.
-    let chars_fmt = [&chars[0..6], &chars[6..12]].join(" ");
+    let code_fmt = [&code[0..6], &code[6..12]].join(" ");
 
     // Generate the URL used to verify email address ownership.
     let href = format!(
         "{}/confirm?session={}&code={}",
         ctx.app.public_url,
         utf8_percent_encode(&ctx.session_id, QUERY_ESCAPE),
-        utf8_percent_encode(&chars, QUERY_ESCAPE)
+        utf8_percent_encode(&code, QUERY_ESCAPE)
     );
 
     let display_origin = ctx
@@ -61,7 +55,7 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>) -> Handle
         let catalog = ctx.catalog();
         let params = &[
             ("display_origin", display_origin.as_str()),
-            ("code", &chars_fmt),
+            ("code", &code_fmt),
             ("link", &href),
             ("title", catalog.gettext("Finish logging in to")),
             ("explanation", catalog.gettext("You received this email so that we may confirm your email address and finish your login to:")),
@@ -88,87 +82,63 @@ pub fn auth(ctx_handle: &ContextHandle, email_addr: &Rc<EmailAddress>) -> Handle
 
     // Store the code in the session for use in the verify handler. We should never fail to claim
     // the session, because we only get here after all other options have failed.
-    match ctx.save_session(BridgeData::Email(EmailBridgeData {
-        code: chars.clone(),
-    })) {
-        Ok(true) => {}
-        Ok(false) => {
-            return Box::new(future::err(BrokerError::Internal(
-                "email fallback failed to claim session".to_owned(),
-            )))
-        }
-        Err(e) => return Box::new(future::err(e)),
+    if !ctx.save_session(BridgeData::Email(EmailBridgeData { code }))? {
+        return Err(BrokerError::Internal(
+            "email fallback failed to claim session".to_owned(),
+        ));
     }
 
     // Send the mail.
-    let mut mailer = match build_transport(&ctx.app) {
-        Ok(mailer) => mailer,
-        Err(reason) => return Box::new(future::err(BrokerError::Internal(reason))),
-    };
-    if let Err(err) = mailer.send(email.into()) {
-        return Box::new(future::err(BrokerError::Internal(format!(
-            "could not send mail: {}",
-            err
-        ))));
-    }
+    let mut mailer = build_transport(&ctx.app).map_err(BrokerError::Internal)?;
+    mailer
+        .send(email.into())
+        .map_err(|e| BrokerError::Internal(format!("could not send mail: {}", e)))?;
     mailer.close();
 
     // Render a form for the user.
     let catalog = ctx.catalog();
-    let res =
-        Response::new()
-            .with_header(ContentType::html())
-            .with_body(ctx.app.templates.confirm_email.render(&[
-            ("display_origin", display_origin.as_str()),
-            ("session_id", &ctx.session_id),
-            ("title", catalog.gettext("Confirm your address")),
-            (
-                "explanation",
-                catalog.gettext("We've sent you an email to confirm your address."),
+    Ok(html_response(ctx.app.templates.confirm_email.render(&[
+        ("display_origin", display_origin.as_str()),
+        ("session_id", &ctx.session_id),
+        ("title", catalog.gettext("Confirm your address")),
+        (
+            "explanation",
+            catalog.gettext("We've sent you an email to confirm your address."),
+        ),
+        (
+            "use",
+            catalog.gettext("Use the link in that email to login to"),
+        ),
+        (
+            "alternate",
+            catalog.gettext(
+                "Alternatively, enter the code from the email to continue in this browser tab:",
             ),
-            (
-                "use",
-                catalog.gettext("Use the link in that email to login to"),
-            ),
-            (
-                "alternate",
-                catalog.gettext(
-                    "Alternatively, enter the code from the email to continue in this browser tab:",
-                ),
-            ),
-        ]));
-    Box::new(future::ok(res))
+        ),
+    ])))
 }
 
 /// Request handler for one-time pad email loop confirmation.
 ///
 /// Retrieves the session based session ID and the expected one-time pad. Verifies the code and
 /// returns the resulting token to the relying party.
-pub fn confirmation(ctx_handle: &ContextHandle) -> HandlerResult {
-    let mut ctx = ctx_handle.borrow_mut();
+pub async fn confirmation(ctx: &mut Context) -> HandlerResult {
     let mut params = ctx.form_params();
 
     let session_id = try_get_provider_param!(params, "session");
-    let bridge_data = match ctx.load_session(&session_id) {
-        Ok(BridgeData::Email(bridge_data)) => Rc::new(bridge_data),
-        Ok(_) => {
-            return Box::new(future::err(BrokerError::ProviderInput(
-                "invalid session".to_owned(),
-            )))
-        }
-        Err(e) => return Box::new(future::err(e)),
+    let bridge_data = match ctx.load_session(&session_id)? {
+        BridgeData::Email(bridge_data) => bridge_data,
+        _ => return Err(BrokerError::ProviderInput("invalid session".to_owned())),
     };
 
     let code = try_get_provider_param!(params, "code")
         .replace(|c: char| c.is_whitespace(), "")
         .to_lowercase();
     if code != bridge_data.code {
-        return Box::new(future::err(BrokerError::ProviderInput(
-            "incorrect code".to_owned(),
-        )));
+        return Err(BrokerError::ProviderInput("incorrect code".to_owned()));
     }
 
-    Box::new(future::result(complete_auth(&*ctx)))
+    complete_auth(ctx).await
 }
 
 /// Build the SMTP transport from config.

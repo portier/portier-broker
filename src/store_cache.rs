@@ -1,14 +1,13 @@
-use crate::config::Config;
+use crate::config::ConfigRc;
 use crate::error::BrokerError;
-use crate::http;
-use futures::{future, Future};
-use hyper::header::{CacheControl, CacheDirective};
-use hyper::StatusCode;
+use crate::web::read_body;
+use headers::{CacheControl, HeaderMapExt};
+use http::StatusCode;
 use log::info;
 use redis::Commands;
 use serde::de::DeserializeOwned;
 use serde_json as json;
-use std::{cmp::max, fmt, rc::Rc, str::from_utf8};
+use std::{cmp::max, fmt, str::from_utf8};
 use url::Url;
 
 /// Represents a Redis key.
@@ -31,101 +30,74 @@ impl<'a> fmt::Display for CacheKey<'a> {
 /// Fetch `url` from cache or using a HTTP GET request, and parse the response as JSON. The
 /// cache is stored in `app.store` with `key`. The `client` is used to make the HTTP GET request,
 /// if necessary.
-pub fn fetch_json_url<T>(
-    app: &Rc<Config>,
+pub async fn fetch_json_url<T>(
+    app: &ConfigRc,
     url: Url,
-    key: &CacheKey,
-) -> Box<dyn Future<Item = T, Error = BrokerError>>
+    key: &CacheKey<'_>,
+) -> Result<T, BrokerError>
 where
     T: 'static + DeserializeOwned,
 {
-    let url = Rc::new(url);
-
     // Try to retrieve the result from cache.
     let key_str = key.to_string();
-    let data: Option<String> = match app.store.client.get(&key_str) {
-        Ok(data) => data,
-        Err(e) => {
-            return Box::new(future::err(BrokerError::Internal(format!(
-                "cache lookup failed: {}",
-                e
-            ))))
-        }
-    };
+    let data: Option<String> = app
+        .store
+        .client
+        .get(&key_str)
+        .map_err(|e| BrokerError::Internal(format!("cache lookup failed: {}", e)))?;
 
-    let f: Box<dyn Future<Item = String, Error = BrokerError>> = if let Some(data) = data {
+    if let Some(ref data) = data {
         info!("HIT {} - {}", key_str, url);
-        Box::new(future::ok(data))
+
+        json::from_str(data)
+            .map_err(|e| BrokerError::Internal(format!("bad cache value ({}): {}", e, url)))
     } else {
         // Cache miss, make a request.
         // TODO: Also cache failed requests, perhaps for a shorter time.
         info!("MISS {} - {}", key_str, url);
 
-        let url2 = Rc::clone(&url);
         let hyper_url = url
             .as_str()
             .parse()
             .expect("failed to convert Url to Hyper Url");
-        let f = app
+
+        let res = app
             .http_client
             .get(hyper_url)
-            .map_err(move |e| BrokerError::Provider(format!("fetch failed ({}): {}", e, url2)));
+            .await
+            .map_err(|e| BrokerError::Provider(format!("fetch failed ({}): {}", e, url)))?;
 
-        let url2 = Rc::clone(&url);
-        let f = f.and_then(move |res| {
-            if res.status() != StatusCode::Ok {
-                Err(BrokerError::Provider(format!(
-                    "fetch failed ({}): {}",
-                    res.status(),
-                    url2
-                )))
-            } else {
-                Ok(res)
-            }
+        if res.status() != StatusCode::OK {
+            return Err(BrokerError::Provider(format!(
+                "fetch failed ({}): {}",
+                res.status(),
+                url
+            )));
+        }
+
+        // Grab the max-age directive from the Cache-Control header.
+        let max_age = res.headers().typed_get().map_or(0, |header: CacheControl| {
+            header.max_age().map(|d| d.as_secs()).unwrap_or(0)
         });
 
-        let url2 = Rc::clone(&url);
-        let f = f.and_then(move |res| {
-            // Grab the max-age directive from the Cache-Control header.
-            let max_age = res.headers().get().map_or(0, |header: &CacheControl| {
-                for dir in header.iter() {
-                    if let CacheDirective::MaxAge(seconds) = *dir {
-                        return seconds;
-                    }
-                }
-                0
-            });
+        // Receive the body.
+        let chunk = read_body(res.into_body())
+            .await
+            .map_err(|e| BrokerError::Provider(format!("fetch failed ({}): {}", e, url)))?;
 
-            // Receive the body.
-            http::read_body(res.body())
-                .map_err(move |e| BrokerError::Provider(format!("fetch failed ({}): {}", e, url2)))
-                .map(move |chunk| (chunk, max_age))
-        });
+        let data = from_utf8(&chunk)
+            .map_err(|e| BrokerError::Provider(format!("fetch failed ({}): {}", e, url)))?;
 
-        let app = Rc::clone(app);
-        let url2 = Rc::clone(&url);
-        let f = f.and_then(move |(chunk, max_age)| {
-            from_utf8(&chunk)
-                .map_err(|e| BrokerError::Provider(format!("fetch failed ({}): {}", e, url2)))
-                .map(|data| data.to_owned())
-                .and_then(move |data| {
-                    // Cache the response for at least `expire_cache`, but honor longer `max-age`.
-                    let seconds = max(app.store.expire_cache, max_age as usize);
-                    app.store
-                        .client
-                        .set_ex::<_, _, ()>(&key_str, &data, seconds)
-                        .map_err(|e| BrokerError::Internal(format!("cache write failed: {}", e)))
-                        .map(|_| data)
-                })
-        });
+        let value = json::from_str(data)
+            .map_err(|e| BrokerError::Provider(format!("fetch failed ({}): {}", e, url)))?;
 
-        Box::new(f)
-    };
+        // Cache the response for at least `expire_cache`, but honor longer `max-age`.
+        let seconds = max(app.store.expire_cache, max_age as usize);
+        app.store
+            .client
+            .set_ex::<_, _, ()>(&key_str, data, seconds)
+            .map_err(|e| BrokerError::Internal(format!("cache write failed: {}", e)))?;
 
-    let f = f.and_then(move |data| {
-        json::from_str(&data)
-            .map_err(|e| BrokerError::Provider(format!("fetch failed ({}): {}", e, url)))
-    });
-
-    Box::new(f)
+        Ok(value)
+    }
 }
