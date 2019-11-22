@@ -1,4 +1,5 @@
 use idna;
+use matches::matches;
 use serde::{Deserialize, Deserializer};
 use serde::{Serialize, Serializer};
 use std::fmt::{Debug, Display, Formatter, Result as FmtResult};

@@ -1,35 +1,3 @@
-extern crate base64;
-extern crate docopt;
-extern crate env_logger;
-extern crate futures;
-extern crate gettext;
-#[macro_use]
-extern crate hyper;
-extern crate hyper_staticfile;
-extern crate hyper_tls;
-extern crate idna;
-extern crate lettre;
-extern crate lettre_email;
-#[macro_use]
-extern crate log;
-#[macro_use]
-extern crate matches;
-extern crate mustache;
-extern crate native_tls;
-extern crate openssl;
-extern crate percent_encoding;
-extern crate rand;
-extern crate redis;
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-#[macro_use]
-extern crate serde_json;
-extern crate time;
-extern crate tokio_core;
-extern crate toml;
-extern crate url;
-
 #[macro_use]
 mod macros;
 
@@ -50,6 +18,8 @@ mod webfinger;
 use futures::Stream;
 use hyper::server::{Http, Request};
 use hyper::Method;
+use log::info;
+use serde_derive::Deserialize;
 use std::net::SocketAddr;
 use std::path::Path;
 use std::rc::Rc;

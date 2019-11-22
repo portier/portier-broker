@@ -8,6 +8,7 @@ homepage = "http://portier.io"
 repository = "https://github.com/portier/portier-broker"
 readme = "README.rst"
 license = "MIT/Apache-2.0"
+edition = "2018"
 
 [features]
 default = []

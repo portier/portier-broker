@@ -1,21 +1,22 @@
-use bridges::oidc::GOOGLE_IDP_ORIGIN;
-use crypto;
+use crate::bridges::oidc::GOOGLE_IDP_ORIGIN;
+use crate::crypto;
+use crate::store;
+use crate::store_limits::Ratelimit;
+use crate::webfinger::{Link, LinkDef, Relation};
 use gettext::Catalog;
 use hyper;
 use hyper::header::LanguageTag;
 use hyper_tls::HttpsConnector;
 use mustache;
+use serde_derive::Deserialize;
 use std::collections::HashMap;
 use std::env;
 use std::error::Error;
 use std::fmt::{self, Display};
 use std::fs::File;
 use std::io::{Error as IoError, Read};
-use store;
-use store_limits::Ratelimit;
 use tokio_core::reactor::Handle;
 use toml;
-use webfinger::{Link, LinkDef, Relation};
 
 /// The type of HTTP client we use, with TLS enabled.
 pub type HttpClient = hyper::Client<HttpsConnector<hyper::client::HttpConnector>>;

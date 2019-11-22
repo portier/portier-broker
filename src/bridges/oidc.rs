@@ -1,19 +1,20 @@
-use bridges::{complete_auth, BridgeData};
-use config::GoogleConfig;
-use crypto;
-use email_address::EmailAddress;
-use error::BrokerError;
+use crate::bridges::{complete_auth, BridgeData};
+use crate::config::GoogleConfig;
+use crate::crypto;
+use crate::email_address::EmailAddress;
+use crate::error::BrokerError;
+use crate::http::{ContextHandle, HandlerResult};
+use crate::serde_helpers::UrlDef;
+use crate::store_cache::{fetch_json_url, CacheKey};
+use crate::validation;
+use crate::webfinger::{Link, Relation};
 use futures::{future, Future};
-use http::{ContextHandle, HandlerResult};
 use hyper::header::Location;
 use hyper::{Response, StatusCode};
-use serde_helpers::UrlDef;
+use serde_derive::{Deserialize, Serialize};
 use std::rc::Rc;
-use store_cache::{fetch_json_url, CacheKey};
 use time::now_utc;
 use url::Url;
-use validation;
-use webfinger::{Link, Relation};
 
 /// The origin of the Google identity provider.
 pub const GOOGLE_IDP_ORIGIN: &str = "https://accounts.google.com";

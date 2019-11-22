@@ -1,9 +1,10 @@
-use config::Config;
-use error::BrokerError;
+use crate::config::Config;
+use crate::error::BrokerError;
+use crate::http;
 use futures::{future, Future};
-use http;
 use hyper::header::{CacheControl, CacheDirective};
 use hyper::StatusCode;
+use log::info;
 use redis::Commands;
 use serde::de::DeserializeOwned;
 use serde_json as json;

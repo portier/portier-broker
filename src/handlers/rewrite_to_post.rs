@@ -1,5 +1,5 @@
+use crate::http::{ContextHandle, HandlerResult};
 use futures::future;
-use http::{ContextHandle, HandlerResult};
 use hyper::{header::ContentType, Response};
 
 /// Request handler that transforms fragment and query parameters to POST parameters.

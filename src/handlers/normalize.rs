@@ -1,6 +1,6 @@
-use email_address::EmailAddress;
+use crate::email_address::EmailAddress;
+use crate::http::{ContextHandle, HandlerResult};
 use futures::future;
-use http::{ContextHandle, HandlerResult};
 use hyper::header::{CacheControl, CacheDirective, ContentType};
 use hyper::server::Response;
 

@@ -1,12 +1,13 @@
-use config::Config;
-use email_address::EmailAddress;
-use error::BrokerError;
+use crate::config::Config;
+use crate::email_address::EmailAddress;
+use crate::error::BrokerError;
+use crate::serde_helpers::UrlDef;
+use crate::store_cache::{fetch_json_url, CacheKey};
 use futures::future::{self, Future};
-use serde_helpers::UrlDef;
+use serde_derive::{Deserialize, Serialize};
 use std::error::Error;
 use std::rc::Rc;
 use std::str::FromStr;
-use store_cache::{fetch_json_url, CacheKey};
 use url::Url;
 
 /// Portier webfinger relation

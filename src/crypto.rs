@@ -1,7 +1,7 @@
+use crate::bridges::oidc::ProviderKey;
+use crate::config::Config;
+use crate::email_address::EmailAddress;
 use base64;
-use bridges::oidc::ProviderKey;
-use config::Config;
-use email_address::EmailAddress;
 use openssl::bn::{BigNum, BigNumRef};
 use openssl::error::ErrorStack as SslErrorStack;
 use openssl::hash::{Hasher, MessageDigest};
@@ -10,6 +10,7 @@ use openssl::rsa::Rsa;
 use openssl::sign::{Signer, Verifier};
 use rand::random;
 use serde_json as json;
+use serde_json::json;
 use std::fs::File;
 use std::io::{Error as IoError, Read};
 use std::iter::Iterator;

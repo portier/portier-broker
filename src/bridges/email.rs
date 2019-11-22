@@ -1,10 +1,10 @@
-use bridges::{complete_auth, BridgeData};
-use config::Config;
-use crypto::random_zbase32;
-use email_address::EmailAddress;
-use error::BrokerError;
+use crate::bridges::{complete_auth, BridgeData};
+use crate::config::Config;
+use crate::crypto::random_zbase32;
+use crate::email_address::EmailAddress;
+use crate::error::BrokerError;
+use crate::http::{ContextHandle, HandlerResult};
 use futures::future;
-use http::{ContextHandle, HandlerResult};
 use hyper::header::ContentType;
 use hyper::Response;
 use lettre::smtp::authentication::Credentials;
@@ -14,6 +14,7 @@ use lettre::Transport;
 use lettre_email::EmailBuilder;
 use native_tls::TlsConnector;
 use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
+use serde_derive::{Deserialize, Serialize};
 use std::rc::Rc;
 
 const QUERY_ESCAPE: &AsciiSet = &CONTROLS.add(b' ').add(b'"').add(b'#').add(b'<').add(b'>');

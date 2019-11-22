@@ -1,19 +1,19 @@
-use bridges;
-use email_address::EmailAddress;
-use error::BrokerError;
+use crate::bridges;
+use crate::email_address::EmailAddress;
+use crate::error::BrokerError;
+use crate::http::{json_response, ContextHandle, HandlerResult, ReturnParams};
+use crate::store_limits::addr_limiter;
+use crate::validation::parse_redirect_uri;
+use crate::webfinger::{self, Link, Relation};
 use futures::future::{self, Either, Future};
-use http::{json_response, ContextHandle, HandlerResult, ReturnParams};
 use hyper::header::ContentType;
 use hyper::server::Response;
 use hyper::Method;
 use mustache;
-use serde_json::{from_value, Value};
+use serde_json::{from_value, json, Value};
 use std::rc::Rc;
 use std::time::Duration;
-use store_limits::addr_limiter;
 use tokio_core::reactor::Timeout;
-use validation::parse_redirect_uri;
-use webfinger::{self, Link, Relation};
 
 /// Request handler to return the OpenID Discovery document.
 ///
