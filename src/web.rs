@@ -411,9 +411,13 @@ pub fn parse_form_encoded(input: &[u8]) -> HashMap<String, String> {
 pub async fn read_body(mut body: Body) -> Result<Bytes, BoxError> {
     let mut acc = BytesMut::new();
     while let Some(result) = body.next().await {
-        let chunk = result.map_err(Box::new)?;
+        // TODO: We can use `.map_err(Box::new)?` starting Rust 1.40.
+        let chunk = match result {
+            Ok(chunk) => chunk,
+            Err(err) => return Err(Box::new(err).into()),
+        };
         if acc.len() + chunk.len() > 8096 {
-            return Err(Box::new(SizeLimitExceeded));
+            return Err(Box::new(SizeLimitExceeded).into());
         }
         acc.extend(chunk);
     }
