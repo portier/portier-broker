@@ -48,7 +48,6 @@ redis = "0.10.0"
 serde = "1.0.103"
 serde_derive = "1.0.103"
 serde_json = "1.0.44"
-time = "0.1.42"
 tokio = { version = "0.2.4", features = ["time", "macros"] }
 toml = "0.5.3"
 url = "2.1.0"

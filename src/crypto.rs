@@ -14,7 +14,7 @@ use serde_json::json;
 use std::fs::File;
 use std::io::{Error as IoError, Read};
 use std::iter::Iterator;
-use time::now_utc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Union of all possible error types seen while parsing.
 #[derive(Debug)]
@@ -228,13 +228,16 @@ pub fn create_jwt(
     aud: &str,
     nonce: &str,
 ) -> String {
-    let now = now_utc().to_timespec().sec;
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
     let payload = json!({
         "aud": aud,
         "email": email_addr.as_str(),
         "email_verified": true,
         "email_original": email,
-        "exp": now + i64::from(app.token_ttl),
+        "exp": now + u64::from(app.token_ttl),
         "iat": now,
         "iss": &app.public_url,
         "sub": email_addr.as_str(),

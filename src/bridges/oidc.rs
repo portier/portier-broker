@@ -11,13 +11,13 @@ use crate::web::{empty_response, Context, HandlerResult};
 use crate::webfinger::{Link, Relation};
 use http::StatusCode;
 use serde_derive::{Deserialize, Serialize};
-use time::now_utc;
+use std::time::{SystemTime, UNIX_EPOCH};
 use url::Url;
 
 /// The origin of the Google identity provider.
 pub const GOOGLE_IDP_ORIGIN: &str = "https://accounts.google.com";
 /// The leeway allowed when verifying iat & exp claims, in seconds.
-pub const LEEWAY: i64 = 30;
+pub const LEEWAY: u64 = 30;
 
 /// Data we store in the session.
 #[derive(Serialize, Deserialize)]
@@ -216,8 +216,8 @@ pub async fn callback(ctx: &mut Context) -> HandlerResult {
     let iss = try_get_token_field!(jwt_payload, "iss", descr);
     let aud = try_get_token_field!(jwt_payload, "aud", descr);
     let email = try_get_token_field!(jwt_payload, "email", descr);
-    let iat = try_get_token_field!(jwt_payload, "iat", |v| v.as_i64(), descr);
-    let exp = try_get_token_field!(jwt_payload, "exp", |v| v.as_i64(), descr);
+    let iat = try_get_token_field!(jwt_payload, "iat", |v| v.as_u64(), descr);
+    let exp = try_get_token_field!(jwt_payload, "exp", |v| v.as_u64(), descr);
     let nonce = try_get_token_field!(jwt_payload, "nonce", descr);
 
     // Verify the token claims.
@@ -225,9 +225,12 @@ pub async fn callback(ctx: &mut Context) -> HandlerResult {
     check_token_field!(aud == bridge_data.client_id, "aud", descr);
     check_token_field!(nonce == bridge_data.nonce, "nonce", descr);
 
-    let now = now_utc().to_timespec().sec;
-    let exp = exp.checked_add(LEEWAY).unwrap_or(i64::min_value());
-    let iat = iat.checked_sub(LEEWAY).unwrap_or(i64::max_value());
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let exp = exp.checked_add(LEEWAY).unwrap_or(u64::min_value());
+    let iat = iat.checked_sub(LEEWAY).unwrap_or(u64::max_value());
     check_token_field!(now < exp, "exp", descr);
     check_token_field!(iat <= now, "iat", descr);
 
