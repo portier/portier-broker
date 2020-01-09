@@ -444,8 +444,8 @@ impl ConfigBuilder {
 
         let store = store::Store::new(
             &self.redis_url.expect("no redis url configured"),
-            self.redis_cache_ttl as usize,
             self.redis_session_ttl as usize,
+            self.redis_cache_ttl as usize,
         )
         .expect("unable to instantiate new redis store");
 
