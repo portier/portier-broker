@@ -1,16 +1,15 @@
-use email_address::EmailAddress;
-use futures::future;
-use http::{ContextHandle, HandlerResult};
-use hyper::header::{CacheControl, CacheDirective, ContentType};
-use hyper::server::Response;
+use crate::email_address::EmailAddress;
+use crate::http_ext::ResponseExt;
+use crate::web::{Context, HandlerResult};
+use headers::{CacheControl, ContentType};
+use http::Response;
+use hyper::Body;
 
 /// Request handler for the email normalization endpoint.
 ///
 /// Performs normalization of email addresses, for clients that cannot implement all the necessary
 /// parts of the relevant specifications. (Unicode, WHATWG, etc.)
-pub fn normalize(ctx_handle: &ContextHandle) -> HandlerResult {
-    let ctx = ctx_handle.borrow();
-
+pub async fn normalize(ctx: &mut Context) -> HandlerResult {
     let result = String::from_utf8_lossy(&ctx.body)
         .lines()
         .map(|s| match s.parse::<EmailAddress>() {
@@ -20,12 +19,8 @@ pub fn normalize(ctx_handle: &ContextHandle) -> HandlerResult {
         .collect::<Vec<_>>()
         .join("\n");
 
-    let res = Response::new()
-        .with_header(ContentType::plaintext())
-        .with_header(CacheControl(vec![
-            CacheDirective::NoCache,
-            CacheDirective::NoStore,
-        ]))
-        .with_body(result);
-    Box::new(future::ok(res))
+    let mut res = Response::new(Body::from(result));
+    res.typed_header(ContentType::text_utf8());
+    res.typed_header(CacheControl::new().with_no_cache().with_no_store());
+    Ok(res)
 }

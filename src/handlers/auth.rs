@@ -1,27 +1,22 @@
-use bridges;
-use email_address::EmailAddress;
-use error::BrokerError;
-use futures::future::{self, Either, Future};
-use http::{json_response, ContextHandle, HandlerResult, ReturnParams};
-use hyper::header::ContentType;
-use hyper::server::Response;
-use hyper::Method;
+use crate::bridges;
+use crate::email_address::EmailAddress;
+use crate::error::BrokerError;
+use crate::store_limits::addr_limiter;
+use crate::validation::parse_redirect_uri;
+use crate::web::{html_response, json_response, Context, HandlerResult, ReturnParams};
+use crate::webfinger::{self, Link, Relation};
+use futures_util::future::{self, Either};
+use http::Method;
+use log::info;
 use mustache;
-use serde_json::{from_value, Value};
-use std::rc::Rc;
+use serde_json::{from_value, json, Value};
 use std::time::Duration;
-use store_limits::addr_limiter;
-use tokio_core::reactor::Timeout;
-use validation::parse_redirect_uri;
-use webfinger::{self, Link, Relation};
 
 /// Request handler to return the OpenID Discovery document.
 ///
 /// Most of this is hard-coded for now, although the URLs are constructed by
 /// using the base URL as configured in the `public_url` configuration value.
-pub fn discovery(ctx_handle: &ContextHandle) -> HandlerResult {
-    let ctx = ctx_handle.borrow();
-
+pub async fn discovery(ctx: &mut Context) -> HandlerResult {
     let obj = json!({
         "issuer": ctx.app.public_url,
         "authorization_endpoint": format!("{}/auth", ctx.app.public_url),
@@ -34,7 +29,7 @@ pub fn discovery(ctx_handle: &ContextHandle) -> HandlerResult {
         "subject_types_supported": vec!["public"],
         "id_token_signing_alg_values_supported": vec!["RS256"],
     });
-    Box::new(json_response(&obj, ctx.app.discovery_ttl))
+    Ok(json_response(&obj, ctx.app.discovery_ttl))
 }
 
 /// Request handler for the JSON Web Key Set document.
@@ -43,15 +38,13 @@ pub fn discovery(ctx_handle: &ContextHandle) -> HandlerResult {
 ///
 /// Relying Parties will need to fetch this data to be able to verify identity
 /// tokens issued by this daemon instance.
-pub fn key_set(ctx_handle: &ContextHandle) -> HandlerResult {
-    let ctx = ctx_handle.borrow();
-
+pub async fn key_set(ctx: &mut Context) -> HandlerResult {
     let obj = json!({
         "keys": ctx.app.keys.iter()
             .map(|key| key.public_jwk())
             .collect::<Vec<_>>(),
     });
-    Box::new(json_response(&obj, ctx.app.keys_ttl))
+    Ok(json_response(&obj, ctx.app.keys_ttl))
 }
 
 /// Request handler for authentication requests from the RP.
@@ -59,11 +52,10 @@ pub fn key_set(ctx_handle: &ContextHandle) -> HandlerResult {
 /// Calls the `oidc::request()` function if the provided email address's
 /// domain matches one of the configured famous providers. Otherwise, calls the
 /// `email::request()` function to allow authentication through the email loop.
-pub fn auth(ctx_handle: &ContextHandle) -> HandlerResult {
-    let mut ctx = ctx_handle.borrow_mut();
+pub async fn auth(ctx: &mut Context) -> HandlerResult {
     let mut params = match ctx.method {
-        Method::Get => ctx.query_params(),
-        Method::Post => ctx.form_params(),
+        Method::GET => ctx.query_params(),
+        Method::POST => ctx.form_params(),
         _ => unreachable!(),
     };
 
@@ -75,36 +67,24 @@ pub fn auth(ctx_handle: &ContextHandle) -> HandlerResult {
     let response_errors = try_get_input_param!(params, "response_errors", "true".to_owned());
     let state = try_get_input_param!(params, "state", "".to_owned());
 
-    let redirect_uri = match parse_redirect_uri(&redirect_uri, "redirect_uri") {
-        Ok(url) => url,
-        Err(e) => return Box::new(future::err(BrokerError::Input(format!("{}", e)))),
-    };
+    let redirect_uri = parse_redirect_uri(&redirect_uri, "redirect_uri")
+        .map_err(|e| BrokerError::Input(format!("{}", e)))?;
 
     if client_id != redirect_uri.origin().ascii_serialization() {
-        return Box::new(future::err(BrokerError::Input(
+        return Err(BrokerError::Input(
             "the client_id must be the origin of the redirect_uri".to_owned(),
-        )));
+        ));
     }
 
     // Parse response_mode by wrapping it a JSON Value.
     // This has minimal overhead, and saves us a separate implementation.
-    let response_mode = match from_value(Value::String(response_mode)) {
-        Ok(response_mode) => response_mode,
-        Err(_) => {
-            return Box::new(future::err(BrokerError::Input(
-                "unsupported response_mode, must be fragment or form_post".to_owned(),
-            )))
-        }
-    };
+    let response_mode = from_value(Value::String(response_mode)).map_err(|_| {
+        BrokerError::Input("unsupported response_mode, must be fragment or form_post".to_owned())
+    })?;
 
-    let response_errors = match response_errors.parse::<bool>() {
-        Ok(value) => value,
-        Err(_) => {
-            return Box::new(future::err(BrokerError::Input(
-                "response_errors must be true or false".to_owned(),
-            )))
-        }
-    };
+    let response_errors = response_errors
+        .parse::<bool>()
+        .map_err(|_| BrokerError::Input("response_errors must be true or false".to_owned()))?;
 
     // Per the OAuth2 spec, we may redirect to the RP once we have validated client_id and
     // redirect_uri. In our case, this means we make redirect_uri available to error handling.
@@ -118,17 +98,17 @@ pub fn auth(ctx_handle: &ContextHandle) -> HandlerResult {
 
     if let Some(ref whitelist) = ctx.app.allowed_origins {
         if !whitelist.contains(&client_id) {
-            return Box::new(future::err(BrokerError::Input(
+            return Err(BrokerError::Input(
                 "the origin is not whitelisted".to_owned(),
-            )));
+            ));
         }
     }
 
     let nonce = try_get_input_param!(params, "nonce");
     if try_get_input_param!(params, "response_type") != "id_token" {
-        return Box::new(future::err(BrokerError::Input(
+        return Err(BrokerError::Input(
             "unsupported response_type, only id_token is supported".to_owned(),
-        )));
+        ));
     }
 
     let login_hint = try_get_input_param!(params, "login_hint", "".to_string());
@@ -159,45 +139,34 @@ pub fn auth(ctx_handle: &ContextHandle) -> HandlerResult {
             })
             .build();
 
-        let res = Response::new()
-            .with_header(ContentType::html())
-            .with_body(ctx.app.templates.login_hint.render_data(&data));
-        let bf = Box::new(future::ok(res));
-        return bf;
+        return Ok(html_response(
+            ctx.app.templates.login_hint.render_data(&data),
+        ));
     }
 
     // Verify and normalize the email.
-    let email_addr = match login_hint.parse::<EmailAddress>() {
-        Ok(addr) => Rc::new(addr),
-        Err(_) => {
-            return Box::new(future::err(BrokerError::Input(
-                "login_hint is not a valid email address".to_owned(),
-            )))
-        }
-    };
+    let email_addr = login_hint
+        .parse::<EmailAddress>()
+        .map_err(|_| BrokerError::Input("login_hint is not a valid email address".to_owned()))?;
 
     // Enforce ratelimit based on the normalized email.
-    match addr_limiter(
+    if !addr_limiter(
         &ctx.app.store,
         email_addr.as_str(),
         &ctx.app.limit_per_email,
-    ) {
-        Err(err) => return Box::new(future::err(err)),
-        Ok(false) => return Box::new(future::err(BrokerError::RateLimited)),
-        _ => {}
+    )? {
+        return Err(BrokerError::RateLimited);
     }
 
     // Create the session with common data, but do not yet save it.
     ctx.start_session(&client_id, &login_hint, &email_addr, &nonce);
 
     // Discover the authentication endpoints based on the email domain.
-    let f = webfinger::query(&ctx.app, &email_addr);
+    let discovery_future = async {
+        let links = webfinger::query(&ctx.app, &email_addr).await?;
 
-    // Try to authenticate with the first provider.
-    // TODO: Queue discovery of links and process in order, with individual timeouts.
-    let ctx_handle2 = Rc::clone(ctx_handle);
-    let email_addr2 = Rc::clone(&email_addr);
-    let f = f.and_then(move |links| {
+        // Try to authenticate with the first provider.
+        // TODO: Queue discovery of links and process in order, with individual timeouts.
         match links.first() {
             // Portier and Google providers share an implementation
             Some(
@@ -211,52 +180,52 @@ pub fn auth(ctx_handle: &ContextHandle) -> HandlerResult {
                     rel: Relation::Google,
                     ..
                 },
-            ) => bridges::oidc::auth(&ctx_handle2, &email_addr2, link),
-            _ => Box::new(future::err(BrokerError::ProviderCancelled)),
+            ) => bridges::oidc::auth(ctx, &email_addr, link).await,
+            _ => Err(BrokerError::ProviderCancelled),
         }
-    });
+    };
 
     // Apply a timeout to discovery.
-    let ctx_handle2 = Rc::clone(ctx_handle);
-    let email_addr2 = Rc::clone(&email_addr);
-    let f = Timeout::new(Duration::from_secs(5), &ctx.app.handle)
-        .expect("failed to create discovery timeout")
-        .select2(f)
-        .then(move |result| {
-            match result {
-                // Timeout resolved first.
-                Ok(Either::A((_, f))) => {
-                    // Continue the discovery future in the background.
-                    ctx_handle2
-                        .borrow()
-                        .app
-                        .handle
-                        .spawn(f.map(|_| ()).map_err(|e| {
-                            e.log();
-                        }));
-                    Err(BrokerError::Provider(format!(
-                        "discovery timed out for {}",
-                        email_addr2
-                    )))
+    match future::select(
+        tokio::time::delay_for(Duration::from_secs(5)),
+        Box::pin(discovery_future),
+    )
+    .await
+    {
+        Either::Left((_, _f)) => {
+            // Timeout causes fall back to email loop auth.
+            info!("discovery timed out for {}", email_addr);
+
+            // TODO: We used to (before async) continue discovery in the background, using shared
+            // access to Context through RefCell. We could bring that back by decoupling auth
+            // mechanisms from Context.
+            //
+            // (The original idea was also for auth mechanisms to have a 'commit' action, to
+            // indicate a side-effect is about the happen. From this side, it'd effectively abort
+            // the timeout and bubble all errors. An intermediate AuthContext could provide this.)
+            /*
+            tokio::spawn(async {
+                if let Err(e) = f.await {
+                    e.log();
                 }
-                Err(Either::A((e, _))) => panic!("error in discovery timeout: {}", e),
-                // Discovery resolved first.
-                Ok(Either::B((v, _))) => Ok(v),
-                Err(Either::B((e, _))) => Err(e),
-            }
-        });
-
-    // Fall back to email loop authentication.
-    let ctx_handle2 = Rc::clone(ctx_handle);
-    let f = f.or_else(move |e| {
-        e.log();
-        match e {
-            BrokerError::Provider(_) | BrokerError::ProviderCancelled => {
-                bridges::email::auth(&ctx_handle2, &email_addr)
-            }
-            _ => Box::new(future::err(e)),
+            });
+            */
         }
-    });
+        Either::Right((Ok(v), _)) => {
+            // Discovery succeeded, simply return the response.
+            return Ok(v);
+        }
+        Either::Right((Err(e @ BrokerError::Provider(_)), _))
+        | Either::Right((Err(e @ BrokerError::ProviderCancelled), _)) => {
+            // Provider errors cause fallback to email loop auth.
+            e.log();
+        }
+        Either::Right((Err(e), _)) => {
+            // Other errors during discovery are bubbled.
+            return Err(e);
+        }
+    }
 
-    Box::new(f)
+    // Fall back to email loop auth.
+    bridges::email::auth(ctx, &email_addr).await
 }

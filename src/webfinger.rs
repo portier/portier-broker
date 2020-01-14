@@ -1,12 +1,10 @@
-use config::Config;
-use email_address::EmailAddress;
-use error::BrokerError;
-use futures::future::{self, Future};
-use serde_helpers::UrlDef;
-use std::error::Error;
-use std::rc::Rc;
+use crate::config::ConfigRc;
+use crate::email_address::EmailAddress;
+use crate::error::BrokerError;
+use crate::serde_helpers::UrlDef;
+use crate::store_cache::{fetch_json_url, CacheKey};
+use serde_derive::{Deserialize, Serialize};
 use std::str::FromStr;
-use store_cache::{fetch_json_url, CacheKey};
 use url::Url;
 
 /// Portier webfinger relation
@@ -71,13 +69,10 @@ impl Link {
 /// This queries the webfinger endpoint of the domain for the given email
 /// address. The resource queried is the email address itself, as an `acct` URL.
 /// Request failures of any kind simply result in an empty list.
-pub fn query(
-    app: &Rc<Config>,
-    email_addr: &EmailAddress,
-) -> Box<dyn Future<Item = Vec<Link>, Error = BrokerError>> {
+pub async fn query(app: &ConfigRc, email_addr: &EmailAddress) -> Result<Vec<Link>, BrokerError> {
     // Look for a configuration override.
     if let Some(mapped) = app.domain_overrides.get(email_addr.domain()) {
-        return Box::new(future::ok(mapped.clone()));
+        return Ok(mapped.clone());
     }
 
     // Build the webfinger query URL. We can safely do string concatenation here, because the
@@ -87,43 +82,34 @@ pub fn query(
     #[cfg(not(feature = "insecure"))]
     let url = format!("https://{}/.well-known/webfinger", email_addr.domain());
 
-    let url = match Url::parse_with_params(
+    let url = Url::parse_with_params(
         &url,
         &[
             ("resource", format!("acct:{}", email_addr).as_str()),
             ("rel", WEBFINGER_PORTIER_REL),
             ("rel", WEBFINGER_GOOGLE_REL),
         ],
-    ) {
-        Ok(url) => url,
-        Err(e) => {
-            return Box::new(future::err(BrokerError::Internal(format!(
-                "could not build webfinger query url: {}",
-                e.description()
-            ))))
-        }
-    };
+    )
+    .map_err(|e| BrokerError::Internal(format!("could not build webfinger query url: {}", e)))?;
 
     // Make the request.
-    let f = fetch_json_url(
+    let descriptor: DescriptorDef = fetch_json_url(
         app,
         url,
         &CacheKey::Discovery {
             acct: email_addr.as_str(),
         },
-    );
+    )
+    .await?;
 
     // Parse the relations.
-    let app = app.clone();
-    let f = f.map(move |descriptor: DescriptorDef| {
-        descriptor
-            .links
-            .iter()
-            .filter_map(|link| Link::from_de_link(link).ok())
-            // Sanity check: skip results that refer to ourselves.
-            .filter(|link| link.href.as_str() != app.public_url)
-            .collect()
-    });
+    let links = descriptor
+        .links
+        .iter()
+        .filter_map(|link| Link::from_de_link(link).ok())
+        // Sanity check: skip results that refer to ourselves.
+        .filter(|link| link.href.as_str() != app.public_url)
+        .collect();
 
-    Box::new(f)
+    Ok(links)
 }

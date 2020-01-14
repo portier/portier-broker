@@ -1,4 +1,4 @@
-use error::{BrokerError, BrokerResult};
+use crate::error::{BrokerError, BrokerResult};
 use redis::{self, Commands};
 
 #[derive(Clone)]

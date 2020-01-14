@@ -1,5 +1,6 @@
-use crypto::random_zbase32;
-use hyper::StatusCode;
+use crate::crypto::random_zbase32;
+use http::StatusCode;
+use log::{debug, error, info};
 use std::error::Error;
 use std::fmt;
 
@@ -33,19 +34,19 @@ impl BrokerError {
             | ref err @ BrokerError::RateLimited
             | ref err @ BrokerError::SessionExpired
             | ref err @ BrokerError::ProviderCancelled => {
-                debug!("{}", err.description());
+                debug!("{}", err);
                 None
             }
             // Provider errors can be noteworthy, especially when
             // the issue is network related.
             ref err @ BrokerError::Provider(_) => {
-                info!("{}", err.description());
+                info!("{}", err);
                 None
             }
             // Internal errors should ring alarm bells.
             ref err @ BrokerError::Internal(_) => {
                 let reference = random_zbase32(6);
-                error!("[REF:{}] {}", reference, err.description());
+                error!("[REF:{}] {}", reference, err);
                 Some(reference)
             }
         }
@@ -55,11 +56,11 @@ impl BrokerError {
     pub fn http_status_code(&self) -> StatusCode {
         match *self {
             BrokerError::Input(_) | BrokerError::ProviderInput(_) | BrokerError::SessionExpired => {
-                StatusCode::BadRequest
+                StatusCode::BAD_REQUEST
             }
-            BrokerError::Provider(_) => StatusCode::ServiceUnavailable,
-            BrokerError::Internal(_) => StatusCode::InternalServerError,
-            BrokerError::RateLimited => StatusCode::TooManyRequests,
+            BrokerError::Provider(_) => StatusCode::SERVICE_UNAVAILABLE,
+            BrokerError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            BrokerError::RateLimited => StatusCode::TOO_MANY_REQUESTS,
             // Internal status that should never bubble this far
             BrokerError::ProviderCancelled => unreachable!(),
         }
@@ -83,9 +84,11 @@ impl BrokerError {
     }
 }
 
-impl Error for BrokerError {
-    fn description(&self) -> &str {
-        match *self {
+impl Error for BrokerError {}
+
+impl fmt::Display for BrokerError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match *self {
             BrokerError::Input(ref description)
             | BrokerError::Provider(ref description)
             | BrokerError::ProviderInput(ref description)
@@ -93,13 +96,7 @@ impl Error for BrokerError {
             BrokerError::RateLimited => "too many requests",
             BrokerError::SessionExpired => "session has expired",
             BrokerError::ProviderCancelled => "bridge cancelled the request",
-        }
-    }
-}
-
-impl fmt::Display for BrokerError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.description())
+        })
     }
 }
 

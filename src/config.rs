@@ -1,21 +1,23 @@
-use bridges::oidc::GOOGLE_IDP_ORIGIN;
-use crypto;
+use crate::bridges::oidc::GOOGLE_IDP_ORIGIN;
+use crate::crypto;
+use crate::store;
+use crate::store_limits::Ratelimit;
+use crate::webfinger::{Link, LinkDef, Relation};
 use gettext::Catalog;
 use hyper;
-use hyper::header::LanguageTag;
 use hyper_tls::HttpsConnector;
 use mustache;
-use std::collections::HashMap;
-use std::env;
-use std::error::Error;
-use std::fmt::{self, Display};
-use std::fs::File;
-use std::io::{Error as IoError, Read};
-use store;
-use store_limits::Ratelimit;
-use tokio_core::reactor::Handle;
+use serde_derive::Deserialize;
+use std::{
+    collections::HashMap,
+    env,
+    error::Error,
+    fmt::{self, Display},
+    fs::File,
+    io::{Error as IoError, Read},
+    sync::Arc,
+};
 use toml;
-use webfinger::{Link, LinkDef, Relation};
 
 /// The type of HTTP client we use, with TLS enabled.
 pub type HttpClient = hyper::Client<HttpsConnector<hyper::client::HttpConnector>>;
@@ -29,16 +31,7 @@ pub enum ConfigError {
     Store(&'static str),
 }
 
-impl Error for ConfigError {
-    fn description(&self) -> &str {
-        match *self {
-            ConfigError::Custom(ref string) => string,
-            ConfigError::Io(ref err) => err.description(),
-            ConfigError::Toml(ref err) => err.description(),
-            ConfigError::Store(static_str) => static_str,
-        }
-    }
-}
+impl Error for ConfigError {}
 
 impl Display for ConfigError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -132,7 +125,7 @@ impl Default for Templates {
 
 // Contains all gettext catalogs we use in compiled form.
 pub struct I18n {
-    pub catalogs: Vec<(LanguageTag, Catalog)>,
+    pub catalogs: Vec<(&'static str, Catalog)>,
 }
 
 const SUPPORTED_LANGUAGES: &[&str] = &["en", "de", "nl"];
@@ -143,11 +136,10 @@ impl Default for I18n {
             catalogs: SUPPORTED_LANGUAGES
                 .iter()
                 .map(|lang| {
-                    let tag = lang.parse().expect("could not parse language tag");
                     let file = File::open(format!("lang/{}.mo", lang))
                         .expect("could not open catalog file");
                     let catalog = Catalog::parse(file).expect("could not parse catalog file");
-                    (tag, catalog)
+                    (*lang, catalog)
                 })
                 .collect(),
         }
@@ -158,14 +150,16 @@ pub struct GoogleConfig {
     pub client_id: String,
 }
 
+pub type ConfigRc = Arc<Config>;
+
 pub struct Config {
     pub listen_ip: String,
     pub listen_port: u16,
     pub public_url: String,
     pub allowed_origins: Option<Vec<String>>,
     pub static_ttl: u32,
-    pub discovery_ttl: u32,
-    pub keys_ttl: u32,
+    pub discovery_ttl: u64,
+    pub keys_ttl: u64,
     pub token_ttl: u16,
     pub keys: Vec<crypto::NamedKey>,
     pub store: store::Store,
@@ -180,7 +174,6 @@ pub struct Config {
     pub google: Option<GoogleConfig>,
     pub templates: Templates,
     pub i18n: I18n,
-    pub handle: Handle,
 }
 
 pub struct ConfigBuilder {
@@ -189,8 +182,8 @@ pub struct ConfigBuilder {
     pub public_url: Option<String>,
     pub allowed_origins: Option<Vec<String>>,
     pub static_ttl: u32,
-    pub discovery_ttl: u32,
-    pub keys_ttl: u32,
+    pub discovery_ttl: u64,
+    pub keys_ttl: u64,
     pub token_ttl: u16,
     pub keyfiles: Vec<String>,
     pub keytext: Option<String>,
@@ -269,8 +262,8 @@ impl ConfigBuilder {
             if let Some(val) = table.token_ttl {
                 self.token_ttl = val;
             }
-            if let Some(val) = table.keyfiles {
-                self.keyfiles.append(&mut val.clone());
+            if let Some(mut val) = table.keyfiles {
+                self.keyfiles.append(&mut val);
             }
             self.keytext = table.keytext.or_else(|| self.keytext.clone());
         }
@@ -306,8 +299,7 @@ impl ConfigBuilder {
                 let links = links
                     .iter()
                     .map(Link::from_de_link)
-                    .collect::<Result<_, _>>()
-                    .map_err(|e| e.to_owned())?;
+                    .collect::<Result<_, _>>()?;
                 self.domain_overrides.insert(domain, links);
             }
         }
@@ -428,7 +420,7 @@ impl ConfigBuilder {
         self
     }
 
-    pub fn done(self, handle: &Handle) -> Result<Config, ConfigError> {
+    pub fn done(self) -> Result<Config, ConfigError> {
         // Additional validations
         if self.smtp_username.is_none() != self.smtp_password.is_none() {
             return Err(ConfigError::Custom(
@@ -452,16 +444,13 @@ impl ConfigBuilder {
 
         let store = store::Store::new(
             &self.redis_url.expect("no redis url configured"),
-            self.redis_cache_ttl as usize,
             self.redis_session_ttl as usize,
+            self.redis_cache_ttl as usize,
         )
         .expect("unable to instantiate new redis store");
 
-        let http_connector =
-            HttpsConnector::new(4, handle).expect("could not initialize https connector");
-        let http_client = hyper::Client::configure()
-            .connector(http_connector)
-            .build(handle);
+        let http_connector = HttpsConnector::new();
+        let http_client = hyper::Client::builder().build(http_connector);
 
         let idx = self
             .limit_per_email
@@ -517,7 +506,6 @@ impl ConfigBuilder {
             google: self.google,
             templates: Templates::default(),
             i18n: I18n::default(),
-            handle: handle.clone(),
         })
     }
 }
@@ -546,8 +534,8 @@ struct TomlServerTable {
 #[derive(Clone, Debug, Deserialize)]
 struct TomlHeadersTable {
     static_ttl: Option<u32>,
-    discovery_ttl: Option<u32>,
-    keys_ttl: Option<u32>,
+    discovery_ttl: Option<u64>,
+    keys_ttl: Option<u64>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -594,8 +582,8 @@ struct EnvConfig {
     broker_public_url: Option<String>,
     broker_allowed_origins: Option<Vec<String>>,
     broker_static_ttl: Option<u32>,
-    broker_discovery_ttl: Option<u32>,
-    broker_keys_ttl: Option<u32>,
+    broker_discovery_ttl: Option<u64>,
+    broker_keys_ttl: Option<u64>,
     broker_token_ttl: Option<u16>,
     broker_keyfiles: Option<Vec<String>>,
     broker_keytext: Option<String>,
