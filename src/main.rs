@@ -77,19 +77,35 @@ async fn main() {
             .unwrap_or_else(|err| panic!(format!("failed to build configuration: {}", err))),
     );
 
-    let ip_addr = app
-        .listen_ip
-        .parse()
-        .expect("Unable to parse listen address");
-    let addr = SocketAddr::new(ip_addr, app.listen_port);
+    // FIXME: Add unix socket support.
+    let builder = match listenfd::ListenFd::from_env().take_tcp_listener(0) {
+        Ok(Some(tcp_listener)) => {
+            let builder = Server::from_tcp(tcp_listener).expect("Socket activation failed");
+            info!("Listening on the socket received from the service manager");
+            builder
+        }
+        Ok(None) => {
+            let ip_addr = app
+                .listen_ip
+                .parse()
+                .expect("Unable to parse listen address");
+            let addr = SocketAddr::new(ip_addr, app.listen_port);
+            let builder = Server::bind(&addr);
+            info!("Listening on {}", addr);
+            builder
+        }
+        Err(err) => {
+            panic!("Socket activation failed: {}", err);
+        }
+    };
+
+    #[cfg(unix)]
+    sd_notify::notify(true, &[sd_notify::NotifyState::Ready])
+        .expect("Failed to signal ready to the service manager");
 
     let make_service = make_service_fn(|stream| {
         let app = ConfigRc::clone(&app);
         future::ok::<_, BoxError>(Service::new(app, stream))
     });
-
-    let server = Server::bind(&addr).serve(make_service);
-    info!("Listening on http://{}", addr);
-
-    server.await.expect("Server error");
+    builder.serve(make_service).await.expect("Server error");
 }
