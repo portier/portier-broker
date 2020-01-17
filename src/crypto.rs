@@ -1,27 +1,30 @@
 use crate::bridges::oidc::ProviderKey;
 use crate::config::Config;
 use crate::email_address::EmailAddress;
-use base64;
-use openssl::bn::{BigNum, BigNumRef};
-use openssl::error::ErrorStack as SslErrorStack;
-use openssl::hash::{Hasher, MessageDigest};
-use openssl::pkey::{PKey, Private, Public};
-use openssl::rsa::Rsa;
-use openssl::sign::{Signer, Verifier};
-use rand::random;
+use ring::{
+    digest,
+    error::{KeyRejected, Unspecified},
+    io::Positive,
+    rand::SecureRandom,
+    signature::{self, KeyPair, RsaKeyPair},
+};
 use serde_json as json;
 use serde_json::json;
 use std::fs::File;
-use std::io::{Error as IoError, Read};
+use std::io::Error as IoError;
 use std::iter::Iterator;
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+type RsaPublicKey = signature::RsaPublicKeyComponents<Vec<u8>>;
 
 /// Union of all possible error types seen while parsing.
 #[derive(Debug)]
 pub enum CryptoError {
     Custom(&'static str),
     Io(IoError),
-    Ssl(SslErrorStack),
+    KeyRejected(KeyRejected),
+    Unspecified,
 }
 
 impl From<&'static str> for CryptoError {
@@ -36,53 +39,53 @@ impl From<IoError> for CryptoError {
     }
 }
 
-impl From<SslErrorStack> for CryptoError {
-    fn from(err: SslErrorStack) -> CryptoError {
-        CryptoError::Ssl(err)
+impl From<KeyRejected> for CryptoError {
+    fn from(err: KeyRejected) -> CryptoError {
+        CryptoError::KeyRejected(err)
+    }
+}
+
+impl From<Unspecified> for CryptoError {
+    fn from(_: Unspecified) -> CryptoError {
+        CryptoError::Unspecified
     }
 }
 
 /// A named key pair, for use in JWS signing.
 pub struct NamedKey {
     id: String,
-    key: PKey<Private>,
+    key_pair: RsaKeyPair,
 }
 
 impl NamedKey {
     /// Creates a NamedKey by reading a `file` path and generating an `id`.
-    pub fn from_file(filename: &str) -> Result<NamedKey, CryptoError> {
-        let mut file = File::open(filename)?;
-        let mut file_contents = String::new();
-        file.read_to_string(&mut file_contents)?;
-
-        NamedKey::from_pem_str(&file_contents)
+    pub fn from_pem_file(filename: impl AsRef<Path>) -> Result<Vec<NamedKey>, ()> {
+        let file = File::open(filename).map_err(|_| ())?;
+        NamedKey::from_pem(&mut std::io::BufReader::new(file))
     }
 
     /// Creates a NamedKey from a PEM-encoded str.
-    pub fn from_pem_str(pem: &str) -> Result<NamedKey, CryptoError> {
-        let rsa = Rsa::private_key_from_pem(pem.as_bytes())?;
-
-        NamedKey::from_rsa(rsa)
+    pub fn from_pem(pem: &mut dyn std::io::BufRead) -> Result<Vec<NamedKey>, ()> {
+        let key_pairs = crate::pemfile::parse_key_pairs(pem).map_err(|_| ())?;
+        Ok(key_pairs.into_iter().map(NamedKey::from_key_pair).collect())
     }
 
-    /// Creates a NamedKey from an Rsa
-    pub fn from_rsa(rsa: Rsa<Private>) -> Result<NamedKey, CryptoError> {
+    /// Creates a NamedKey from an RsaKeyPair.
+    pub fn from_key_pair(key_pair: RsaKeyPair) -> NamedKey {
         let id = {
-            let (e, n) = (rsa.e(), rsa.n());
-            let mut hasher = Hasher::new(MessageDigest::sha256())?;
-            let hash = hasher
-                .update(&e.to_vec())
-                .and_then(|_| hasher.update(b"."))
-                .and_then(|_| hasher.update(&n.to_vec()))
-                .and_then(|_| hasher.finish())?;
-            base64url_encode(&hash)
+            let public = key_pair.public_key();
+            let (n, e) = (public.modulus(), public.exponent());
+            let mut ctx = digest::Context::new(&digest::SHA256);
+            ctx.update(e.big_endian_without_leading_zero());
+            ctx.update(b".");
+            ctx.update(n.big_endian_without_leading_zero());
+            base64url_encode(&ctx.finish())
         };
-        let key = PKey::from_rsa(rsa)?;
-        Ok(NamedKey { id, key })
+        NamedKey { id, key_pair }
     }
 
     /// Create a JSON Web Signature (JWS) for the given JSON structure.
-    pub fn sign_jws(&self, payload: &json::Value) -> String {
+    pub fn sign_jws(&self, payload: &json::Value, rng: &dyn SecureRandom) -> String {
         let header = json!({
             "kid": &self.id,
             "alg": "RS256",
@@ -95,11 +98,9 @@ impl NamedKey {
         input.push(b'.');
         input.extend(base64url_encode(&payload).into_bytes());
 
-        let mut signer =
-            Signer::new(MessageDigest::sha256(), &self.key).expect("could not initialize signer");
-        let sig = signer
-            .update(&input)
-            .and_then(|_| signer.sign_to_vec())
+        let mut sig = vec![0; self.key_pair.public_modulus_len()];
+        self.key_pair
+            .sign(&signature::RSA_PKCS1_SHA256, rng, &input, &mut sig)
             .expect("failed to sign jwt");
 
         input.push(b'.');
@@ -109,12 +110,12 @@ impl NamedKey {
 
     /// Return JSON represenation of the public key for use in JWK key sets.
     pub fn public_jwk(&self) -> json::Value {
-        fn json_big_num(n: &BigNumRef) -> String {
-            base64url_encode(&n.to_vec())
+        fn json_big_num(v: Positive) -> String {
+            base64url_encode(v.big_endian_without_leading_zero())
         }
 
-        let rsa = self.key.rsa().expect("unable to retrieve rsa key");
-        let (n, e) = (rsa.n(), rsa.e());
+        let public = self.key_pair.public_key();
+        let (n, e) = (public.modulus(), public.exponent());
         json!({
             "kty": "RSA",
             "alg": "RS256",
@@ -131,32 +132,40 @@ impl NamedKey {
 /// Put the email address, the client ID (RP origin) and some randomness into
 /// a SHA256 hash, and encode it with URL-safe bas64 encoding. This is used
 /// as the key in Redis, as well as the state for OAuth authentication.
-pub fn session_id(email: &EmailAddress, client_id: &str) -> String {
-    let rand_bytes: [u8; 16] = random();
-    let mut hasher =
-        Hasher::new(MessageDigest::sha256()).expect("couldn't initialize SHA256 hasher");
-    let hash = hasher
-        .update(email.as_str().as_bytes())
-        .and_then(|_| hasher.update(client_id.as_bytes()))
-        .and_then(|_| hasher.update(&rand_bytes))
-        .and_then(|_| hasher.finish())
-        .expect("session hashing failed");
-    base64url_encode(&hash)
+pub fn session_id(email: &EmailAddress, client_id: &str, rng: &dyn SecureRandom) -> String {
+    let mut rand_bytes = [0u8; 16];
+    rng.fill(&mut rand_bytes)
+        .expect("secure random number generator failed");
+
+    let mut ctx = digest::Context::new(&digest::SHA256);
+    ctx.update(email.as_str().as_bytes());
+    ctx.update(client_id.as_bytes());
+    ctx.update(&rand_bytes);
+    base64url_encode(&ctx.finish())
 }
 
 /// Helper function to create a secure nonce.
-pub fn nonce() -> String {
-    let rand_bytes: [u8; 16] = random();
+pub fn nonce(rng: &dyn SecureRandom) -> String {
+    let mut rand_bytes = [0u8; 16];
+    rng.fill(&mut rand_bytes)
+        .expect("secure random number generator failed");
+
     base64url_encode(&rand_bytes)
 }
 
 /// Helper function to create a random string consisting of
 /// characters from the z-base-32 set.
-pub fn random_zbase32(len: usize) -> String {
+pub fn random_zbase32(len: usize, rng: &dyn SecureRandom) -> String {
     const CHARSET: &[u8] = b"13456789abcdefghijkmnopqrstuwxyz";
+
+    let mut rand_bytes = vec![0u8; len];
+    rng.fill(&mut rand_bytes)
+        .expect("secure random number generator failed");
+
     String::from_utf8(
-        (0..len)
-            .map(|_| CHARSET[random::<usize>() % CHARSET.len()])
+        rand_bytes
+            .into_iter()
+            .map(|v| CHARSET[v as usize % CHARSET.len()])
             .collect(),
     )
     .expect("failed to build one-time pad")
@@ -166,7 +175,7 @@ pub fn random_zbase32(len: usize) -> String {
 ///
 /// Searches the provided JWK Key Set Value for the key matching the given
 /// id. Returns a usable public key if exactly one key is found.
-pub fn jwk_key_set_find(key_set: &[ProviderKey], kid: &str) -> Result<PKey<Public>, ()> {
+pub fn jwk_key_set_find(key_set: &[ProviderKey], kid: &str) -> Result<RsaPublicKey, ()> {
     let matching: Vec<&ProviderKey> = key_set
         .iter()
         .filter(|key| key.use_ == "sig" && key.kid == kid)
@@ -179,10 +188,9 @@ pub fn jwk_key_set_find(key_set: &[ProviderKey], kid: &str) -> Result<PKey<Publi
 
     // Then, use the data to build a public key object for verification.
     let key = matching.first().expect("expected one key");
-    let n = base64url_decode(&key.n).and_then(|data| BigNum::from_slice(&data).map_err(|_| ()))?;
-    let e = base64url_decode(&key.e).and_then(|data| BigNum::from_slice(&data).map_err(|_| ()))?;
-    let rsa = Rsa::from_public_components(n, e).map_err(|_| ())?;
-    Ok(PKey::from_rsa(rsa).map_err(|_| ())?)
+    let n = base64url_decode(&key.n).map_err(|_| ())?;
+    let e = base64url_decode(&key.e).map_err(|_| ())?;
+    Ok(RsaPublicKey { n, e })
 }
 
 /// Verify a JWS signature, returning the payload as Value if successful.
@@ -203,18 +211,16 @@ pub fn verify_jws(jws: &str, key_set: &[ProviderKey]) -> Result<json::Value, ()>
 
     // Verify the identity token's signature.
     let message_len = parts[0].len() + parts[1].len() + 1;
-    let mut verifier = Verifier::new(MessageDigest::sha256(), &pub_key).map_err(|_| ())?;
-    verifier
-        .update(jws[..message_len].as_bytes())
-        .and_then(|_| verifier.verify(&decoded[2]))
-        .map_err(|_| ())
-        .and_then(|ok| {
-            if ok {
-                Ok(json::from_slice(&decoded[1]).map_err(|_| ())?)
-            } else {
-                Err(())
-            }
-        })
+    pub_key
+        .verify(
+            &signature::RSA_PKCS1_2048_8192_SHA256,
+            jws[..message_len].as_bytes(),
+            &decoded[2],
+        )
+        .map_err(|_| ())?;
+
+    // Return the payload.
+    Ok(json::from_slice(&decoded[1]).map_err(|_| ())?)
 }
 
 /// Helper method to create a JWT for a given email address and audience.
@@ -244,7 +250,7 @@ pub fn create_jwt(
         "nonce": nonce,
     });
     let key = app.keys.last().expect("unable to locate signing key");
-    key.sign_jws(&payload)
+    key.sign_jws(&payload, &app.rng)
 }
 
 #[inline]

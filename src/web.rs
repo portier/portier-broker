@@ -15,7 +15,6 @@ use hyper::server::conn::AddrStream;
 use hyper::service::Service as HyperService;
 use hyper::Body;
 use log::info;
-use mustache;
 use serde_derive::{Deserialize, Serialize};
 use serde_json as json;
 use std::{
@@ -129,7 +128,7 @@ impl Context {
             .return_params
             .as_ref()
             .expect("start_session called without return parameters");
-        self.session_id = crypto::session_id(email_addr, client_id);
+        self.session_id = crypto::session_id(email_addr, client_id, &self.app.rng);
         self.session_data = Some(SessionData {
             return_params: return_params.clone(),
             email: email.to_owned(),
@@ -289,7 +288,7 @@ impl HyperService<Request> for Service {
 /// The large match-statement below handles all these scenario's properly, and
 /// sets proper response codes for each category.
 fn handle_error(ctx: &Context, err: BrokerError) -> Response {
-    let reference = err.log();
+    let reference = err.log(Some(&ctx.app.rng));
 
     // Check if we can redirect to the RP. We must have return parameters, and the RP must not have
     // opted out from receiving errors in the redirect response.

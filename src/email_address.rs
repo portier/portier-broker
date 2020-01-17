@@ -1,4 +1,3 @@
-use idna;
 use matches::matches;
 use serde::{Deserialize, Deserializer};
 use serde::{Serialize, Serializer};

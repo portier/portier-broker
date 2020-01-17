@@ -4,9 +4,9 @@ use crate::store;
 use crate::store_limits::Ratelimit;
 use crate::webfinger::{Link, LinkDef, Relation};
 use gettext::Catalog;
-use hyper;
 use hyper_tls::HttpsConnector;
-use mustache;
+use log::warn;
+use ring::rand::{SecureRandom, SystemRandom};
 use serde_derive::Deserialize;
 use std::{
     collections::HashMap,
@@ -17,7 +17,6 @@ use std::{
     io::{Error as IoError, Read},
     sync::Arc,
 };
-use toml;
 
 /// The type of HTTP client we use, with TLS enabled.
 pub type HttpClient = hyper::Client<HttpsConnector<hyper::client::HttpConnector>>;
@@ -174,6 +173,7 @@ pub struct Config {
     pub google: Option<GoogleConfig>,
     pub templates: Templates,
     pub i18n: I18n,
+    pub rng: SystemRandom,
 }
 
 pub struct ConfigBuilder {
@@ -429,16 +429,43 @@ impl ConfigBuilder {
             ));
         }
 
+        // Create the secure random number generate.
+        // Per SystemRandom docs, call `fill` once here to prepare the generator.
+        let rng = SystemRandom::new();
+        let mut dummy = [0u8; 16];
+        rng.fill(&mut dummy)
+            .expect("secure random number generator failed to initialize");
+
         // Child structs
         let mut keys: Vec<crypto::NamedKey> = self
             .keyfiles
             .iter()
-            .filter_map(|path| crypto::NamedKey::from_file(path).ok())
+            .filter_map(|path| match crypto::NamedKey::from_pem_file(path) {
+                Ok(keys) => {
+                    if keys.is_empty() {
+                        warn!("No key pairs found in: {}", path);
+                        None
+                    } else {
+                        Some(keys)
+                    }
+                }
+                Err(_) => {
+                    warn!("Could not parse key pair in: {}", path);
+                    None
+                }
+            })
+            .flatten()
             .collect();
 
         if let Some(keytext) = self.keytext {
-            if let Ok(pkey) = crypto::NamedKey::from_pem_str(&keytext) {
-                keys.push(pkey)
+            if let Ok(mut env_keys) = crypto::NamedKey::from_pem(&mut keytext.as_bytes()) {
+                if env_keys.is_empty() {
+                    warn!("No key pairs found in environment");
+                } else {
+                    keys.append(&mut env_keys);
+                }
+            } else {
+                warn!("Could not parse key pair from environment");
             }
         }
 
@@ -507,6 +534,7 @@ impl ConfigBuilder {
             google: self.google,
             templates: Templates::default(),
             i18n: I18n::default(),
+            rng,
         })
     }
 }

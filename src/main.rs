@@ -8,6 +8,7 @@ mod email_address;
 mod error;
 mod handlers;
 mod http_ext;
+mod pemfile;
 mod router;
 mod serde_helpers;
 mod store;
