@@ -1,10 +1,5 @@
 FROM clux/muslrust:stable as builder
 
-# Install gettext, needed to build translations
-RUN set -x \
- && apt-get -y update \
- && apt-get -y install gettext
-
 # Build the broker
 COPY . /src
 RUN set -x \

@@ -2,7 +2,6 @@
 name = "portier_broker"
 version = "0.2.0"
 authors = ["Dirkjan Ochtman <dirkjan@ochtman.nl>"]
-build = "build.rs"
 description = "Reference implementation of the Portier broker protocol"
 homepage = "http://portier.io"
 repository = "https://github.com/portier/portier-broker"
@@ -17,9 +16,6 @@ insecure = []
 [[bin]]
 name = "portier-broker"
 path = "src/main.rs"
-
-[build-dependencies]
-glob = "0.3.0"
 
 [dependencies]
 accept-language = "2.0.0"
