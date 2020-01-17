@@ -72,6 +72,7 @@ async fn main() {
     let app = ConfigRc::new(
         builder
             .done()
+            .await
             .unwrap_or_else(|err| panic!(format!("failed to build configuration: {}", err))),
     );
 

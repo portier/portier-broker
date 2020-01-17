@@ -154,7 +154,9 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
         &ctx.app.store,
         email_addr.as_str(),
         &ctx.app.limit_per_email,
-    )? {
+    )
+    .await?
+    {
         return Err(BrokerError::RateLimited);
     }
 

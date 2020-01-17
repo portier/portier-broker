@@ -142,23 +142,26 @@ impl Context {
     ///
     /// Will return `false` if the session was not started, which will also happen if another
     /// provider has already claimed the session.
-    pub fn save_session(&mut self, bridge_data: BridgeData) -> BrokerResult<bool> {
+    pub async fn save_session(&mut self, bridge_data: BridgeData) -> BrokerResult<bool> {
         let data = match self.session_data.take() {
             Some(data) => data,
             None => return Ok(false),
         };
         let data = json::to_string(&Session { data, bridge_data })
             .map_err(|e| BrokerError::Internal(format!("could not serialize session: {}", e)))?;
-        self.app.store.store_session(&self.session_id, &data)?;
+        self.app
+            .store
+            .store_session(&self.session_id, &data)
+            .await?;
         Ok(true)
     }
 
     /// Load a session from storage.
-    pub fn load_session(&mut self, id: &str) -> BrokerResult<BridgeData> {
+    pub async fn load_session(&mut self, id: &str) -> BrokerResult<BridgeData> {
         assert!(self.session_id.is_empty());
         assert!(self.session_data.is_none());
         assert!(self.return_params.is_none());
-        let data = self.app.store.get_session(id)?;
+        let data = self.app.store.get_session(id).await?;
         let Session { data, bridge_data } = json::from_str(&data)
             .map_err(|e| BrokerError::Internal(format!("could not deserialize session: {}", e)))?;
         self.return_params = Some(data.return_params.clone());

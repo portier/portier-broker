@@ -420,7 +420,7 @@ impl ConfigBuilder {
         self
     }
 
-    pub fn done(self) -> Result<Config, ConfigError> {
+    pub async fn done(self) -> Result<Config, ConfigError> {
         // Additional validations
         if self.smtp_username.is_none() != self.smtp_password.is_none() {
             return Err(ConfigError::Custom(
@@ -443,10 +443,11 @@ impl ConfigBuilder {
         }
 
         let store = store::Store::new(
-            &self.redis_url.expect("no redis url configured"),
+            self.redis_url.expect("no redis url configured"),
             self.redis_session_ttl as usize,
             self.redis_cache_ttl as usize,
         )
+        .await
         .expect("unable to instantiate new redis store");
 
         let http_connector = HttpsConnector::new();

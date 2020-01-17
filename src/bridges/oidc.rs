@@ -154,7 +154,7 @@ pub async fn auth(ctx: &mut Context, email_addr: &EmailAddress, link: &Link) -> 
 
     // Save session data, committing the session to this provider.
     // If this fails, another auth mechanism has already claimed the session.
-    if !ctx.save_session(BridgeData::Oidc(bridge_data))? {
+    if !ctx.save_session(BridgeData::Oidc(bridge_data)).await? {
         return Err(BrokerError::ProviderCancelled);
     }
 
@@ -173,7 +173,7 @@ pub async fn callback(ctx: &mut Context) -> HandlerResult {
         let mut params = ctx.form_params();
 
         let session_id = try_get_provider_param!(params, "state");
-        let bridge_data = match ctx.load_session(&session_id)? {
+        let bridge_data = match ctx.load_session(&session_id).await? {
             BridgeData::Oidc(bridge_data) => bridge_data,
             _ => return Err(BrokerError::ProviderInput("invalid session".to_owned())),
         };

@@ -82,7 +82,10 @@ pub async fn auth(ctx: &mut Context, email_addr: &EmailAddress) -> HandlerResult
 
     // Store the code in the session for use in the verify handler. We should never fail to claim
     // the session, because we only get here after all other options have failed.
-    if !ctx.save_session(BridgeData::Email(EmailBridgeData { code }))? {
+    if !ctx
+        .save_session(BridgeData::Email(EmailBridgeData { code }))
+        .await?
+    {
         return Err(BrokerError::Internal(
             "email fallback failed to claim session".to_owned(),
         ));
@@ -126,7 +129,7 @@ pub async fn confirmation(ctx: &mut Context) -> HandlerResult {
     let mut params = ctx.form_params();
 
     let session_id = try_get_provider_param!(params, "session");
-    let bridge_data = match ctx.load_session(&session_id)? {
+    let bridge_data = match ctx.load_session(&session_id).await? {
         BridgeData::Email(bridge_data) => bridge_data,
         _ => return Err(BrokerError::ProviderInput("invalid session".to_owned())),
     };
