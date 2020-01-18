@@ -1,0 +1,98 @@
+name: Release
+
+on:
+  release:
+    types: [created]
+
+env:
+  package_resources: lang res tmpl
+
+jobs:
+  release:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        default: true
+
+    - name: Build
+      run: cargo build --release
+
+    - name: Package
+      id: package
+      run: |
+        broker_executable="./target/release/portier-broker"
+        tag_name="${{ github.event.release.tag_name }}"
+        basename="Portier-Broker-$tag_name-$(uname -s)-$(uname -m)"
+        filename="$basename.tgz"
+
+        mkdir $basename
+        mv $broker_executable $basename/
+        mv $package_resources $basename/
+        tar -czf $filename $basename
+
+        echo "##[set-output name=filename]$filename"
+        echo "##[set-output name=content_type]application/gzip"
+
+    - name: Upload
+      uses: actions/upload-release-asset@v1.0.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: ./${{ steps.package.outputs.filename }}
+        asset_name: ${{ steps.package.outputs.filename }}
+        asset_content_type: ${{ steps.package.outputs.content_type }}
+
+  release-windows:
+    runs-on: windows-latest
+    steps:
+
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        default: true
+
+    - name: Build
+      run: cargo build --release
+
+    - name: Package
+      id: package
+      run: |
+        $broker_executable="./target/release/portier-broker.exe"
+        $tag_name="${{ github.event.release.tag_name }}"
+        $basename="Portier-Broker-$tag_name-Windows-x86_64"
+        $filename="$basename.zip"
+
+        mkdir $basename
+        mv $broker_executable $basename/
+        mv $env:package_resources.split() $basename/
+        7z a -tzip $filename $basename
+
+        echo "##[set-output name=filename]$filename"
+        echo "##[set-output name=content_type]application/zip"
+
+    - name: Upload
+      uses: actions/upload-release-asset@v1.0.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: ./${{ steps.package.outputs.filename }}
+        asset_name: ${{ steps.package.outputs.filename }}
+        asset_content_type: ${{ steps.package.outputs.content_type }}
