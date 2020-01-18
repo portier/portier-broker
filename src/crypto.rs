@@ -6,7 +6,7 @@ use ring::{
     error::{KeyRejected, Unspecified},
     io::Positive,
     rand::SecureRandom,
-    signature::{self, Ed25519KeyPair, KeyPair, RsaKeyPair},
+    signature::{self, Ed25519KeyPair, KeyPair, RsaKeyPair, UnparsedPublicKey},
 };
 use serde_derive::{Deserialize, Serialize};
 use serde_json as json;
@@ -137,6 +137,25 @@ impl SupportedKeyPair {
                 ctx.update(b".");
                 ctx.update(n.big_endian_without_leading_zero());
                 base64url_encode(&ctx.finish())
+            }
+        }
+    }
+}
+
+/// The types of public keys we support.
+pub enum SupportedPublicKey {
+    Ed25519(UnparsedPublicKey<Vec<u8>>),
+    Rsa(RsaPublicKey),
+}
+
+impl SupportedPublicKey {
+    /// Verify a message signature.
+    pub fn verify(&self, message: &[u8], signature: &[u8]) -> Result<(), Unspecified> {
+        use SupportedPublicKey::*;
+        match self {
+            Ed25519(ref inner) => inner.verify(message, signature),
+            Rsa(ref inner) => {
+                inner.verify(&signature::RSA_PKCS1_2048_8192_SHA256, message, signature)
             }
         }
     }
@@ -293,7 +312,7 @@ pub fn random_zbase32(len: usize, rng: &dyn SecureRandom) -> String {
 ///
 /// Searches the provided JWK Key Set Value for the key matching the given
 /// id. Returns a usable public key if exactly one key is found.
-pub fn jwk_key_set_find(key_set: &[ProviderKey], kid: &str) -> Result<RsaPublicKey, ()> {
+pub fn jwk_key_set_find(key_set: &[ProviderKey], kid: &str) -> Result<SupportedPublicKey, ()> {
     let matching: Vec<&ProviderKey> = key_set
         .iter()
         .filter(|key| key.use_ == "sig" && key.kid == kid)
@@ -303,16 +322,31 @@ pub fn jwk_key_set_find(key_set: &[ProviderKey], kid: &str) -> Result<RsaPublicK
     if matching.len() != 1 {
         return Err(());
     }
+    let key = matching.first().expect("expected one key");
 
     // Then, use the data to build a public key object for verification.
-    let key = matching.first().expect("expected one key");
-    let n = base64url_decode(&key.n).map_err(|_| ())?;
-    let e = base64url_decode(&key.e).map_err(|_| ())?;
-    Ok(RsaPublicKey { n, e })
+    match (key.alg.as_str(), key.crv.as_str()) {
+        ("EdDSA", "Ed25519") => {
+            let x = base64url_decode(&key.x).map_err(|_| ())?;
+            let key = UnparsedPublicKey::new(&signature::ED25519, x);
+            Ok(SupportedPublicKey::Ed25519(key))
+        }
+        ("RS256", _) => {
+            let n = base64url_decode(&key.n).map_err(|_| ())?;
+            let e = base64url_decode(&key.e).map_err(|_| ())?;
+            let key = RsaPublicKey { n, e };
+            Ok(SupportedPublicKey::Rsa(key))
+        }
+        _ => Err(()),
+    }
 }
 
 /// Verify a JWS signature, returning the payload as Value if successful.
-pub fn verify_jws(jws: &str, key_set: &[ProviderKey]) -> Result<json::Value, ()> {
+pub fn verify_jws(
+    jws: &str,
+    key_set: &[ProviderKey],
+    signing_alg: SigningAlgorithm,
+) -> Result<json::Value, ()> {
     // Extract the header from the JWT structure. Determine what key was used
     // to sign the token, so we can then verify the signature.
     let parts: Vec<&str> = jws.split('.').collect();
@@ -327,14 +361,17 @@ pub fn verify_jws(jws: &str, key_set: &[ProviderKey]) -> Result<json::Value, ()>
     let kid = jwt_header.get("kid").and_then(|v| v.as_str()).ok_or(())?;
     let pub_key = jwk_key_set_find(key_set, kid)?;
 
+    // Make sure the key matches the algorithm originally selected.
+    match (signing_alg, &pub_key) {
+        (SigningAlgorithm::EdDsa, &SupportedPublicKey::Ed25519(_))
+        | (SigningAlgorithm::Rs256, &SupportedPublicKey::Rsa(_)) => {}
+        _ => return Err(()),
+    }
+
     // Verify the identity token's signature.
     let message_len = parts[0].len() + parts[1].len() + 1;
     pub_key
-        .verify(
-            &signature::RSA_PKCS1_2048_8192_SHA256,
-            jws[..message_len].as_bytes(),
-            &decoded[2],
-        )
+        .verify(jws[..message_len].as_bytes(), &decoded[2])
         .map_err(|_| ())?;
 
     // Return the payload.
