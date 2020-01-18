@@ -1,0 +1,70 @@
+name: Build
+
+on:
+  push:
+    branches: '**'
+
+jobs:
+  checked-build:
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        components: rustfmt, clippy
+        default: true
+
+    - name: Build
+      run: cargo build
+
+    - name: Test
+      run: cargo test
+
+    - name: Clippy
+      uses: actions-rs/clippy-check@v1
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Rustfmt
+      run: cargo fmt -- --check
+
+    - name: Install gettext
+      run: sudo apt-get install gettext
+
+    - name: Check translations
+      run: |
+        ./msgfmt.sh
+        if [ -n "$(git status -s)" ]; then
+          echo "If this fails, the lang/*.mo files are out of date."
+          echo "Run ./msgfmt.sh to fix this."
+          exit 1
+        fi
+
+  build:
+    strategy:
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        default: true
+
+    - name: Build
+      run: cargo build
+
+    - name: Test
+      run: cargo test
