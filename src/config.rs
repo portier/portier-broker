@@ -1,5 +1,5 @@
 use crate::bridges::oidc::GOOGLE_IDP_ORIGIN;
-use crate::crypto;
+use crate::crypto::{self, SigningAlgorithm};
 use crate::store;
 use crate::store_limits::Ratelimit;
 use crate::webfinger::{Link, LinkDef, Relation};
@@ -160,7 +160,8 @@ pub struct Config {
     pub discovery_ttl: u64,
     pub keys_ttl: u64,
     pub token_ttl: u16,
-    pub keys: Vec<crypto::NamedKey>,
+    pub keys: Vec<crypto::NamedKeyPair>,
+    pub signing_algs: Vec<SigningAlgorithm>,
     pub store: store::Store,
     pub http_client: HttpClient,
     pub from_name: String,
@@ -437,10 +438,10 @@ impl ConfigBuilder {
             .expect("secure random number generator failed to initialize");
 
         // Child structs
-        let mut keys: Vec<crypto::NamedKey> = self
+        let mut keys: Vec<crypto::NamedKeyPair> = self
             .keyfiles
             .iter()
-            .filter_map(|path| match crypto::NamedKey::from_pem_file(path) {
+            .filter_map(|path| match crypto::NamedKeyPair::from_pem_file(path) {
                 Ok(keys) => {
                     if keys.is_empty() {
                         warn!("No key pairs found in: {}", path);
@@ -458,7 +459,7 @@ impl ConfigBuilder {
             .collect();
 
         if let Some(keytext) = self.keytext {
-            if let Ok(mut env_keys) = crypto::NamedKey::from_pem(&mut keytext.as_bytes()) {
+            if let Ok(mut env_keys) = crypto::NamedKeyPair::from_pem(&mut keytext.as_bytes()) {
                 if env_keys.is_empty() {
                     warn!("No key pairs found in environment");
                 } else {
@@ -467,6 +468,15 @@ impl ConfigBuilder {
             } else {
                 warn!("Could not parse key pair from environment");
             }
+        }
+
+        // We prefer EdDSA, but list it last, in case a client treats the order as preference.
+        let mut signing_algs = vec![];
+        if crypto::find_key_pair(&keys, SigningAlgorithm::Rs256).is_ok() {
+            signing_algs.push(SigningAlgorithm::Rs256);
+        }
+        if crypto::find_key_pair(&keys, SigningAlgorithm::EdDsa).is_ok() {
+            signing_algs.push(SigningAlgorithm::EdDsa);
         }
 
         let store = store::Store::new(
@@ -520,6 +530,7 @@ impl ConfigBuilder {
             keys_ttl: self.keys_ttl,
             token_ttl: self.token_ttl,
             keys,
+            signing_algs,
             store,
             http_client,
             from_name: self.from_name,

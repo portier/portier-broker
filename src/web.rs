@@ -1,6 +1,6 @@
 use crate::bridges::BridgeData;
 use crate::config::ConfigRc;
-use crate::crypto;
+use crate::crypto::{self, SigningAlgorithm};
 use crate::email_address::EmailAddress;
 use crate::error::{BrokerError, BrokerResult};
 use crate::http_ext::ResponseExt;
@@ -70,6 +70,7 @@ pub struct SessionData {
     #[serde(deserialize_with = "EmailAddress::deserialize_trusted")]
     pub email_addr: EmailAddress,
     pub nonce: String,
+    pub signing_alg: SigningAlgorithm,
 }
 
 /// Context for a request
@@ -121,6 +122,7 @@ impl Context {
         email: &str,
         email_addr: &EmailAddress,
         nonce: &str,
+        signing_alg: SigningAlgorithm,
     ) {
         assert!(self.session_id.is_empty());
         assert!(self.session_data.is_none());
@@ -134,6 +136,7 @@ impl Context {
             email: email.to_owned(),
             email_addr: email_addr.clone(),
             nonce: nonce.to_owned(),
+            signing_alg,
         });
     }
 

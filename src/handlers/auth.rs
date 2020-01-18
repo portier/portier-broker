@@ -26,7 +26,9 @@ pub async fn discovery(ctx: &mut Context) -> HandlerResult {
         "response_modes_supported": vec!["form_post", "fragment"],
         "grant_types_supported": vec!["implicit"],
         "subject_types_supported": vec!["public"],
-        "id_token_signing_alg_values_supported": vec!["RS256"],
+        "id_token_signing_alg_values_supported": &ctx.app.signing_algs,
+        // NOTE: This field is non-standard.
+        "accepts_id_token_signing_alg_query_param": true,
     });
     Ok(json_response(&obj, ctx.app.discovery_ttl))
 }
@@ -110,6 +112,24 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
         ));
     }
 
+    // NOTE: This query parameter is non-standard.
+    let signing_alg = try_get_input_param!(params, "id_token_signing_alg", "RS256".to_owned());
+    let signing_alg = signing_alg
+        .parse()
+        .ok()
+        .filter(|alg| ctx.app.signing_algs.contains(alg))
+        .ok_or_else(|| {
+            BrokerError::Input(format!(
+                "unsupported id_token_signing_alg, must be one of: {}",
+                ctx.app
+                    .signing_algs
+                    .iter()
+                    .map(|alg| alg.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ))
+        })?;
+
     let login_hint = try_get_input_param!(params, "login_hint", "".to_string());
     if login_hint == "" {
         let display_origin = redirect_uri_.origin().unicode_serialization();
@@ -160,7 +180,7 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
     }
 
     // Create the session with common data, but do not yet save it.
-    ctx.start_session(&client_id, &login_hint, &email_addr, &nonce);
+    ctx.start_session(&client_id, &login_hint, &email_addr, &nonce, signing_alg);
 
     // Discover the authentication endpoints based on the email domain.
     let discovery_future = async {

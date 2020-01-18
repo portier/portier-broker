@@ -1,6 +1,7 @@
 // This file is based on code from rustls 0.16.0. (Licensed Apache 2.0, MIT, ISC)
 
-use ring::signature::RsaKeyPair;
+use crate::crypto::SupportedKeyPair;
+use ring::signature::{Ed25519KeyPair, RsaKeyPair};
 use std::io::BufRead;
 
 const RSA_START_MARK: &str = "-----BEGIN RSA PRIVATE KEY-----";
@@ -14,8 +15,8 @@ enum State {
     InRsa,
 }
 
-/// Parse all key pairs from a PEM file.
-pub fn parse_key_pairs(rd: &mut dyn BufRead) -> Result<Vec<RsaKeyPair>, ()> {
+/// Parse all supported key pairs from a PEM file.
+pub fn parse_key_pairs(rd: &mut dyn BufRead) -> Result<Vec<SupportedKeyPair>, ()> {
     let mut key_pairs = Vec::new();
     let mut b64buf = String::new();
     let mut state = State::Scan;
@@ -43,7 +44,10 @@ pub fn parse_key_pairs(rd: &mut dyn BufRead) -> Result<Vec<RsaKeyPair>, ()> {
                 if line.starts_with(PKCS8_END_MARK) {
                     state = State::Scan;
                     let der = base64::decode(&b64buf).map_err(|_| ())?;
-                    let key_pair = RsaKeyPair::from_pkcs8(&der).map_err(|_| ())?;
+                    let key_pair = Ed25519KeyPair::from_pkcs8(&der)
+                        .map(SupportedKeyPair::Ed25519)
+                        .or_else(|_| RsaKeyPair::from_pkcs8(&der).map(SupportedKeyPair::Rsa))
+                        .map_err(|_| ())?;
                     key_pairs.push(key_pair);
                 } else {
                     b64buf.push_str(line.trim());
@@ -53,7 +57,9 @@ pub fn parse_key_pairs(rd: &mut dyn BufRead) -> Result<Vec<RsaKeyPair>, ()> {
                 if line.starts_with(RSA_END_MARK) {
                     state = State::Scan;
                     let der = base64::decode(&b64buf).map_err(|_| ())?;
-                    let key_pair = RsaKeyPair::from_der(&der).map_err(|_| ())?;
+                    let key_pair = RsaKeyPair::from_der(&der)
+                        .map(SupportedKeyPair::Rsa)
+                        .map_err(|_| ())?;
                     key_pairs.push(key_pair);
                 } else {
                     b64buf.push_str(line.trim());

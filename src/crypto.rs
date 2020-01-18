@@ -6,10 +6,12 @@ use ring::{
     error::{KeyRejected, Unspecified},
     io::Positive,
     rand::SecureRandom,
-    signature::{self, KeyPair, RsaKeyPair},
+    signature::{self, Ed25519KeyPair, KeyPair, RsaKeyPair},
 };
+use serde_derive::{Deserialize, Serialize};
 use serde_json as json;
 use serde_json::json;
+use std::fmt;
 use std::fs::File;
 use std::io::Error as IoError;
 use std::iter::Iterator;
@@ -24,6 +26,7 @@ pub enum CryptoError {
     Custom(&'static str),
     Io(IoError),
     KeyRejected(KeyRejected),
+    UnsupportedAlgorithm,
     Unspecified,
 }
 
@@ -51,45 +54,135 @@ impl From<Unspecified> for CryptoError {
     }
 }
 
-/// A named key pair, for use in JWS signing.
-pub struct NamedKey {
-    id: String,
-    key_pair: RsaKeyPair,
+/// Token signing algorithms we support.
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SigningAlgorithm {
+    #[serde(rename = "EdDSA")]
+    EdDsa,
+    #[serde(rename = "RS256")]
+    Rs256,
 }
 
-impl NamedKey {
-    /// Creates a NamedKey by reading a `file` path and generating an `id`.
-    pub fn from_pem_file(filename: impl AsRef<Path>) -> Result<Vec<NamedKey>, ()> {
+impl SigningAlgorithm {
+    /// Get the JWA string representation.
+    pub fn as_str(self) -> &'static str {
+        use SigningAlgorithm::*;
+        match self {
+            EdDsa => "EdDSA",
+            Rs256 => "RS256",
+        }
+    }
+}
+
+impl fmt::Display for SigningAlgorithm {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl std::str::FromStr for SigningAlgorithm {
+    type Err = &'static str;
+    fn from_str(s: &str) -> Result<SigningAlgorithm, &'static str> {
+        use SigningAlgorithm::*;
+        match s {
+            "EdDSA" => Ok(EdDsa),
+            "RS256" => Ok(Rs256),
+            _ => Err("unsupported value"),
+        }
+    }
+}
+
+/// The types of key pairs we support.
+pub enum SupportedKeyPair {
+    Ed25519(Ed25519KeyPair),
+    Rsa(RsaKeyPair),
+}
+
+impl SupportedKeyPair {
+    /// Whether this is an Ed25519 key pair.
+    pub fn is_ed25519(&self) -> bool {
+        match self {
+            SupportedKeyPair::Ed25519(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Whether this is an RSA key pair.
+    pub fn is_rsa(&self) -> bool {
+        match self {
+            SupportedKeyPair::Rsa(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Generate an ID for the key by hashing the public components.
+    ///
+    /// Note that this hash is not a standard format, but that's okay, because it's only used as
+    /// a simple identifier in JWKs.
+    pub fn generate_id(&self) -> String {
+        use SupportedKeyPair::*;
+        match self {
+            Ed25519(inner) => {
+                let mut ctx = digest::Context::new(&digest::SHA256);
+                ctx.update(b"ed25519.");
+                ctx.update(inner.public_key().as_ref());
+                base64url_encode(&ctx.finish())
+            }
+            Rsa(inner) => {
+                let public = inner.public_key();
+                let (n, e) = (public.modulus(), public.exponent());
+                let mut ctx = digest::Context::new(&digest::SHA256);
+                ctx.update(b"rsa.");
+                ctx.update(e.big_endian_without_leading_zero());
+                ctx.update(b".");
+                ctx.update(n.big_endian_without_leading_zero());
+                base64url_encode(&ctx.finish())
+            }
+        }
+    }
+}
+
+/// A named key pair, for use in JWS signing.
+pub struct NamedKeyPair {
+    pub id: String,
+    pub key_pair: SupportedKeyPair,
+}
+
+impl NamedKeyPair {
+    /// Read key pairs from a PEM file.
+    pub fn from_pem_file(filename: impl AsRef<Path>) -> Result<Vec<NamedKeyPair>, ()> {
         let file = File::open(filename).map_err(|_| ())?;
-        NamedKey::from_pem(&mut std::io::BufReader::new(file))
+        NamedKeyPair::from_pem(&mut std::io::BufReader::new(file))
     }
 
-    /// Creates a NamedKey from a PEM-encoded str.
-    pub fn from_pem(pem: &mut dyn std::io::BufRead) -> Result<Vec<NamedKey>, ()> {
+    /// Read key pairs from PEM data.
+    pub fn from_pem(pem: &mut dyn std::io::BufRead) -> Result<Vec<NamedKeyPair>, ()> {
         let key_pairs = crate::pemfile::parse_key_pairs(pem).map_err(|_| ())?;
-        Ok(key_pairs.into_iter().map(NamedKey::from_key_pair).collect())
+        Ok(key_pairs
+            .into_iter()
+            .map(NamedKeyPair::from_key_pair)
+            .collect())
     }
 
-    /// Creates a NamedKey from an RsaKeyPair.
-    pub fn from_key_pair(key_pair: RsaKeyPair) -> NamedKey {
-        let id = {
-            let public = key_pair.public_key();
-            let (n, e) = (public.modulus(), public.exponent());
-            let mut ctx = digest::Context::new(&digest::SHA256);
-            ctx.update(e.big_endian_without_leading_zero());
-            ctx.update(b".");
-            ctx.update(n.big_endian_without_leading_zero());
-            base64url_encode(&ctx.finish())
-        };
-        NamedKey { id, key_pair }
+    /// Creates a NamedKeyPair from an key pair object.
+    pub fn from_key_pair(key_pair: SupportedKeyPair) -> NamedKeyPair {
+        let id = key_pair.generate_id();
+        NamedKeyPair { id, key_pair }
     }
 
     /// Create a JSON Web Signature (JWS) for the given JSON structure.
     pub fn sign_jws(&self, payload: &json::Value, rng: &dyn SecureRandom) -> String {
-        let header = json!({
-            "kid": &self.id,
-            "alg": "RS256",
-        })
+        use SupportedKeyPair::*;
+        let header = match self.key_pair {
+            Ed25519(_) => json!({
+                "kid": &self.id,
+                "alg": "EdDSA",
+            }),
+            Rsa(_) => json!({
+                "kid": &self.id,
+                "alg": "RS256",
+            }),
+        }
         .to_string();
 
         let payload = payload.to_string();
@@ -98,13 +191,22 @@ impl NamedKey {
         input.push(b'.');
         input.extend(base64url_encode(&payload).into_bytes());
 
-        let mut sig = vec![0; self.key_pair.public_modulus_len()];
-        self.key_pair
-            .sign(&signature::RSA_PKCS1_SHA256, rng, &input, &mut sig)
-            .expect("failed to sign jwt");
+        let sig = match self.key_pair {
+            Ed25519(ref inner) => {
+                let sig = inner.sign(&input);
+                base64url_encode(&sig)
+            }
+            Rsa(ref inner) => {
+                let mut sig = vec![0; inner.public_modulus_len()];
+                inner
+                    .sign(&signature::RSA_PKCS1_SHA256, rng, &input, &mut sig)
+                    .expect("failed to sign jwt");
+                base64url_encode(&sig)
+            }
+        };
 
         input.push(b'.');
-        input.extend(base64url_encode(&sig).into_bytes());
+        input.extend(sig.into_bytes());
         String::from_utf8(input).expect("unable to coerce jwt into string")
     }
 
@@ -114,16 +216,32 @@ impl NamedKey {
             base64url_encode(v.big_endian_without_leading_zero())
         }
 
-        let public = self.key_pair.public_key();
-        let (n, e) = (public.modulus(), public.exponent());
-        json!({
-            "kty": "RSA",
-            "alg": "RS256",
-            "use": "sig",
-            "kid": &self.id,
-            "n": json_big_num(n),
-            "e": json_big_num(e),
-        })
+        use SupportedKeyPair::*;
+        match self.key_pair {
+            Ed25519(ref inner) => {
+                let public = inner.public_key();
+                json!({
+                    "kty": "OKP",
+                    "alg": "EdDSA",
+                    "crv": "Ed25519",
+                    "use": "sig",
+                    "kid": &self.id,
+                    "x": base64url_encode(&public),
+                })
+            }
+            Rsa(ref inner) => {
+                let public = inner.public_key();
+                let (n, e) = (public.modulus(), public.exponent());
+                json!({
+                    "kty": "RSA",
+                    "alg": "RS256",
+                    "use": "sig",
+                    "kid": &self.id,
+                    "n": json_big_num(n),
+                    "e": json_big_num(e),
+                })
+            }
+        }
     }
 }
 
@@ -223,6 +341,19 @@ pub fn verify_jws(jws: &str, key_set: &[ProviderKey]) -> Result<json::Value, ()>
     Ok(json::from_slice(&decoded[1]).map_err(|_| ())?)
 }
 
+/// Find the key pair for the selected signing algorithm.
+pub fn find_key_pair(
+    keys: &[NamedKeyPair],
+    signing_alg: SigningAlgorithm,
+) -> Result<&NamedKeyPair, CryptoError> {
+    use SigningAlgorithm::*;
+    match signing_alg {
+        EdDsa => keys.iter().rfind(|k| k.key_pair.is_ed25519()),
+        Rs256 => keys.iter().rfind(|k| k.key_pair.is_rsa()),
+    }
+    .ok_or(CryptoError::UnsupportedAlgorithm)
+}
+
 /// Helper method to create a JWT for a given email address and audience.
 ///
 /// Builds the JSON payload, then signs it using the last key provided in
@@ -233,7 +364,9 @@ pub fn create_jwt(
     email_addr: &EmailAddress,
     aud: &str,
     nonce: &str,
-) -> String {
+    signing_alg: SigningAlgorithm,
+) -> Result<String, CryptoError> {
+    let key_pair = find_key_pair(&app.keys, signing_alg)?;
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -249,8 +382,7 @@ pub fn create_jwt(
         "sub": email_addr.as_str(),
         "nonce": nonce,
     });
-    let key = app.keys.last().expect("unable to locate signing key");
-    key.sign_jws(&payload, &app.rng)
+    Ok(key_pair.sign_jws(&payload, &app.rng))
 }
 
 #[inline]
