@@ -15,7 +15,6 @@ use hyper::server::conn::AddrStream;
 use hyper::service::Service as HyperService;
 use hyper::Body;
 use log::info;
-use mustache;
 use serde_derive::{Deserialize, Serialize};
 use serde_json as json;
 use std::{
@@ -129,7 +128,7 @@ impl Context {
             .return_params
             .as_ref()
             .expect("start_session called without return parameters");
-        self.session_id = crypto::session_id(email_addr, client_id);
+        self.session_id = crypto::session_id(email_addr, client_id, &self.app.rng);
         self.session_data = Some(SessionData {
             return_params: return_params.clone(),
             email: email.to_owned(),
@@ -142,23 +141,26 @@ impl Context {
     ///
     /// Will return `false` if the session was not started, which will also happen if another
     /// provider has already claimed the session.
-    pub fn save_session(&mut self, bridge_data: BridgeData) -> BrokerResult<bool> {
+    pub async fn save_session(&mut self, bridge_data: BridgeData) -> BrokerResult<bool> {
         let data = match self.session_data.take() {
             Some(data) => data,
             None => return Ok(false),
         };
         let data = json::to_string(&Session { data, bridge_data })
             .map_err(|e| BrokerError::Internal(format!("could not serialize session: {}", e)))?;
-        self.app.store.store_session(&self.session_id, &data)?;
+        self.app
+            .store
+            .store_session(&self.session_id, &data)
+            .await?;
         Ok(true)
     }
 
     /// Load a session from storage.
-    pub fn load_session(&mut self, id: &str) -> BrokerResult<BridgeData> {
+    pub async fn load_session(&mut self, id: &str) -> BrokerResult<BridgeData> {
         assert!(self.session_id.is_empty());
         assert!(self.session_data.is_none());
         assert!(self.return_params.is_none());
-        let data = self.app.store.get_session(id)?;
+        let data = self.app.store.get_session(id).await?;
         let Session { data, bridge_data } = json::from_str(&data)
             .map_err(|e| BrokerError::Internal(format!("could not deserialize session: {}", e)))?;
         self.return_params = Some(data.return_params.clone());
@@ -286,7 +288,7 @@ impl HyperService<Request> for Service {
 /// The large match-statement below handles all these scenario's properly, and
 /// sets proper response codes for each category.
 fn handle_error(ctx: &Context, err: BrokerError) -> Response {
-    let reference = err.log();
+    let reference = err.log(Some(&ctx.app.rng));
 
     // Check if we can redirect to the RP. We must have return parameters, and the RP must not have
     // opted out from receiving errors in the redirect response.

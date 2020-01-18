@@ -17,7 +17,7 @@ pub async fn complete_auth(ctx: &mut Context) -> HandlerResult {
         .session_data
         .as_ref()
         .expect("complete_auth called without a session");
-    ctx.app.store.remove_session(&ctx.session_id)?;
+    ctx.app.store.remove_session(&ctx.session_id).await?;
     let aud = data
         .return_params
         .redirect_uri

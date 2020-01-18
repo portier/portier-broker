@@ -4,7 +4,7 @@ use crate::web::read_body;
 use headers::{CacheControl, HeaderMapExt};
 use http::StatusCode;
 use log::info;
-use redis::Commands;
+use redis::AsyncCommands;
 use serde::de::DeserializeOwned;
 use serde_json as json;
 use std::{cmp::max, fmt, str::from_utf8};
@@ -38,12 +38,13 @@ pub async fn fetch_json_url<T>(
 where
     T: 'static + DeserializeOwned,
 {
+    let mut store_client = app.store.client.clone();
+
     // Try to retrieve the result from cache.
     let key_str = key.to_string();
-    let data: Option<String> = app
-        .store
-        .client
+    let data: Option<String> = store_client
         .get(&key_str)
+        .await
         .map_err(|e| BrokerError::Internal(format!("cache lookup failed: {}", e)))?;
 
     if let Some(ref data) = data {
@@ -93,9 +94,9 @@ where
 
         // Cache the response for at least `expire_cache`, but honor longer `max-age`.
         let seconds = max(app.store.expire_cache, max_age as usize);
-        app.store
-            .client
+        store_client
             .set_ex::<_, _, ()>(&key_str, data, seconds)
+            .await
             .map_err(|e| BrokerError::Internal(format!("cache write failed: {}", e)))?;
 
         Ok(value)

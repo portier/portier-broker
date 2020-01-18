@@ -12,13 +12,17 @@ pub struct Ratelimit {
 }
 
 /// Increment and check a ratelimit for a specific email address.
-pub fn addr_limiter(store: &Store, addr: &str, limit: &Ratelimit) -> BrokerResult<bool> {
+pub async fn addr_limiter(store: &Store, addr: &str, limit: &Ratelimit) -> BrokerResult<bool> {
     let key = format!("ratelimit:addr:{}", addr.to_lowercase());
-    incr_and_test_limits(store, &key, limit)
+    incr_and_test_limits(store, &key, limit).await
 }
 
 /// Increment the given key, and test if the counter is within limits.
-fn incr_and_test_limits(store: &Store, key: &str, ratelimit: &Ratelimit) -> BrokerResult<bool> {
+async fn incr_and_test_limits(
+    store: &Store,
+    key: &str,
+    ratelimit: &Ratelimit,
+) -> BrokerResult<bool> {
     let script = Script::new(
         r"
         local count = redis.call('incr', KEYS[1])
@@ -30,9 +34,11 @@ fn incr_and_test_limits(store: &Store, key: &str, ratelimit: &Ratelimit) -> Brok
     );
 
     let count: usize = script
+        .prepare_invoke()
         .key(key)
         .arg(ratelimit.duration)
-        .invoke(&store.client)
+        .invoke_async(&mut store.client.clone())
+        .await
         .map_err(|e| BrokerError::Internal(format!("could not test rate limit: {}", e)))?;
 
     Ok(count <= ratelimit.count)
