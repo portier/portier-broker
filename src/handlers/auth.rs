@@ -136,7 +136,6 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
 
         let catalog = ctx.catalog();
         let data = mustache::MapBuilder::new()
-            // TODO: catalog/localization?
             .insert_str("display_origin", display_origin)
             .insert_str("title", catalog.gettext("Finish logging in to"))
             .insert_str(

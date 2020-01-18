@@ -77,7 +77,7 @@ async fn main() {
             .unwrap_or_else(|err| panic!(format!("failed to build configuration: {}", err))),
     );
 
-    // FIXME: Add unix socket support.
+    // TODO: Add unix socket support.
     let builder = match listenfd::ListenFd::from_env().take_tcp_listener(0) {
         Ok(Some(tcp_listener)) => {
             let builder = Server::from_tcp(tcp_listener).expect("Socket activation failed");
