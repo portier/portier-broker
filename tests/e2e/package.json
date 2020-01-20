@@ -1,0 +1,13 @@
+{
+  "name": "portier-broker-e2e-test",
+  "version": "0.0.0",
+  "license": "(MIT OR Apache-2.0)",
+  "private": true,
+  "dependencies": {
+    "body-parser": "^1.19.0",
+    "express": "^4.17.1",
+    "node-fetch": "^2.6.0",
+    "portier": "^0.4.1",
+    "selenium-webdriver": "^4.0.0-alpha.5"
+  }
+}

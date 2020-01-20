@@ -5,6 +5,7 @@
 
 # Build products
 target
+node_modules
 
 # Runtime files
 *.pem
