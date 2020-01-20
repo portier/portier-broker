@@ -2,9 +2,12 @@
 
 const express = require("express");
 const formParser = require("body-parser").urlencoded({ extended: false });
+const { EventEmitter } = require("events");
 const { PortierClient } = require("portier");
 
 module.exports = () => {
+  const instance = new EventEmitter();
+
   const portier = new PortierClient({
     broker: "http://localhost:3333",
     redirectUri: "http://localhost:8000/verify"
@@ -28,7 +31,9 @@ module.exports = () => {
     } catch (err) {
       console.error("RP failed to start authentication:");
       console.error(err);
-      return res.status(500).end();
+      return res.status(500).type("html").end(`
+        <title>RP: Error</title>
+      `);
     }
 
     res.redirect(303, authUrl);
@@ -36,32 +41,41 @@ module.exports = () => {
 
   app.post("/verify", formParser, async (req, res) => {
     if (req.body.error) {
-      console.error(`Broker returned to RP with error: ${req.body.error}`);
-      console.error(`Description: ${req.body.error_description}`);
-      return res.status(500).end();
+      if (!instance.emit("gotError", req.body)) {
+        console.error(`RP got an error from the broker: ${req.body.error}`);
+        console.error(`Description: ${req.body.error_description}`);
+      }
+      return res.status(500).type("html").end(`
+        <title>RP: Got error</title>
+      `);
     }
 
     let email;
     try {
       email = await portier.verify(req.body.id_token);
     } catch (err) {
-      console.error("RP failed to verify token:");
-      console.error(err);
-      return res.status(500).end();
+      if (!instance.emit("invalidToken", req.body)) {
+        console.error("RP failed to verify token:");
+        console.error(err);
+      }
+      return res.status(500).type("html").end(`
+        <title>RP: Invalid token</title>
+      `);
     }
 
     res.type("html").end(`
-      <title>Confirmed</title>
-      <p>Verified email address ${email}!</p>
+      <title>RP: Confirmed</title>
+      <p>${email}</p>
     `);
   });
 
   const server = app.listen(8000);
 
-  return {
-    destroy() {
-      server.close();
-      portier.destroy();
-    }
+  instance.portier = portier;
+  instance.destroy = () => {
+    server.close();
+    portier.destroy();
   };
+
+  return instance;
 };
