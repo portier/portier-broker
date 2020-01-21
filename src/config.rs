@@ -15,6 +15,7 @@ use std::{
     fmt::{self, Display},
     fs::File,
     io::{Error as IoError, Read},
+    path::{Path, PathBuf},
     sync::Arc,
 };
 
@@ -63,6 +64,17 @@ from_error!(&'static str, Store);
 pub struct Template(mustache::Template);
 
 impl Template {
+    fn compile(data_dir: impl AsRef<Path>, name: &str) -> Template {
+        let mut path = data_dir.as_ref().to_path_buf();
+        path.push("tmpl");
+        path.push(name);
+        path.set_extension("mustache");
+        Template(
+            mustache::compile_path(&path)
+                .unwrap_or_else(|err| panic!("unable to compile template {:?}: {:?}", path, err)),
+        )
+    }
+
     pub fn render(&self, params: &[(&str, &str)]) -> String {
         let mut builder = mustache::MapBuilder::new();
         for &param in params {
@@ -100,24 +112,16 @@ pub struct Templates {
 }
 
 impl Templates {
-    fn compile_template(path: &str) -> Template {
-        Template(
-            mustache::compile_path(path)
-                .unwrap_or_else(|err| panic!("unable to compile template '{}': {:?}", path, err)),
-        )
-    }
-}
-
-impl Default for Templates {
-    fn default() -> Templates {
+    fn new(data_dir: impl AsRef<Path>) -> Templates {
+        let data_dir = data_dir.as_ref();
         Templates {
-            confirm_email: Self::compile_template("tmpl/confirm_email.mustache"),
-            email_html: Self::compile_template("tmpl/email_html.mustache"),
-            email_text: Self::compile_template("tmpl/email_text.mustache"),
-            login_hint: Self::compile_template("tmpl/login_hint.mustache"),
-            error: Self::compile_template("tmpl/error.mustache"),
-            forward: Self::compile_template("tmpl/forward.mustache"),
-            rewrite_to_post: Self::compile_template("tmpl/rewrite_to_post.mustache"),
+            confirm_email: Template::compile(data_dir, "confirm_email"),
+            email_html: Template::compile(data_dir, "email_html"),
+            email_text: Template::compile(data_dir, "email_text"),
+            login_hint: Template::compile(data_dir, "login_hint"),
+            error: Template::compile(data_dir, "error"),
+            forward: Template::compile(data_dir, "forward"),
+            rewrite_to_post: Template::compile(data_dir, "rewrite_to_post"),
         }
     }
 }
@@ -129,19 +133,22 @@ pub struct I18n {
 
 const SUPPORTED_LANGUAGES: &[&str] = &["en", "de", "nl"];
 
-impl Default for I18n {
-    fn default() -> I18n {
-        I18n {
-            catalogs: SUPPORTED_LANGUAGES
-                .iter()
-                .map(|lang| {
-                    let file = File::open(format!("lang/{}.mo", lang))
-                        .expect("could not open catalog file");
-                    let catalog = Catalog::parse(file).expect("could not parse catalog file");
-                    (*lang, catalog)
-                })
-                .collect(),
-        }
+impl I18n {
+    fn new(data_dir: impl AsRef<Path>) -> I18n {
+        let data_dir = data_dir.as_ref();
+        let catalogs = SUPPORTED_LANGUAGES
+            .iter()
+            .map(|lang| {
+                let mut path = data_dir.to_path_buf();
+                path.push("lang");
+                path.push(lang);
+                path.set_extension("mo");
+                let file = File::open(path).expect("could not open catalog file");
+                let catalog = Catalog::parse(file).expect("could not parse catalog file");
+                (*lang, catalog)
+            })
+            .collect();
+        I18n { catalogs }
     }
 }
 
@@ -172,6 +179,7 @@ pub struct Config {
     pub limit_per_email: Ratelimit,
     pub domain_overrides: HashMap<String, Vec<Link>>,
     pub google: Option<GoogleConfig>,
+    pub res_dir: PathBuf,
     pub templates: Templates,
     pub i18n: I18n,
     pub rng: SystemRandom,
@@ -199,6 +207,7 @@ pub struct ConfigBuilder {
     pub limit_per_email: String,
     pub domain_overrides: HashMap<String, Vec<Link>>,
     pub google: Option<GoogleConfig>,
+    pub data_dir: PathBuf,
 }
 
 impl ConfigBuilder {
@@ -225,6 +234,7 @@ impl ConfigBuilder {
             limit_per_email: "5/min".to_owned(),
             domain_overrides: HashMap::new(),
             google: None,
+            data_dir: PathBuf::new(),
         }
     }
 
@@ -245,6 +255,9 @@ impl ConfigBuilder {
             if let Some(val) = table.allowed_origins {
                 self.allowed_origins = Some(val)
             };
+            if let Some(val) = table.data_dir {
+                self.data_dir = val.into();
+            }
         }
 
         if let Some(table) = toml_config.headers {
@@ -420,6 +433,10 @@ impl ConfigBuilder {
             self.google = Some(GoogleConfig { client_id });
         }
 
+        if let Some(val) = env_config.data_dir {
+            self.data_dir = val.into();
+        }
+
         self
     }
 
@@ -522,6 +539,11 @@ impl ConfigBuilder {
             domain_overrides.insert(domain, links);
         }
 
+        let templates = Templates::new(&self.data_dir);
+        let i18n = I18n::new(&self.data_dir);
+        let mut res_dir = self.data_dir;
+        res_dir.push("res");
+
         Ok(Config {
             listen_ip: self.listen_ip,
             listen_port: self.listen_port,
@@ -545,8 +567,9 @@ impl ConfigBuilder {
             limit_per_email: ratelimit,
             domain_overrides,
             google: self.google,
-            templates: Templates::default(),
-            i18n: I18n::default(),
+            res_dir,
+            templates,
+            i18n,
             rng,
         })
     }
@@ -571,6 +594,7 @@ struct TomlServerTable {
     listen_port: Option<u16>,
     public_url: Option<String>,
     allowed_origins: Option<Vec<String>>,
+    data_dir: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -639,4 +663,5 @@ struct EnvConfig {
     smtp_password: Option<String>,
     limit_per_email: Option<String>,
     google_client_id: Option<String>,
+    data_dir: Option<String>,
 }

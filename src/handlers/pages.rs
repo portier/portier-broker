@@ -5,7 +5,7 @@ use headers::ContentType;
 use http::{Response, StatusCode};
 use hyper::Body;
 use hyper_staticfile::{resolve_path, ResponseBuilder};
-use std::{env, path::Path};
+use std::env;
 
 /// Handler for the root path, redirects to the Portier homepage.
 pub async fn index(_: &mut Context) -> HandlerResult {
@@ -35,8 +35,7 @@ pub async fn version(_: &mut Context) -> HandlerResult {
 
 /// Static serving of resources.
 pub async fn static_(ctx: &mut Context) -> HandlerResult {
-    let res_path = Path::new("./res/");
-    let result = resolve_path(res_path, ctx.uri.path())
+    let result = resolve_path(&ctx.app.res_dir, ctx.uri.path())
         .await
         .map_err(|e| BrokerError::Internal(format!("static serving failed: {}", e)))?;
     let res = ResponseBuilder::new()
