@@ -349,72 +349,74 @@ impl ConfigBuilder {
     }
 
     pub fn update_from_broker_env(&mut self) -> &mut ConfigBuilder {
-        let env_config = EnvConfig::from_env();
+        let env_config: EnvConfig = envy::prefixed("BROKER_")
+            .from_env()
+            .expect("could not parse environment variables");
 
-        if let Some(val) = env_config.broker_ip {
+        if let Some(val) = env_config.ip {
             self.listen_ip = val
         }
-        if let Some(val) = env_config.broker_port {
+        if let Some(val) = env_config.port {
             self.listen_port = val;
         }
-        if let Some(val) = env_config.broker_public_url {
+        if let Some(val) = env_config.public_url {
             self.public_url = Some(val);
         }
-        if let Some(val) = env_config.broker_allowed_origins {
+        if let Some(val) = env_config.allowed_origins {
             self.allowed_origins = Some(val);
         }
 
-        if let Some(val) = env_config.broker_static_ttl {
+        if let Some(val) = env_config.static_ttl {
             self.static_ttl = val;
         }
-        if let Some(val) = env_config.broker_discovery_ttl {
+        if let Some(val) = env_config.discovery_ttl {
             self.discovery_ttl = val;
         }
-        if let Some(val) = env_config.broker_keys_ttl {
+        if let Some(val) = env_config.keys_ttl {
             self.keys_ttl = val;
         }
 
-        if let Some(val) = env_config.broker_token_ttl {
+        if let Some(val) = env_config.token_ttl {
             self.token_ttl = val;
         }
-        if let Some(val) = env_config.broker_keyfiles {
+        if let Some(val) = env_config.keyfiles {
             self.keyfiles = val;
         }
-        if let Some(val) = env_config.broker_keytext {
+        if let Some(val) = env_config.keytext {
             self.keytext = Some(val);
         }
 
-        if let Some(val) = env_config.broker_redis_url {
+        if let Some(val) = env_config.redis_url {
             self.redis_url = Some(val);
         }
-        if let Some(val) = env_config.broker_session_ttl {
+        if let Some(val) = env_config.session_ttl {
             self.redis_session_ttl = val;
         }
-        if let Some(val) = env_config.broker_cache_ttl {
+        if let Some(val) = env_config.cache_ttl {
             self.redis_cache_ttl = val;
         }
 
-        if let Some(val) = env_config.broker_from_name {
+        if let Some(val) = env_config.from_name {
             self.from_name = val;
         }
-        if let Some(val) = env_config.broker_from_address {
+        if let Some(val) = env_config.from_address {
             self.from_address = Some(val);
         }
-        if let Some(val) = env_config.broker_smtp_server {
+        if let Some(val) = env_config.smtp_server {
             self.smtp_server = Some(val);
         }
-        if let Some(val) = env_config.broker_smtp_username {
+        if let Some(val) = env_config.smtp_username {
             self.smtp_username = Some(val);
         }
-        if let Some(val) = env_config.broker_smtp_password {
+        if let Some(val) = env_config.smtp_password {
             self.smtp_password = Some(val);
         }
 
-        if let Some(val) = env_config.broker_limit_per_email {
+        if let Some(val) = env_config.limit_per_email {
             self.limit_per_email = val;
         }
 
-        if let Some(client_id) = env_config.broker_google_client_id {
+        if let Some(client_id) = env_config.google_client_id {
             self.google = Some(GoogleConfig { client_id });
         }
 
@@ -613,80 +615,28 @@ struct TomlGoogleTable {
 
 /// Intermediate structure for deserializing environment variables
 ///
-/// Environment variable `FOO_BAR` deserializes in to struct member `foo_bar`.
-/// These vars have high precendence and must be prefixed to avoid collisions.
+/// Environment variable `BROKER_FOO_BAR` deserializes in to struct member `foo_bar`. These vars
+/// have high precendence and must be prefixed to avoid collisions.
 #[derive(Clone, Debug, Deserialize)]
 struct EnvConfig {
-    broker_ip: Option<String>,
-    broker_port: Option<u16>,
-    broker_public_url: Option<String>,
-    broker_allowed_origins: Option<Vec<String>>,
-    broker_static_ttl: Option<u32>,
-    broker_discovery_ttl: Option<u64>,
-    broker_keys_ttl: Option<u64>,
-    broker_token_ttl: Option<u16>,
-    broker_keyfiles: Option<Vec<String>>,
-    broker_keytext: Option<String>,
-    broker_redis_url: Option<String>,
-    broker_session_ttl: Option<u16>,
-    broker_cache_ttl: Option<u16>,
-    broker_from_name: Option<String>,
-    broker_from_address: Option<String>,
-    broker_smtp_server: Option<String>,
-    broker_smtp_username: Option<String>,
-    broker_smtp_password: Option<String>,
-    broker_limit_per_email: Option<String>,
-    broker_google_client_id: Option<String>,
-}
-
-impl EnvConfig {
-    /// Manually deserialize from environment variables
-    ///
-    /// Redundant once [Envy](https://crates.io/crates/envy) supports Serde 0.8
-    pub fn from_env() -> EnvConfig {
-        EnvConfig {
-            broker_ip: env::var("BROKER_IP").ok(),
-            broker_port: env::var("BROKER_PORT").ok().and_then(|x| x.parse().ok()),
-            broker_public_url: env::var("BROKER_PUBLIC_URL").ok(),
-            broker_allowed_origins: env::var("BROKER_ALLOWED_ORIGINS")
-                .ok()
-                .map(|x| x.split(',').map(|x| x.to_owned()).collect()),
-
-            broker_static_ttl: env::var("BROKER_STATIC_TTL")
-                .ok()
-                .and_then(|x| x.parse().ok()),
-            broker_discovery_ttl: env::var("BROKER_DISCOVERY_TTL")
-                .ok()
-                .and_then(|x| x.parse().ok()),
-            broker_keys_ttl: env::var("BROKER_KEYS_TTL")
-                .ok()
-                .and_then(|x| x.parse().ok()),
-
-            broker_token_ttl: env::var("BROKER_TOKEN_TTL")
-                .ok()
-                .and_then(|x| x.parse().ok()),
-            broker_keyfiles: env::var("BROKER_KEYFILES")
-                .ok()
-                .map(|x| x.split(',').map(|x| x.to_owned()).collect()),
-            broker_keytext: env::var("BROKER_KEYTEXT").ok().and_then(|x| x.parse().ok()),
-
-            broker_redis_url: env::var("BROKER_REDIS_URL").ok(),
-            broker_session_ttl: env::var("BROKER_SESSION_TTL")
-                .ok()
-                .and_then(|x| x.parse().ok()),
-            broker_cache_ttl: env::var("BROKER_CACHE_TTL")
-                .ok()
-                .and_then(|x| x.parse().ok()),
-
-            broker_from_name: env::var("BROKER_FROM_NAME").ok(),
-            broker_from_address: env::var("BROKER_FROM_ADDRESS").ok(),
-            broker_smtp_server: env::var("BROKER_SMTP_SERVER").ok(),
-            broker_smtp_username: env::var("BROKER_SMTP_USERNAME").ok(),
-            broker_smtp_password: env::var("BROKER_SMTP_PASSWORD").ok(),
-
-            broker_limit_per_email: env::var("BROKER_LIMIT_PER_EMAIL").ok(),
-
-            broker_google_client_id: env::var("BROKER_GOOGLE_CLIENT_ID").ok(),
-        }
-    }
+    ip: Option<String>,
+    port: Option<u16>,
+    public_url: Option<String>,
+    allowed_origins: Option<Vec<String>>,
+    static_ttl: Option<u32>,
+    discovery_ttl: Option<u64>,
+    keys_ttl: Option<u64>,
+    token_ttl: Option<u16>,
+    keyfiles: Option<Vec<String>>,
+    keytext: Option<String>,
+    redis_url: Option<String>,
+    session_ttl: Option<u16>,
+    cache_ttl: Option<u16>,
+    from_name: Option<String>,
+    from_address: Option<String>,
+    smtp_server: Option<String>,
+    smtp_username: Option<String>,
+    smtp_password: Option<String>,
+    limit_per_email: Option<String>,
+    google_client_id: Option<String>,
 }
