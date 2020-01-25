@@ -1,6 +1,7 @@
 #[macro_use]
 mod macros;
 
+mod base64url;
 mod bridges;
 mod config;
 mod crypto;
@@ -8,6 +9,7 @@ mod email_address;
 mod error;
 mod handlers;
 mod http_ext;
+mod keys;
 mod pemfile;
 mod router;
 mod serde_helpers;

@@ -1,11 +1,10 @@
 use crate::bridges::oidc::GOOGLE_IDP_ORIGIN;
-use crate::crypto::{self, SigningAlgorithm};
+use crate::keys::{KeyManager, ManualKeys, RotatingKeys};
 use crate::store;
 use crate::store_limits::Ratelimit;
 use crate::webfinger::{Link, LinkDef, Relation};
 use gettext::Catalog;
 use hyper_tls::HttpsConnector;
-use log::warn;
 use ring::rand::{SecureRandom, SystemRandom};
 use serde_derive::Deserialize;
 use std::{
@@ -167,8 +166,7 @@ pub struct Config {
     pub discovery_ttl: u64,
     pub keys_ttl: u64,
     pub token_ttl: u16,
-    pub keys: Vec<crypto::NamedKeyPair>,
-    pub signing_algs: Vec<SigningAlgorithm>,
+    pub key_manager: Box<dyn KeyManager>,
     pub store: store::Store,
     pub http_client: HttpClient,
     pub from_name: String,
@@ -196,6 +194,8 @@ pub struct ConfigBuilder {
     pub token_ttl: u16,
     pub keyfiles: Vec<String>,
     pub keytext: Option<String>,
+    pub keysdir: Option<String>,
+    pub generate_rsa_command: Vec<String>,
     pub redis_url: Option<String>,
     pub redis_session_ttl: u16,
     pub redis_cache_ttl: u16,
@@ -223,6 +223,8 @@ impl ConfigBuilder {
             token_ttl: 600,
             keyfiles: Vec::new(),
             keytext: None,
+            keysdir: None,
+            generate_rsa_command: vec![],
             redis_url: None,
             redis_session_ttl: 900,
             redis_cache_ttl: 3600,
@@ -280,6 +282,10 @@ impl ConfigBuilder {
                 self.keyfiles.append(&mut val);
             }
             self.keytext = table.keytext.or_else(|| self.keytext.clone());
+            self.keysdir = table.keysdir.or_else(|| self.keysdir.clone());
+            self.generate_rsa_command = table
+                .generate_rsa_command
+                .unwrap_or_else(|| self.generate_rsa_command.clone());
         }
 
         if let Some(table) = toml_config.redis {
@@ -398,6 +404,12 @@ impl ConfigBuilder {
         if let Some(val) = env_config.keytext {
             self.keytext = Some(val);
         }
+        if let Some(val) = env_config.keysdir {
+            self.keysdir = Some(val);
+        }
+        if let Some(val) = env_config.generate_rsa_command {
+            self.generate_rsa_command = val.split_whitespace().map(|arg| arg.to_owned()).collect();
+        }
 
         if let Some(val) = env_config.redis_url {
             self.redis_url = Some(val);
@@ -457,46 +469,26 @@ impl ConfigBuilder {
             .expect("secure random number generator failed to initialize");
 
         // Child structs
-        let mut keys: Vec<crypto::NamedKeyPair> = self
-            .keyfiles
-            .iter()
-            .filter_map(|path| match crypto::NamedKeyPair::from_pem_file(path) {
-                Ok(keys) => {
-                    if keys.is_empty() {
-                        warn!("No key pairs found in: {}", path);
-                        None
-                    } else {
-                        Some(keys)
-                    }
-                }
-                Err(_) => {
-                    warn!("Could not parse key pair in: {}", path);
-                    None
-                }
-            })
-            .flatten()
-            .collect();
-
-        if let Some(keytext) = self.keytext {
-            if let Ok(mut env_keys) = crypto::NamedKeyPair::from_pem(&mut keytext.as_bytes()) {
-                if env_keys.is_empty() {
-                    warn!("No key pairs found in environment");
-                } else {
-                    keys.append(&mut env_keys);
-                }
-            } else {
-                warn!("Could not parse key pair from environment");
+        let key_manager: Box<dyn KeyManager> = if let Some(keysdir) = self.keysdir {
+            if !self.keyfiles.is_empty() || self.keytext.is_some() {
+                return Err(ConfigError::Custom(
+                    "keysdir cannot be combined with keyfiles / keytext".to_owned(),
+                ));
             }
-        }
-
-        // We prefer EdDSA, but list it last, in case a client treats the order as preference.
-        let mut signing_algs = vec![];
-        if crypto::find_key_pair(&keys, SigningAlgorithm::Rs256).is_ok() {
-            signing_algs.push(SigningAlgorithm::Rs256);
-        }
-        if crypto::find_key_pair(&keys, SigningAlgorithm::EdDsa).is_ok() {
-            signing_algs.push(SigningAlgorithm::EdDsa);
-        }
+            if self.generate_rsa_command.is_empty() {
+                return Err(ConfigError::Custom(
+                    "generate_rsa_command is required for rotated keys".to_owned(),
+                ));
+            }
+            Box::new(RotatingKeys::new(
+                keysdir,
+                self.keys_ttl,
+                self.generate_rsa_command,
+                rng.clone(),
+            ))
+        } else {
+            Box::new(ManualKeys::new(self.keyfiles, self.keytext))
+        };
 
         let store = store::Store::new(
             self.redis_url.expect("no redis url configured"),
@@ -553,8 +545,7 @@ impl ConfigBuilder {
             discovery_ttl: self.discovery_ttl,
             keys_ttl: self.keys_ttl,
             token_ttl: self.token_ttl,
-            keys,
-            signing_algs,
+            key_manager,
             store,
             http_client,
             from_name: self.from_name,
@@ -609,6 +600,8 @@ struct TomlCryptoTable {
     token_ttl: Option<u16>,
     keyfiles: Option<Vec<String>>,
     keytext: Option<String>,
+    keysdir: Option<String>,
+    generate_rsa_command: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -653,6 +646,8 @@ struct EnvConfig {
     token_ttl: Option<u16>,
     keyfiles: Option<Vec<String>>,
     keytext: Option<String>,
+    keysdir: Option<String>,
+    generate_rsa_command: Option<String>,
     redis_url: Option<String>,
     session_ttl: Option<u16>,
     cache_ttl: Option<u16>,
