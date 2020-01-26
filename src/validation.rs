@@ -1,78 +1,45 @@
-use std::error::Error;
-use std::fmt;
+use err_derive::Error;
 use url::{self, Url};
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ValidationError {
-    Parse(url::ParseError),
-    BadScheme(String),
-    UserinfoPresent(String),
-    InconsistentSerialization(String),
-    BadPort(String),
-}
-
-impl fmt::Display for ValidationError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            ValidationError::Parse(ref err) => {
-                err.fmt(f)
-            },
-            ValidationError::BadScheme(ref param) => {
-                write!(f, "the {} scheme was not http(s)", param)
-            },
-            ValidationError::UserinfoPresent(ref param) => {
-                write!(f, "the {} must not contain username or password", param)
-            },
-            ValidationError::InconsistentSerialization(ref param) => {
-                write!(f, "parsing and re-serializing the {} changed its representation, check for unnecessary information like default ports", param)
-            },
-            ValidationError::BadPort(ref param) => {
-                write!(f, "the {} contains an invalid port", param)
-            },
-        }
-    }
-}
-
-impl Error for ValidationError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match *self {
-            ValidationError::Parse(ref err) => Some(err),
-            ValidationError::BadScheme(_)
-            | ValidationError::UserinfoPresent(_)
-            | ValidationError::InconsistentSerialization(_)
-            | ValidationError::BadPort(_) => None,
-        }
-    }
-}
-
-impl From<url::ParseError> for ValidationError {
-    fn from(err: url::ParseError) -> ValidationError {
-        ValidationError::Parse(err)
-    }
+    #[error(display = "the URL is not http(s): {}", _0)]
+    NotHttps(String),
+    #[error(display = "the URL could not be parsed: {}", _0)]
+    InvalidUrl(#[error(source)] url::ParseError),
+    #[error(display = "the URL must not contain a username or password: {}", _0)]
+    UserinfoPresent(Url),
+    #[error(
+        display = "parsing and re-serializing the URL changed its representation (check for unnecessary information like default ports): {}",
+        _0
+    )]
+    InconsistentSerialization(Url),
+    #[error(display = "the URL contains an invalid port: {}", _0)]
+    InvalidPort(Url),
 }
 
 /// Test that a `redirect_uri` is valid. Returns the parsed `Url` if successful.
 pub fn parse_redirect_uri(input: &str, param: &str) -> Result<Url, ValidationError> {
     if !input.starts_with("http://") && !input.starts_with("https://") {
-        return Err(ValidationError::BadScheme(param.to_owned()));
+        return Err(ValidationError::NotHttps(param.to_owned()));
     }
 
     let url = Url::parse(input)?;
     if url.username() != "" || url.password().is_some() {
-        return Err(ValidationError::UserinfoPresent(param.to_owned()));
+        return Err(ValidationError::UserinfoPresent(url));
     }
     if url.port() == Some(0) {
-        return Err(ValidationError::BadPort(param.to_owned()));
+        return Err(ValidationError::InvalidPort(url));
     }
 
     // Make sure the input origin matches the serialized origin.
     let origin = url.origin().ascii_serialization();
     if !input.starts_with(&origin) {
-        return Err(ValidationError::InconsistentSerialization(param.to_owned()));
+        return Err(ValidationError::InconsistentSerialization(url));
     }
     match input.as_bytes().get(origin.len()) {
         Some(&b'/') | None => {}
-        _ => return Err(ValidationError::InconsistentSerialization(param.to_owned())),
+        _ => return Err(ValidationError::InconsistentSerialization(url)),
     }
 
     Ok(url)

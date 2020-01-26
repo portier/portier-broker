@@ -1,6 +1,8 @@
 use crate::crypto::SigningAlgorithm;
-use crate::keys::{KeyManager, KeyPairExt, NamedKeyPair, TryFromParsedKeyPair};
+use crate::keys::{KeyManager, KeyPairExt, NamedKeyPair, SignError};
 use crate::pemfile;
+use crate::pemfile::ParsedKeyPair;
+use err_derive::Error;
 use log::{info, warn};
 use ring::{
     rand::SecureRandom,
@@ -9,12 +11,57 @@ use ring::{
 use serde_json as json;
 use std::ffi::OsString;
 use std::fs::{self, File};
-use std::io::ErrorKind;
+use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::mem;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, RwLock, RwLockReadGuard};
 use std::time::{Duration, SystemTime};
+
+#[derive(Debug, Error)]
+pub enum RotateError {
+    #[error(display = "could not open '{}': {}", path, error)]
+    Open {
+        path: String,
+        #[error(source, nofrom)]
+        error: IoError,
+    },
+    #[error(display = "could not create directory '{}': {}", path, error)]
+    Mkdir {
+        path: String,
+        #[error(source, nofrom)]
+        error: IoError,
+    },
+    #[error(
+        display = "could not determine last modification time of '{}': {}",
+        path,
+        error
+    )]
+    StatMtime {
+        path: String,
+        #[error(source, nofrom)]
+        error: IoError,
+    },
+    #[error(display = "could not parse file '{}': {}", path, error)]
+    Parse {
+        path: String,
+        #[error(source, nofrom)]
+        error: pemfile::ParseError,
+    },
+    #[error(
+        display = "invalid type of key in '{}', want {}, found {}",
+        path,
+        want,
+        found
+    )]
+    InvalidKeyType {
+        path: String,
+        want: &'static str,
+        found: &'static str,
+    },
+    #[error(display = "expected exactly one key in '{}', found {}", path, found)]
+    ExpectedOneKey { path: String, found: usize },
+}
 
 /// Struct that contains configuration we pass around.
 struct RotateConfig {
@@ -35,20 +82,23 @@ impl RotatingKeys {
         keys_ttl: u64,
         generate_rsa_command: Vec<String>,
         rng: impl SecureRandom + Send + Sync + 'static,
-    ) -> Self {
-        info!("Using rotating keys with interval of {} seconds", keys_ttl);
+    ) -> Result<Self, RotateError> {
+        info!(
+            "Using rotating keys with an interval of {} seconds",
+            keys_ttl
+        );
         let rng = Box::new(rng);
         let config = Arc::new(RotateConfig {
             keys_ttl: Duration::from_secs(keys_ttl),
             generate_rsa_command,
             rng,
         });
-        let ed25519_keys = KeySet::from_subdir(keysdir.as_ref(), "ed25519", &config);
-        let rsa_keys = KeySet::from_subdir(keysdir.as_ref(), "rsa", &config);
-        RotatingKeys {
+        let ed25519_keys = KeySet::from_subdir(keysdir.as_ref(), "ed25519", &config)?;
+        let rsa_keys = KeySet::from_subdir(keysdir.as_ref(), "rsa", &config)?;
+        Ok(RotatingKeys {
             ed25519_keys,
             rsa_keys,
-        }
+        })
     }
 
     /// Get a read lock on the Ed25519 key set, or panic.
@@ -70,7 +120,7 @@ impl KeyManager for RotatingKeys {
         payload: &json::Value,
         signing_alg: SigningAlgorithm,
         rng: &dyn SecureRandom,
-    ) -> String {
+    ) -> Result<String, SignError> {
         match signing_alg {
             SigningAlgorithm::EdDsa => self.read_ed25519_keys().current.sign_jws(payload, rng),
             SigningAlgorithm::Rs256 => self.read_rsa_keys().current.sign_jws(payload, rng),
@@ -107,39 +157,45 @@ struct KeySet<T: KeyPairExt> {
 
 impl<T> KeySet<T>
 where
-    T: KeyPairExt + TryFromParsedKeyPair + GeneratedKeyPair + Send + Sync + 'static,
+    T: KeyPairExt + GeneratedKeyPair + Send + Sync + 'static,
 {
     /// Read key pairs of type `T` from a subdir of `keysdir`.
     fn from_subdir(
         keysdir: impl AsRef<Path>,
         subdir: &str,
         config: &Arc<RotateConfig>,
-    ) -> KeySetHandle<T> {
+    ) -> Result<KeySetHandle<T>, RotateError> {
         let mut dir = keysdir.as_ref().to_path_buf();
         dir.push(subdir);
-        fs::create_dir_all(&dir).expect("could not create keys directory");
+        fs::create_dir_all(&dir).map_err(|error| RotateError::Mkdir {
+            path: dir.to_string_lossy().into_owned(),
+            error,
+        })?;
 
         let mut current_path = dir.clone();
         current_path.push("current.pem");
-        let current =
-            read_key_file::<T>(&current_path).unwrap_or_else(|| T::generate(config, &current_path));
+        let current = read_key_file::<T>(&current_path)?
+            .unwrap_or_else(|| T::generate(config, &current_path));
 
         // The last modification time of `next.pem`, along with `keys_ttl`,
         // is used to determine when the next rotation should happen.
         let mut next_path = dir.clone();
         next_path.push("next.pem");
-        let (next, mtime) = read_key_file::<T>(&next_path)
-            .map(|key_pair| {
-                let mtime = fs::metadata(&next_path)
-                    .and_then(|meta| meta.modified())
-                    .expect("could not last modification time of next.pem");
-                (key_pair, mtime)
-            })
-            .unwrap_or_else(|| (T::generate(config, &next_path), SystemTime::now()));
+        let (next, mtime) = if let Some(key_pair) = read_key_file::<T>(&next_path)? {
+            let mtime = fs::metadata(&next_path)
+                .and_then(|meta| meta.modified())
+                .map_err(|error| RotateError::StatMtime {
+                    path: next_path.to_string_lossy().into_owned(),
+                    error,
+                })?;
+            (key_pair, mtime)
+        } else {
+            (T::generate(config, &next_path), SystemTime::now())
+        };
 
         let mut previous_path = dir;
         previous_path.push("previous.pem");
-        let previous = read_key_file::<T>(&previous_path);
+        let previous = read_key_file::<T>(&previous_path)?;
 
         let key_set = Arc::new(RwLock::new(KeySet {
             config: config.clone(),
@@ -152,7 +208,7 @@ where
             previous_path,
         }));
         Self::check_expiry(key_set.clone());
-        key_set
+        Ok(key_set)
     }
 
     /// Check if we should rotate, and schedule the next check.
@@ -177,6 +233,8 @@ where
     }
 
     /// Rotate keys in memory and on disk.
+    ///
+    /// If this fails, we panic, because it may happen at an arbitrary moment at run-time.
     fn rotate(&mut self) {
         fs::rename(&self.current_path, &self.previous_path)
             .and_then(|_| fs::rename(&self.next_path, &self.current_path))
@@ -202,7 +260,14 @@ impl<T: KeyPairExt> KeySet<T> {
 /// Trait for key pair types we can generate.
 trait GeneratedKeyPair: KeyPairExt + Sized {
     /// Generate a new key pair.
+    ///
+    /// This should log a message at info-level on success.
+    ///
+    /// If this fails, we panic, because it may happen at an arbitrary moment at run-time.
     fn generate(config: &RotateConfig, out_file: &Path) -> NamedKeyPair<Self>;
+
+    /// Convert a ParsedKeyPair, if it is of the correct type.
+    fn from_parsed(parsed: ParsedKeyPair, path: &Path) -> Result<NamedKeyPair<Self>, RotateError>;
 }
 
 impl GeneratedKeyPair for Ed25519KeyPair {
@@ -216,6 +281,17 @@ impl GeneratedKeyPair for Ed25519KeyPair {
             .expect("could not write generated key pair to output file");
         info!("Generated new Ed25519 key: {:?}", out_file);
         key_pair.into()
+    }
+
+    fn from_parsed(parsed: ParsedKeyPair, path: &Path) -> Result<NamedKeyPair<Self>, RotateError> {
+        match parsed {
+            ParsedKeyPair::Ed25519(inner) => Ok(inner.into()),
+            other => Err(RotateError::InvalidKeyType {
+                path: path.to_string_lossy().into_owned(),
+                want: "Ed25519",
+                found: other.kind(),
+            }),
+        }
     }
 }
 
@@ -244,32 +320,57 @@ impl GeneratedKeyPair for RsaKeyPair {
         if !status.success() {
             panic!("Command to generate RSA key failed with status {}", status);
         }
-        let key_pair = read_key_file(out_file).expect("generated RSA key file not found");
+        let key_pair = read_key_file(out_file)
+            .expect("could not read generated RSA key file")
+            .expect("generated RSA key file not found");
         info!("Generated new RSA key: {:?}", out_file);
         key_pair
+    }
+
+    fn from_parsed(parsed: ParsedKeyPair, path: &Path) -> Result<NamedKeyPair<Self>, RotateError> {
+        match parsed {
+            ParsedKeyPair::Rsa(inner) => Ok(inner.into()),
+            other => Err(RotateError::InvalidKeyType {
+                path: path.to_string_lossy().into_owned(),
+                want: "RSA",
+                found: other.kind(),
+            }),
+        }
     }
 }
 
 /// Read a single key pair of type `T` from `path`.
 ///
 /// Returns `None` when the file does not exist.
-fn read_key_file<T: KeyPairExt + TryFromParsedKeyPair>(path: &Path) -> Option<NamedKeyPair<T>> {
-    let file = File::open(path).map(Some).unwrap_or_else(|err| {
-        if err.kind() == ErrorKind::NotFound {
-            None
-        } else {
-            panic!("Could not open '{:?}': {:?}", path, err)
+fn read_key_file<T: KeyPairExt + GeneratedKeyPair>(
+    path: &Path,
+) -> Result<Option<NamedKeyPair<T>>, RotateError> {
+    let file = match File::open(path) {
+        Ok(file) => file,
+        Err(error) => {
+            if error.kind() == IoErrorKind::NotFound {
+                return Ok(None);
+            } else {
+                return Err(RotateError::Open {
+                    path: path.to_string_lossy().into_owned(),
+                    error,
+                });
+            }
         }
-    })?;
+    };
     let mut key_pairs =
-        pemfile::parse_key_pairs(&mut std::io::BufReader::new(file)).expect("Could not parse PEM");
-    let key_pair = key_pairs.pop().expect("No keys found in PEM");
-    if !key_pairs.is_empty() {
-        panic!("Multiple keys found in PEM");
+        pemfile::parse_key_pairs(&mut std::io::BufReader::new(file)).map_err(|error| {
+            RotateError::Parse {
+                path: path.to_string_lossy().into_owned(),
+                error,
+            }
+        })?;
+    if key_pairs.len() != 1 {
+        return Err(RotateError::ExpectedOneKey {
+            path: path.to_string_lossy().into_owned(),
+            found: key_pairs.len(),
+        });
     }
-    Some(
-        T::try_from_parsed_key_pair(key_pair)
-            .expect("Invalid key type")
-            .into(),
-    )
+    let key_pair = key_pairs.pop().unwrap();
+    Ok(Some(T::from_parsed(key_pair, path)?))
 }

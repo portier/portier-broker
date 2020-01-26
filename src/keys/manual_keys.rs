@@ -1,6 +1,7 @@
 use crate::crypto::SigningAlgorithm;
-use crate::keys::{KeyManager, NamedKeyPair};
+use crate::keys::{KeyManager, NamedKeyPair, SignError};
 use crate::pemfile::{self, ParsedKeyPair};
+use err_derive::Error;
 use log::{info, warn};
 use ring::{
     rand::SecureRandom,
@@ -9,6 +10,16 @@ use ring::{
 use serde_json as json;
 use std::fs::File;
 
+#[derive(Debug, Error)]
+pub enum ConfigError {
+    #[error(display = "could not parse keytext: {}", _0)]
+    InvalidKeytext(#[error(source)] pemfile::ParseError),
+    #[error(display = "no PEM data found in keytext")]
+    EmptyKeytext,
+    #[error(display = "no keys found in keyfiles or keytext")]
+    NoKeys,
+}
+
 /// KeyManager where the use provided keys to us manually.
 pub struct ManualKeys {
     ed25519_keys: Vec<NamedKeyPair<Ed25519KeyPair>>,
@@ -16,14 +27,14 @@ pub struct ManualKeys {
 }
 
 impl ManualKeys {
-    pub fn new(keyfiles: Vec<String>, keytext: Option<String>) -> Self {
+    pub fn new(keyfiles: Vec<String>, keytext: Option<String>) -> Result<Self, ConfigError> {
         info!("Using manual key management");
         let mut parsed = vec![];
         for keyfile in &keyfiles {
             let file = match File::open(keyfile) {
                 Ok(file) => file,
                 Err(err) => {
-                    warn!("Ignoring keyfile '{}', could not open: {:?}", keyfile, err);
+                    warn!("Ignoring keyfile '{}', could not open: {}", keyfile, err);
                     continue;
                 }
             };
@@ -31,28 +42,27 @@ impl ManualKeys {
             let mut key_pairs = match pemfile::parse_key_pairs(&mut std::io::BufReader::new(file)) {
                 Ok(key_pairs) => key_pairs,
                 Err(err) => {
-                    warn!("Ignoring keyfile '{}', could not read: {:?}", keyfile, err);
+                    warn!("Ignoring keyfile '{}', could not parse: {}", keyfile, err);
                     continue;
                 }
             };
 
             if key_pairs.is_empty() {
-                warn!("Ignoring keyfile '{}', no PEM in content", keyfile);
+                warn!("Ignoring keyfile '{}', no PEM data found", keyfile);
             } else {
                 parsed.append(&mut key_pairs);
             }
         }
         if let Some(keytext) = keytext {
-            let mut key_pairs =
-                pemfile::parse_key_pairs(&mut keytext.as_bytes()).expect("could not parse keytext");
+            let mut key_pairs = pemfile::parse_key_pairs(&mut keytext.as_bytes())?;
             if key_pairs.is_empty() {
-                panic!("no PEM found in keytext");
+                return Err(ConfigError::EmptyKeytext);
             } else {
                 parsed.append(&mut key_pairs);
             }
         }
         if parsed.is_empty() {
-            panic!("no keys found in keyfiles or keytext");
+            return Err(ConfigError::NoKeys);
         }
 
         let mut ed25519_keys = vec![];
@@ -69,10 +79,10 @@ impl ManualKeys {
             rsa_keys.len()
         );
 
-        Self {
+        Ok(Self {
             ed25519_keys,
             rsa_keys,
-        }
+        })
     }
 }
 
@@ -82,17 +92,17 @@ impl KeyManager for ManualKeys {
         payload: &json::Value,
         signing_alg: SigningAlgorithm,
         rng: &dyn SecureRandom,
-    ) -> String {
+    ) -> Result<String, SignError> {
         match signing_alg {
             SigningAlgorithm::EdDsa => self
                 .ed25519_keys
                 .last()
-                .expect("no keys found for EdDSA")
+                .ok_or_else(|| SignError::UnsupportedAlgorithm(signing_alg))?
                 .sign_jws(payload, rng),
             SigningAlgorithm::Rs256 => self
                 .rsa_keys
                 .last()
-                .expect("no keys found for RS256")
+                .ok_or_else(|| SignError::UnsupportedAlgorithm(signing_alg))?
                 .sign_jws(payload, rng),
         }
     }

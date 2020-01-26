@@ -6,7 +6,7 @@ pub use rotating_keys::*;
 
 use crate::base64url;
 use crate::crypto::SigningAlgorithm;
-use crate::pemfile::ParsedKeyPair;
+use err_derive::Error;
 use ring::{
     digest,
     io::Positive,
@@ -16,6 +16,20 @@ use ring::{
 use serde_json as json;
 use serde_json::json;
 
+#[derive(Debug, Error)]
+pub enum SignError {
+    #[error(display = "unsupported signing algorithm {}", _0)]
+    UnsupportedAlgorithm(SigningAlgorithm),
+    #[error(display = "unspecified signing error")]
+    Unspecified,
+}
+
+impl From<ring::error::Unspecified> for SignError {
+    fn from(_: ring::error::Unspecified) -> Self {
+        Self::Unspecified
+    }
+}
+
 /// Trait implemented by key management strategies.
 pub trait KeyManager: Send + Sync {
     /// Create a JSON Web Signature (JWS) for the given JSON structure.
@@ -24,7 +38,7 @@ pub trait KeyManager: Send + Sync {
         payload: &json::Value,
         signing_alg: SigningAlgorithm,
         rng: &dyn SecureRandom,
-    ) -> String;
+    ) -> Result<String, SignError>;
 
     /// Get a list of JWKs containing public keys.
     fn public_jwks(&self) -> Vec<json::Value>;
@@ -41,7 +55,7 @@ pub struct NamedKeyPair<T: KeyPairExt> {
 
 impl<T: KeyPairExt> NamedKeyPair<T> {
     /// Create a JSON Web Signature (JWS) for the given JSON structure.
-    fn sign_jws(&self, payload: &json::Value, rng: &dyn SecureRandom) -> String {
+    fn sign_jws(&self, payload: &json::Value, rng: &dyn SecureRandom) -> Result<String, SignError> {
         self.key_pair.sign_jws(&self.kid, payload, rng)
     }
 
@@ -70,18 +84,15 @@ pub trait KeyPairExt {
     fn signing_alg(&self) -> SigningAlgorithm;
 
     /// Create a JSON Web Signature (JWS) for the given JSON structure.
-    fn sign_jws(&self, kid: &str, payload: &json::Value, rng: &dyn SecureRandom) -> String;
+    fn sign_jws(
+        &self,
+        kid: &str,
+        payload: &json::Value,
+        rng: &dyn SecureRandom,
+    ) -> Result<String, SignError>;
 
     /// Return JSON represenation of the public key for use in JWK key sets.
     fn public_jwk(&self, kid: &str) -> json::Value;
-}
-
-/// Additional KeyPair conversion from ParsedKeyPair.
-///
-/// This is separate from KeyPairExt in order to allow trait objects of KeyPairExt.
-pub trait TryFromParsedKeyPair: Sized {
-    /// Convert a ParsedKeyPair if it is of the correct type.
-    fn try_from_parsed_key_pair(parsed: ParsedKeyPair) -> Option<Self>;
 }
 
 impl KeyPairExt for Ed25519KeyPair {
@@ -96,7 +107,12 @@ impl KeyPairExt for Ed25519KeyPair {
         SigningAlgorithm::EdDsa
     }
 
-    fn sign_jws(&self, kid: &str, payload: &json::Value, _rng: &dyn SecureRandom) -> String {
+    fn sign_jws(
+        &self,
+        kid: &str,
+        payload: &json::Value,
+        _rng: &dyn SecureRandom,
+    ) -> Result<String, SignError> {
         let header = json!({ "kid": kid, "alg": "EdDSA" }).to_string();
         let mut data = String::new();
         data.push_str(&base64url::encode(&header));
@@ -105,7 +121,7 @@ impl KeyPairExt for Ed25519KeyPair {
         let sig = self.sign(data.as_bytes());
         data.push('.');
         data.push_str(&base64url::encode(&sig));
-        data
+        Ok(data)
     }
 
     fn public_jwk(&self, kid: &str) -> json::Value {
@@ -118,15 +134,6 @@ impl KeyPairExt for Ed25519KeyPair {
             "kid": &kid,
             "x": base64url::encode(&public),
         })
-    }
-}
-
-impl TryFromParsedKeyPair for Ed25519KeyPair {
-    fn try_from_parsed_key_pair(parsed: ParsedKeyPair) -> Option<Self> {
-        match parsed {
-            ParsedKeyPair::Ed25519(inner) => Some(inner),
-            _ => None,
-        }
     }
 }
 
@@ -146,18 +153,22 @@ impl KeyPairExt for RsaKeyPair {
         SigningAlgorithm::Rs256
     }
 
-    fn sign_jws(&self, kid: &str, payload: &json::Value, rng: &dyn SecureRandom) -> String {
+    fn sign_jws(
+        &self,
+        kid: &str,
+        payload: &json::Value,
+        rng: &dyn SecureRandom,
+    ) -> Result<String, SignError> {
         let header = json!({ "kid": kid, "alg": "RS256" }).to_string();
         let mut data = String::new();
         data.push_str(&base64url::encode(&header));
         data.push('.');
         data.push_str(&base64url::encode(&payload.to_string()));
         let mut sig = vec![0; self.public_modulus_len()];
-        self.sign(&signature::RSA_PKCS1_SHA256, rng, data.as_bytes(), &mut sig)
-            .expect("failed to sign JWT using RSA");
+        self.sign(&signature::RSA_PKCS1_SHA256, rng, data.as_bytes(), &mut sig)?;
         data.push('.');
         data.push_str(&base64url::encode(&sig));
-        data
+        Ok(data)
     }
 
     fn public_jwk(&self, kid: &str) -> json::Value {
@@ -175,14 +186,5 @@ impl KeyPairExt for RsaKeyPair {
             "n": json_big_num(n),
             "e": json_big_num(e),
         })
-    }
-}
-
-impl TryFromParsedKeyPair for RsaKeyPair {
-    fn try_from_parsed_key_pair(parsed: ParsedKeyPair) -> Option<Self> {
-        match parsed {
-            ParsedKeyPair::Rsa(inner) => Some(inner),
-            _ => None,
-        }
     }
 }

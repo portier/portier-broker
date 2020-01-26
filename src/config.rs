@@ -1,8 +1,9 @@
 use crate::bridges::oidc::GOOGLE_IDP_ORIGIN;
-use crate::keys::{KeyManager, ManualKeys, RotatingKeys};
+use crate::keys::{self, KeyManager, ManualKeys, RotatingKeys};
 use crate::store;
 use crate::store_limits::Ratelimit;
-use crate::webfinger::{Link, LinkDef, Relation};
+use crate::webfinger::{Link, LinkDef, ParseLinkError, Relation};
+use err_derive::Error;
 use gettext::Catalog;
 use hyper_tls::HttpsConnector;
 use ring::rand::{SecureRandom, SystemRandom};
@@ -10,8 +11,6 @@ use serde_derive::Deserialize;
 use std::{
     collections::HashMap,
     env,
-    error::Error,
-    fmt::{self, Display},
     fs::File,
     io::{Error as IoError, Read},
     path::{Path, PathBuf},
@@ -22,41 +21,21 @@ use std::{
 pub type HttpClient = hyper::Client<HttpsConnector<hyper::client::HttpConnector>>;
 
 /// Union of all possible error types seen while parsing.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ConfigError {
-    Custom(String),
-    Io(IoError),
-    Toml(toml::de::Error),
-    Store(&'static str),
+    #[error(display = "configuration error: {}", _0)]
+    Custom(#[error(from)] &'static str),
+    #[error(display = "IO error: {}", _0)]
+    Io(#[error(source)] IoError),
+    #[error(display = "TOML error: {}", _0)]
+    Toml(#[error(source)] toml::de::Error),
+    #[error(display = "keys configuration error: {}", _0)]
+    ManualKeys(#[error(source)] keys::ConfigError),
+    #[error(display = "rotating keys configuration error: {}", _0)]
+    RotatingKeys(#[error(source)] keys::RotateError),
+    #[error(display = "domain override configuration error: {}", _0)]
+    DomainOverride(#[error(source)] ParseLinkError),
 }
-
-impl Error for ConfigError {}
-
-impl Display for ConfigError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            ConfigError::Custom(ref string) => write!(f, "Configuration error: {}", string),
-            ConfigError::Io(ref err) => write!(f, "IO error: {}", err),
-            ConfigError::Toml(ref err) => write!(f, "TOML error: {}", err),
-            ConfigError::Store(static_str) => write!(f, "Store error: {}", static_str),
-        }
-    }
-}
-
-macro_rules! from_error {
-    ( $orig:ty, $enum_type:ident ) => {
-        impl From<$orig> for ConfigError {
-            fn from(err: $orig) -> ConfigError {
-                ConfigError::$enum_type(err)
-            }
-        }
-    };
-}
-
-from_error!(String, Custom);
-from_error!(IoError, Io);
-from_error!(toml::de::Error, Toml);
-from_error!(&'static str, Store);
 
 // Newtype so we can implement helpers for templates.
 #[derive(Clone)]
@@ -455,10 +434,9 @@ impl ConfigBuilder {
     pub async fn done(self) -> Result<Config, ConfigError> {
         // Additional validations
         if self.smtp_username.is_none() != self.smtp_password.is_none() {
-            return Err(ConfigError::Custom(
-                "only one of smtp username and password specified; provide both or neither"
-                    .to_owned(),
-            ));
+            return Err(
+                "only one of smtp username and password specified; provide both or neither".into(),
+            );
         }
 
         // Create the secure random number generate.
@@ -471,23 +449,19 @@ impl ConfigBuilder {
         // Child structs
         let key_manager: Box<dyn KeyManager> = if let Some(keysdir) = self.keysdir {
             if !self.keyfiles.is_empty() || self.keytext.is_some() {
-                return Err(ConfigError::Custom(
-                    "keysdir cannot be combined with keyfiles / keytext".to_owned(),
-                ));
+                return Err("keysdir cannot be combined with keyfiles / keytext".into());
             }
             if self.generate_rsa_command.is_empty() {
-                return Err(ConfigError::Custom(
-                    "generate_rsa_command is required for rotated keys".to_owned(),
-                ));
+                return Err("generate_rsa_command is required for rotated keys".into());
             }
             Box::new(RotatingKeys::new(
                 keysdir,
                 self.keys_ttl,
                 self.generate_rsa_command,
                 rng.clone(),
-            ))
+            )?)
         } else {
-            Box::new(ManualKeys::new(self.keyfiles, self.keytext))
+            Box::new(ManualKeys::new(self.keyfiles, self.keytext)?)
         };
 
         let store = store::Store::new(

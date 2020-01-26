@@ -3,6 +3,7 @@ use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
 use crate::serde_helpers::UrlDef;
 use crate::store_cache::{fetch_json_url, CacheKey};
+use err_derive::Error;
 use serde_derive::{Deserialize, Serialize};
 use std::str::FromStr;
 use url::Url;
@@ -27,6 +28,12 @@ pub struct LinkDef {
     pub href: String,
 }
 
+#[derive(Debug, Error)]
+pub enum ParseRelationError {
+    #[error(display = "invalid value: {}", _0)]
+    InvalidValue(String),
+}
+
 /// Parsed and validated webfinger relation
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Relation {
@@ -35,14 +42,22 @@ pub enum Relation {
 }
 
 impl FromStr for Relation {
-    type Err = &'static str;
-    fn from_str(s: &str) -> Result<Relation, &'static str> {
+    type Err = ParseRelationError;
+    fn from_str(s: &str) -> Result<Relation, ParseRelationError> {
         match s {
             WEBFINGER_PORTIER_REL => Ok(Relation::Portier),
             WEBFINGER_GOOGLE_REL => Ok(Relation::Google),
-            _ => Err("unsupported value"),
+            value => Err(ParseRelationError::InvalidValue(value.to_owned())),
         }
     }
+}
+
+#[derive(Debug, Error)]
+pub enum ParseLinkError {
+    #[error(display = "invalid relation: {}", _0)]
+    InvalidRelation(#[error(source)] ParseRelationError),
+    #[error(display = "invalid href: {}", _0)]
+    InvalidHref(#[error(source)] url::ParseError),
 }
 
 /// Parsed and validated webfinger link
@@ -55,12 +70,10 @@ pub struct Link {
 
 impl Link {
     /// Parse and validate a deserialized link
-    pub fn from_de_link(link: &LinkDef) -> Result<Link, String> {
-        match (link.rel.parse(), link.href.parse()) {
-            (Ok(rel), Ok(href)) => Ok(Link { rel, href }),
-            (Err(e), _) => Err(format!("invalid rel: {}", e)),
-            (_, Err(e)) => Err(format!("invalid href: {}", e)),
-        }
+    pub fn from_de_link(link: &LinkDef) -> Result<Link, ParseLinkError> {
+        let rel = link.rel.parse()?;
+        let href = link.href.parse()?;
+        Ok(Link { rel, href })
     }
 }
 

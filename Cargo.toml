@@ -20,13 +20,14 @@ path = "src/main.rs"
 [dependencies]
 accept-language = "2.0.0"
 base64 = "0.11.0"
-bytes = "0.5.3"
+bytes = "0.5.4"
 docopt = "1.1.0"
 env_logger = "0.7.1"
 envy = "0.4.1"
+err-derive = "0.2.2"
 futures-util = "0.3.1"
 gettext = "0.4.0"
-headers = "0.3.0"
+headers = "0.3.1"
 http = "0.2.0"
 hyper = "0.13.1"
 hyper-staticfile = "0.5.1"
@@ -44,8 +45,8 @@ redis = { version = "0.15.1", features = ["tokio-rt-core"] }
 ring = "0.16.9"
 serde = "1.0.104"
 serde_derive = "1.0.104"
-serde_json = "1.0.44"
-tokio = { version = "0.2.9", features = ["time", "macros"] }
+serde_json = "1.0.45"
+tokio = { version = "0.2.11", features = ["time", "macros"] }
 toml = "0.5.6"
 url = "2.1.1"
 

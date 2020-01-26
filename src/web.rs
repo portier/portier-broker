@@ -7,6 +7,7 @@ use crate::http_ext::ResponseExt;
 use crate::router::router;
 use crate::serde_helpers::UrlDef;
 use bytes::{Bytes, BytesMut};
+use err_derive::Error;
 use futures_util::stream::StreamExt;
 use gettext::Catalog;
 use headers::{CacheControl, ContentType, Header, StrictTransportSecurity};
@@ -18,7 +19,7 @@ use log::info;
 use serde_derive::{Deserialize, Serialize};
 use serde_json as json;
 use std::{
-    collections::HashMap, error::Error, fmt, future::Future, net::SocketAddr, pin::Pin, sync::Arc,
+    collections::HashMap, error::Error, future::Future, net::SocketAddr, pin::Pin, sync::Arc,
     task::Poll, time::Duration,
 };
 use url::{form_urlencoded, Url};
@@ -27,14 +28,9 @@ pub type BoxError = Box<dyn Error + Send + Sync>;
 pub type BoxFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send>>;
 
 /// Error type used within an `io::Error`, to indicate a size limit was exceeded.
-#[derive(Debug)]
+#[derive(Debug, Error)]
+#[error(display = "size limit exceeded")]
 pub struct SizeLimitExceeded;
-impl Error for SizeLimitExceeded {}
-impl fmt::Display for SizeLimitExceeded {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        fmt.write_str("size limit exceeded")
-    }
-}
 
 /// A session as stored in Redis.
 #[derive(Serialize, Deserialize)]

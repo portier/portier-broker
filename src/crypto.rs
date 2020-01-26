@@ -2,9 +2,10 @@ use crate::base64url;
 use crate::bridges::oidc::ProviderKey;
 use crate::config::Config;
 use crate::email_address::EmailAddress;
+use crate::keys::SignError;
 use ring::{
     digest,
-    error::{KeyRejected, Unspecified},
+    error::Unspecified,
     rand::SecureRandom,
     signature::{self, UnparsedPublicKey},
 };
@@ -12,47 +13,13 @@ use serde_derive::{Deserialize, Serialize};
 use serde_json as json;
 use serde_json::json;
 use std::fmt;
-use std::io::Error as IoError;
 use std::iter::Iterator;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 type RsaPublicKey = signature::RsaPublicKeyComponents<Vec<u8>>;
 
-/// Union of all possible error types seen while parsing.
-#[derive(Debug)]
-pub enum CryptoError {
-    Custom(&'static str),
-    Io(IoError),
-    KeyRejected(KeyRejected),
-    Unspecified,
-}
-
-impl From<&'static str> for CryptoError {
-    fn from(err: &'static str) -> CryptoError {
-        CryptoError::Custom(err)
-    }
-}
-
-impl From<IoError> for CryptoError {
-    fn from(err: IoError) -> CryptoError {
-        CryptoError::Io(err)
-    }
-}
-
-impl From<KeyRejected> for CryptoError {
-    fn from(err: KeyRejected) -> CryptoError {
-        CryptoError::KeyRejected(err)
-    }
-}
-
-impl From<Unspecified> for CryptoError {
-    fn from(_: Unspecified) -> CryptoError {
-        CryptoError::Unspecified
-    }
-}
-
 /// Token signing algorithms we support.
-#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SigningAlgorithm {
     #[serde(rename = "EdDSA")]
     EdDsa,
@@ -233,7 +200,7 @@ pub fn create_jwt(
     aud: &str,
     nonce: &str,
     signing_alg: SigningAlgorithm,
-) -> Result<String, CryptoError> {
+) -> Result<String, SignError> {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -249,5 +216,5 @@ pub fn create_jwt(
         "sub": email_addr.as_str(),
         "nonce": nonce,
     });
-    Ok(app.key_manager.sign_jws(&payload, signing_alg, &app.rng))
+    app.key_manager.sign_jws(&payload, signing_alg, &app.rng)
 }
