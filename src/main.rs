@@ -1,27 +1,25 @@
 #[macro_use]
 mod macros;
 
-mod base64url;
 mod bridges;
 mod config;
 mod crypto;
 mod email_address;
 mod error;
 mod handlers;
-mod http_ext;
 mod keys;
-mod pemfile;
 mod router;
-mod serde_helpers;
 mod store;
 mod store_cache;
 mod store_limits;
+mod utils;
 mod validation;
 mod web;
 mod webfinger;
 
 use crate::config::{ConfigBuilder, ConfigRc};
-use crate::web::{BoxError, Service};
+use crate::utils::BoxError;
+use crate::web::Service;
 use futures_util::future;
 use hyper::{server::Server, service::make_service_fn};
 use log::info;

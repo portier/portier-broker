@@ -46,7 +46,7 @@ ring = "0.16.9"
 serde = "1.0.104"
 serde_derive = "1.0.104"
 serde_json = "1.0.45"
-tokio = { version = "0.2.11", features = ["time", "macros"] }
+tokio = { version = "0.2.11", features = ["fs", "macros", "process", "sync", "time"] }
 toml = "0.5.6"
 url = "2.1.1"
 

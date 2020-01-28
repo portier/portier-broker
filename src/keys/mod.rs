@@ -4,8 +4,8 @@ mod rotating_keys;
 pub use manual_keys::*;
 pub use rotating_keys::*;
 
-use crate::base64url;
 use crate::crypto::SigningAlgorithm;
+use crate::utils::base64url;
 use err_derive::Error;
 use ring::{
     digest,
@@ -118,6 +118,7 @@ impl KeyPairExt for Ed25519KeyPair {
         data.push_str(&base64url::encode(&header));
         data.push('.');
         data.push_str(&base64url::encode(&payload.to_string()));
+        // TODO: Maybe treat this as blocking?
         let sig = self.sign(data.as_bytes());
         data.push('.');
         data.push_str(&base64url::encode(&sig));
@@ -165,6 +166,7 @@ impl KeyPairExt for RsaKeyPair {
         data.push('.');
         data.push_str(&base64url::encode(&payload.to_string()));
         let mut sig = vec![0; self.public_modulus_len()];
+        // TODO: Blocking
         self.sign(&signature::RSA_PKCS1_SHA256, rng, data.as_bytes(), &mut sig)?;
         data.push('.');
         data.push_str(&base64url::encode(&sig));

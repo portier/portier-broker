@@ -3,7 +3,8 @@
 use err_derive::Error;
 use ring::pkcs8::Document;
 use ring::signature::{Ed25519KeyPair, RsaKeyPair};
-use std::io::{BufRead, Cursor, Error as IoError, Read, Write};
+use std::io::{Cursor, Error as IoError, Read};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 
 const RSA_START_MARK: &str = "-----BEGIN RSA PRIVATE KEY-----";
 const RSA_END_MARK: &str = "-----END RSA PRIVATE KEY-----";
@@ -42,7 +43,10 @@ enum State {
 }
 
 /// Parse all supported key pairs from a PEM stream.
-pub fn parse_key_pairs(reader: &mut dyn BufRead) -> Result<Vec<ParsedKeyPair>, ParseError> {
+pub async fn parse_key_pairs<R>(mut reader: R) -> Result<Vec<ParsedKeyPair>, ParseError>
+where
+    R: AsyncBufReadExt + Unpin,
+{
     let mut key_pairs = Vec::new();
     let mut b64buf = String::new();
     let mut state = State::Scan;
@@ -50,7 +54,7 @@ pub fn parse_key_pairs(reader: &mut dyn BufRead) -> Result<Vec<ParsedKeyPair>, P
     let mut raw_line = Vec::<u8>::new();
     loop {
         raw_line.clear();
-        let len = reader.read_until(b'\n', &mut raw_line)?;
+        let len = reader.read_until(b'\n', &mut raw_line).await?;
 
         if len == 0 {
             return Ok(key_pairs);
@@ -93,21 +97,24 @@ pub fn parse_key_pairs(reader: &mut dyn BufRead) -> Result<Vec<ParsedKeyPair>, P
 }
 
 /// Write a PKCS #8 document as PEM to a stream.
-pub fn write_pkcs8(doc: &Document, writer: &mut dyn Write) -> Result<(), IoError> {
+pub async fn write_pkcs8<W>(doc: &Document, mut writer: W) -> Result<(), IoError>
+where
+    W: AsyncWriteExt + Unpin,
+{
     let b64 = base64::encode(doc);
     let mut cursor = Cursor::new(b64.as_bytes());
-    writer.write_all(PKCS8_START_MARK.as_bytes())?;
-    writer.write_all(&[0xa])?;
+    writer.write_all(PKCS8_START_MARK.as_bytes()).await?;
+    writer.write_all(&[0xa]).await?;
     let mut buf = [0u8; 64];
     loop {
-        let size = cursor.read(&mut buf[..])?;
+        let size = cursor.read(&mut buf[..]).unwrap();
         if size == 0 {
             break;
         }
-        writer.write_all(&buf[..size])?;
-        writer.write_all(&[0xa])?;
+        writer.write_all(&buf[..size]).await?;
+        writer.write_all(&[0xa]).await?;
     }
-    writer.write_all(PKCS8_END_MARK.as_bytes())?;
-    writer.write_all(&[0xa])?;
+    writer.write_all(PKCS8_END_MARK.as_bytes()).await?;
+    writer.write_all(&[0xa]).await?;
     Ok(())
 }

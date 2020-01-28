@@ -441,10 +441,13 @@ impl ConfigBuilder {
 
         // Create the secure random number generate.
         // Per SystemRandom docs, call `fill` once here to prepare the generator.
-        let rng = SystemRandom::new();
-        let mut dummy = [0u8; 16];
-        rng.fill(&mut dummy)
-            .expect("secure random number generator failed to initialize");
+        let rng = tokio::task::spawn_blocking(|| {
+            let rng = SystemRandom::new();
+            let mut dummy = [0u8; 16];
+            rng.fill(&mut dummy)
+                .expect("secure random number generator failed to initialize");
+            rng
+        }).await.unwrap();
 
         // Child structs
         let key_manager: Box<dyn KeyManager> = if let Some(keysdir) = self.keysdir {
@@ -454,14 +457,17 @@ impl ConfigBuilder {
             if self.generate_rsa_command.is_empty() {
                 return Err("generate_rsa_command is required for rotated keys".into());
             }
-            Box::new(RotatingKeys::new(
-                keysdir,
-                self.keys_ttl,
-                self.generate_rsa_command,
-                rng.clone(),
-            )?)
+            Box::new(
+                RotatingKeys::new(
+                    keysdir,
+                    self.keys_ttl,
+                    self.generate_rsa_command,
+                    rng.clone(),
+                )
+                .await?,
+            )
         } else {
-            Box::new(ManualKeys::new(self.keyfiles, self.keytext)?)
+            Box::new(ManualKeys::new(self.keyfiles, self.keytext).await?)
         };
 
         let store = store::Store::new(

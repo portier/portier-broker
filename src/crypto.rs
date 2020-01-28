@@ -1,8 +1,8 @@
-use crate::base64url;
 use crate::bridges::oidc::ProviderKey;
 use crate::config::Config;
 use crate::email_address::EmailAddress;
 use crate::keys::SignError;
+use crate::utils::base64url;
 use ring::{
     digest,
     error::Unspecified,

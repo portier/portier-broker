@@ -3,9 +3,8 @@ use crate::config::ConfigRc;
 use crate::crypto::{self, SigningAlgorithm};
 use crate::email_address::EmailAddress;
 use crate::error::{BrokerError, BrokerResult};
-use crate::http_ext::ResponseExt;
 use crate::router::router;
-use crate::serde_helpers::UrlDef;
+use crate::utils::{http::ResponseExt, serde::UrlDef, BoxError, BoxFuture};
 use bytes::{Bytes, BytesMut};
 use err_derive::Error;
 use futures_util::stream::StreamExt;
@@ -18,14 +17,8 @@ use hyper::Body;
 use log::info;
 use serde_derive::{Deserialize, Serialize};
 use serde_json as json;
-use std::{
-    collections::HashMap, error::Error, future::Future, net::SocketAddr, pin::Pin, sync::Arc,
-    task::Poll, time::Duration,
-};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc, task::Poll, time::Duration};
 use url::{form_urlencoded, Url};
-
-pub type BoxError = Box<dyn Error + Send + Sync>;
-pub type BoxFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send>>;
 
 /// Error type used within an `io::Error`, to indicate a size limit was exceeded.
 #[derive(Debug, Error)]
@@ -253,7 +246,7 @@ impl Service {
 impl HyperService<Request> for Service {
     type Response = Response;
     type Error = BoxError;
-    type Future = BoxFuture<Response, BoxError>;
+    type Future = BoxFuture<Result<Response, BoxError>>;
 
     fn poll_ready(&mut self, _cx: &mut std::task::Context) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))

@@ -1,5 +1,5 @@
 use crate::error::BrokerError;
-use crate::http_ext::ResponseExt;
+use crate::utils::http::ResponseExt;
 use crate::web::{empty_response, Context, HandlerResult};
 use headers::ContentType;
 use http::{Response, StatusCode};

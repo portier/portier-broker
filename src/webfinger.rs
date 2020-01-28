@@ -1,8 +1,8 @@
 use crate::config::ConfigRc;
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
-use crate::serde_helpers::UrlDef;
 use crate::store_cache::{fetch_json_url, CacheKey};
+use crate::utils::serde::UrlDef;
 use err_derive::Error;
 use serde_derive::{Deserialize, Serialize};
 use std::str::FromStr;

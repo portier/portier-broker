@@ -1,6 +1,6 @@
 use crate::crypto::SigningAlgorithm;
 use crate::keys::{KeyManager, NamedKeyPair, SignError};
-use crate::pemfile::{self, ParsedKeyPair};
+use crate::utils::pem::{self, ParsedKeyPair};
 use err_derive::Error;
 use log::{info, warn};
 use ring::{
@@ -8,12 +8,13 @@ use ring::{
     signature::{Ed25519KeyPair, RsaKeyPair},
 };
 use serde_json as json;
-use std::fs::File;
+use tokio::fs::File;
+use tokio::io::BufReader;
 
 #[derive(Debug, Error)]
 pub enum ConfigError {
     #[error(display = "could not parse keytext: {}", _0)]
-    InvalidKeytext(#[error(source)] pemfile::ParseError),
+    InvalidKeytext(#[error(source)] pem::ParseError),
     #[error(display = "no PEM data found in keytext")]
     EmptyKeytext,
     #[error(display = "no keys found in keyfiles or keytext")]
@@ -27,11 +28,11 @@ pub struct ManualKeys {
 }
 
 impl ManualKeys {
-    pub fn new(keyfiles: Vec<String>, keytext: Option<String>) -> Result<Self, ConfigError> {
+    pub async fn new(keyfiles: Vec<String>, keytext: Option<String>) -> Result<Self, ConfigError> {
         info!("Using manual key management");
         let mut parsed = vec![];
         for keyfile in &keyfiles {
-            let file = match File::open(keyfile) {
+            let file = match File::open(keyfile).await {
                 Ok(file) => file,
                 Err(err) => {
                     warn!("Ignoring keyfile '{}', could not open: {}", keyfile, err);
@@ -39,7 +40,7 @@ impl ManualKeys {
                 }
             };
 
-            let mut key_pairs = match pemfile::parse_key_pairs(&mut std::io::BufReader::new(file)) {
+            let mut key_pairs = match pem::parse_key_pairs(BufReader::new(file)).await {
                 Ok(key_pairs) => key_pairs,
                 Err(err) => {
                     warn!("Ignoring keyfile '{}', could not parse: {}", keyfile, err);
@@ -54,7 +55,7 @@ impl ManualKeys {
             }
         }
         if let Some(keytext) = keytext {
-            let mut key_pairs = pemfile::parse_key_pairs(&mut keytext.as_bytes())?;
+            let mut key_pairs = pem::parse_key_pairs(keytext.as_bytes()).await?;
             if key_pairs.is_empty() {
                 return Err(ConfigError::EmptyKeytext);
             } else {
