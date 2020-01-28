@@ -16,7 +16,7 @@ use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::mem;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::{Arc, RwLock, RwLockReadGuard};
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 use tokio::fs::{self, File};
 use tokio::io::BufReader;
@@ -77,20 +77,22 @@ struct RotateConfig {
 
 /// KeyManager where we rotating 3 keys of each type.
 pub struct RotatingKeys {
-    ed25519_keys: KeySetHandle<Ed25519KeyPair>,
-    rsa_keys: KeySetHandle<RsaKeyPair>,
+    ed25519_keys: Option<KeySetHandle<Ed25519KeyPair>>,
+    rsa_keys: Option<KeySetHandle<RsaKeyPair>>,
 }
 
 impl RotatingKeys {
     pub async fn new(
         keysdir: impl AsRef<Path>,
         keys_ttl: u64,
+        signing_algs: &[SigningAlgorithm],
         generate_rsa_command: Vec<String>,
         rng: impl SecureRandom + Send + Sync + 'static,
     ) -> Result<Self, RotateError> {
         info!(
-            "Using rotating keys with an interval of {} seconds",
-            keys_ttl
+            "Using rotating keys with a {}s interval and algorithms: {}",
+            keys_ttl,
+            SigningAlgorithm::format_list(signing_algs)
         );
         let rng = Box::new(rng);
         let config = Arc::new(RotateConfig {
@@ -98,22 +100,18 @@ impl RotatingKeys {
             generate_rsa_command,
             rng,
         });
+        let ed25519_keys = match signing_algs.contains(&SigningAlgorithm::EdDsa) {
+            true => Some(KeySet::from_subdir(keysdir.as_ref(), "ed25519", &config).await?),
+            false => None,
+        };
+        let rsa_keys = match signing_algs.contains(&SigningAlgorithm::Rs256) {
+            true => Some(KeySet::from_subdir(keysdir.as_ref(), "rsa", &config).await?),
+            false => None,
+        };
         Ok(RotatingKeys {
-            ed25519_keys: KeySet::from_subdir(keysdir.as_ref(), "ed25519", &config).await?,
-            rsa_keys: KeySet::from_subdir(keysdir.as_ref(), "rsa", &config).await?,
+            ed25519_keys,
+            rsa_keys,
         })
-    }
-
-    /// Get a read lock on the Ed25519 key set, or panic.
-    fn read_ed25519_keys(&self) -> RwLockReadGuard<KeySet<Ed25519KeyPair>> {
-        self.ed25519_keys
-            .read()
-            .expect("could not read-lock key set")
-    }
-
-    /// Get a read lock on the RSA key set, or panic.
-    fn read_rsa_keys(&self) -> RwLockReadGuard<KeySet<RsaKeyPair>> {
-        self.rsa_keys.read().expect("could not read-lock key set")
     }
 }
 
@@ -124,24 +122,37 @@ impl KeyManager for RotatingKeys {
         signing_alg: SigningAlgorithm,
         rng: &dyn SecureRandom,
     ) -> Result<String, SignError> {
-        // TODO: Blocking
+        // TODO: Read-locking is blocking.
         match signing_alg {
-            SigningAlgorithm::EdDsa => self.read_ed25519_keys().current.sign_jws(payload, rng),
-            SigningAlgorithm::Rs256 => self.read_rsa_keys().current.sign_jws(payload, rng),
+            SigningAlgorithm::EdDsa => self
+                .ed25519_keys
+                .as_ref()
+                .ok_or_else(|| SignError::UnsupportedAlgorithm(signing_alg))?
+                .read()
+                .unwrap()
+                .current
+                .sign_jws(payload, rng),
+            SigningAlgorithm::Rs256 => self
+                .rsa_keys
+                .as_ref()
+                .ok_or_else(|| SignError::UnsupportedAlgorithm(signing_alg))?
+                .read()
+                .unwrap()
+                .current
+                .sign_jws(payload, rng),
         }
     }
 
     fn public_jwks(&self) -> Vec<json::Value> {
-        // TODO: Blocking
+        // TODO: Read-locking is blocking.
         let mut jwks = vec![];
-        jwks.append(&mut self.read_ed25519_keys().public_jwks());
-        jwks.append(&mut self.read_rsa_keys().public_jwks());
+        if let Some(ref key_set) = self.ed25519_keys {
+            jwks.append(&mut key_set.read().unwrap().public_jwks());
+        }
+        if let Some(ref key_set) = self.rsa_keys {
+            jwks.append(&mut key_set.read().unwrap().public_jwks());
+        }
         jwks
-    }
-
-    fn signing_algs(&self) -> Vec<SigningAlgorithm> {
-        // We prefer EdDSA, but list RSA first, in case a client treats the order as preference.
-        vec![SigningAlgorithm::Rs256, SigningAlgorithm::EdDsa]
     }
 }
 

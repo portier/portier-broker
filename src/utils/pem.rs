@@ -1,5 +1,7 @@
 // This file is based on code from rustls 0.16.0. (Licensed Apache 2.0, MIT, ISC)
 
+use crate::crypto::SigningAlgorithm;
+use crate::keys::KeyPairExt;
 use err_derive::Error;
 use ring::pkcs8::Document;
 use ring::signature::{Ed25519KeyPair, RsaKeyPair};
@@ -17,11 +19,21 @@ pub enum ParsedKeyPair {
 }
 
 impl ParsedKeyPair {
+    /// Describe the type of key pair.
     pub fn kind(&self) -> &'static str {
         use ParsedKeyPair::*;
         match self {
             Ed25519(_) => "Ed25519",
             Rsa(_) => "RSA",
+        }
+    }
+
+    /// Get the signing algorithm for this key type.
+    pub fn signing_alg(&self) -> SigningAlgorithm {
+        use ParsedKeyPair::*;
+        match self {
+            Ed25519(ref inner) => inner.signing_alg(),
+            Rsa(ref inner) => inner.signing_alg(),
         }
     }
 }

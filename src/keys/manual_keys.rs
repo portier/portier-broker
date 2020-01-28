@@ -17,8 +17,8 @@ pub enum ConfigError {
     InvalidKeytext(#[error(source)] pem::ParseError),
     #[error(display = "no PEM data found in keytext")]
     EmptyKeytext,
-    #[error(display = "no keys found in keyfiles or keytext")]
-    NoKeys,
+    #[error(display = "no {} keys found in keyfiles or keytext", signing_alg)]
+    MissingKeys { signing_alg: SigningAlgorithm },
 }
 
 /// KeyManager where the use provided keys to us manually.
@@ -28,8 +28,15 @@ pub struct ManualKeys {
 }
 
 impl ManualKeys {
-    pub async fn new(keyfiles: Vec<String>, keytext: Option<String>) -> Result<Self, ConfigError> {
-        info!("Using manual key management");
+    pub async fn new(
+        keyfiles: Vec<String>,
+        keytext: Option<String>,
+        signing_algs: &[SigningAlgorithm],
+    ) -> Result<Self, ConfigError> {
+        info!(
+            "Using manual key management with algorithms: {}",
+            SigningAlgorithm::format_list(signing_algs)
+        );
         let mut parsed = vec![];
         for keyfile in &keyfiles {
             let file = match File::open(keyfile).await {
@@ -40,7 +47,7 @@ impl ManualKeys {
                 }
             };
 
-            let mut key_pairs = match pem::parse_key_pairs(BufReader::new(file)).await {
+            let key_pairs = match pem::parse_key_pairs(BufReader::new(file)).await {
                 Ok(key_pairs) => key_pairs,
                 Err(err) => {
                     warn!("Ignoring keyfile '{}', could not parse: {}", keyfile, err);
@@ -50,9 +57,24 @@ impl ManualKeys {
 
             if key_pairs.is_empty() {
                 warn!("Ignoring keyfile '{}', no PEM data found", keyfile);
-            } else {
-                parsed.append(&mut key_pairs);
+                continue;
             }
+
+            let orig_len = key_pairs.len();
+            let mut key_pairs = key_pairs
+                .into_iter()
+                .filter(|key_pair| signing_algs.contains(&key_pair.signing_alg()))
+                .collect::<Vec<_>>();
+            if key_pairs.len() != orig_len {
+                warn!(
+                    "Ignoring {} (of {}) key(s) in '{}' for disabled signing algorithms",
+                    orig_len - key_pairs.len(),
+                    orig_len,
+                    keyfile
+                );
+            }
+
+            parsed.append(&mut key_pairs);
         }
         if let Some(keytext) = keytext {
             let mut key_pairs = pem::parse_key_pairs(keytext.as_bytes()).await?;
@@ -61,9 +83,6 @@ impl ManualKeys {
             } else {
                 parsed.append(&mut key_pairs);
             }
-        }
-        if parsed.is_empty() {
-            return Err(ConfigError::NoKeys);
         }
 
         let mut ed25519_keys = vec![];
@@ -79,6 +98,17 @@ impl ManualKeys {
             ed25519_keys.len(),
             rsa_keys.len()
         );
+
+        for signing_alg in signing_algs {
+            if match signing_alg {
+                SigningAlgorithm::EdDsa => ed25519_keys.is_empty(),
+                SigningAlgorithm::Rs256 => rsa_keys.is_empty(),
+            } {
+                return Err(ConfigError::MissingKeys {
+                    signing_alg: *signing_alg,
+                });
+            }
+        }
 
         Ok(Self {
             ed25519_keys,
@@ -113,18 +143,5 @@ impl KeyManager for ManualKeys {
         let ed25519_jwks = self.ed25519_keys.iter().map(NamedKeyPair::public_jwk);
         let rsa_jwks = self.rsa_keys.iter().map(NamedKeyPair::public_jwk);
         ed25519_jwks.chain(rsa_jwks).collect()
-    }
-
-    /// Get a list of supported signing algorithms.
-    fn signing_algs(&self) -> Vec<SigningAlgorithm> {
-        // We prefer EdDSA, but list RSA first, in case a client treats the order as preference.
-        let mut list = vec![];
-        if !self.rsa_keys.is_empty() {
-            list.push(SigningAlgorithm::Rs256);
-        }
-        if !self.ed25519_keys.is_empty() {
-            list.push(SigningAlgorithm::EdDsa);
-        }
-        list
     }
 }

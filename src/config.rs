@@ -1,4 +1,5 @@
 use crate::bridges::oidc::GOOGLE_IDP_ORIGIN;
+use crate::crypto::SigningAlgorithm;
 use crate::keys::{self, KeyManager, ManualKeys, RotatingKeys};
 use crate::store;
 use crate::store_limits::Ratelimit;
@@ -146,6 +147,7 @@ pub struct Config {
     pub keys_ttl: u64,
     pub token_ttl: u16,
     pub key_manager: Box<dyn KeyManager>,
+    pub signing_algs: Vec<SigningAlgorithm>,
     pub store: store::Store,
     pub http_client: HttpClient,
     pub from_name: String,
@@ -174,6 +176,7 @@ pub struct ConfigBuilder {
     pub keyfiles: Vec<String>,
     pub keytext: Option<String>,
     pub keysdir: Option<String>,
+    pub signing_algs: Vec<SigningAlgorithm>,
     pub generate_rsa_command: Vec<String>,
     pub redis_url: Option<String>,
     pub redis_session_ttl: u16,
@@ -203,6 +206,7 @@ impl ConfigBuilder {
             keyfiles: Vec::new(),
             keytext: None,
             keysdir: None,
+            signing_algs: vec![SigningAlgorithm::Rs256],
             generate_rsa_command: vec![],
             redis_url: None,
             redis_session_ttl: 900,
@@ -262,6 +266,9 @@ impl ConfigBuilder {
             }
             self.keytext = table.keytext.or_else(|| self.keytext.clone());
             self.keysdir = table.keysdir.or_else(|| self.keysdir.clone());
+            if let Some(val) = table.signing_algs {
+                self.signing_algs = val;
+            }
             self.generate_rsa_command = table
                 .generate_rsa_command
                 .unwrap_or_else(|| self.generate_rsa_command.clone());
@@ -386,6 +393,9 @@ impl ConfigBuilder {
         if let Some(val) = env_config.keysdir {
             self.keysdir = Some(val);
         }
+        if let Some(val) = env_config.signing_algs {
+            self.signing_algs = val;
+        }
         if let Some(val) = env_config.generate_rsa_command {
             self.generate_rsa_command = val.split_whitespace().map(|arg| arg.to_owned()).collect();
         }
@@ -447,27 +457,32 @@ impl ConfigBuilder {
             rng.fill(&mut dummy)
                 .expect("secure random number generator failed to initialize");
             rng
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
 
         // Child structs
         let key_manager: Box<dyn KeyManager> = if let Some(keysdir) = self.keysdir {
             if !self.keyfiles.is_empty() || self.keytext.is_some() {
                 return Err("keysdir cannot be combined with keyfiles / keytext".into());
             }
-            if self.generate_rsa_command.is_empty() {
-                return Err("generate_rsa_command is required for rotated keys".into());
+            if self.signing_algs.contains(&SigningAlgorithm::Rs256)
+                && self.generate_rsa_command.is_empty()
+            {
+                return Err("generate_rsa_command is required for rotating RSA keys".into());
             }
             Box::new(
                 RotatingKeys::new(
                     keysdir,
                     self.keys_ttl,
+                    &self.signing_algs,
                     self.generate_rsa_command,
                     rng.clone(),
                 )
                 .await?,
             )
         } else {
-            Box::new(ManualKeys::new(self.keyfiles, self.keytext).await?)
+            Box::new(ManualKeys::new(self.keyfiles, self.keytext, &self.signing_algs).await?)
         };
 
         let store = store::Store::new(
@@ -526,6 +541,7 @@ impl ConfigBuilder {
             keys_ttl: self.keys_ttl,
             token_ttl: self.token_ttl,
             key_manager,
+            signing_algs: self.signing_algs,
             store,
             http_client,
             from_name: self.from_name,
@@ -581,6 +597,7 @@ struct TomlCryptoTable {
     keyfiles: Option<Vec<String>>,
     keytext: Option<String>,
     keysdir: Option<String>,
+    signing_algs: Option<Vec<SigningAlgorithm>>,
     generate_rsa_command: Option<Vec<String>>,
 }
 
@@ -627,6 +644,7 @@ struct EnvConfig {
     keyfiles: Option<Vec<String>>,
     keytext: Option<String>,
     keysdir: Option<String>,
+    signing_algs: Option<Vec<SigningAlgorithm>>,
     generate_rsa_command: Option<String>,
     redis_url: Option<String>,
     session_ttl: Option<u16>,

@@ -19,7 +19,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 type RsaPublicKey = signature::RsaPublicKeyComponents<Vec<u8>>;
 
 /// Token signing algorithms we support.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum SigningAlgorithm {
     #[serde(rename = "EdDSA")]
     EdDsa,
@@ -35,6 +35,14 @@ impl SigningAlgorithm {
             EdDsa => "EdDSA",
             Rs256 => "RS256",
         }
+    }
+
+    /// Format a list of algorithms for display.
+    pub fn format_list(list: &[Self]) -> String {
+        list.iter()
+            .map(|alg| alg.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 }
 

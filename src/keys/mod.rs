@@ -42,9 +42,6 @@ pub trait KeyManager: Send + Sync {
 
     /// Get a list of JWKs containing public keys.
     fn public_jwks(&self) -> Vec<json::Value>;
-
-    /// Get a list of supported signing algorithms.
-    fn signing_algs(&self) -> Vec<SigningAlgorithm>;
 }
 
 /// A named key pair, for use in JWS signing.
@@ -166,7 +163,7 @@ impl KeyPairExt for RsaKeyPair {
         data.push('.');
         data.push_str(&base64url::encode(&payload.to_string()));
         let mut sig = vec![0; self.public_modulus_len()];
-        // TODO: Blocking
+        // TODO: RNG is blocking
         self.sign(&signature::RSA_PKCS1_SHA256, rng, data.as_bytes(), &mut sig)?;
         data.push('.');
         data.push_str(&base64url::encode(&sig));

@@ -1,4 +1,5 @@
 use crate::bridges;
+use crate::crypto::SigningAlgorithm;
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
 use crate::store_limits::addr_limiter;
@@ -26,7 +27,7 @@ pub async fn discovery(ctx: &mut Context) -> HandlerResult {
         "response_modes_supported": vec!["form_post", "fragment"],
         "grant_types_supported": vec!["implicit"],
         "subject_types_supported": vec!["public"],
-        "id_token_signing_alg_values_supported": &ctx.app.key_manager.signing_algs(),
+        "id_token_signing_alg_values_supported": &ctx.app.signing_algs,
         // NOTE: This field is non-standard.
         "accepts_id_token_signing_alg_query_param": true,
     });
@@ -111,20 +112,15 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
     }
 
     // NOTE: This query parameter is non-standard.
-    let signing_algs = ctx.app.key_manager.signing_algs();
     let signing_alg = try_get_input_param!(params, "id_token_signing_alg", "RS256".to_owned());
     let signing_alg = signing_alg
         .parse()
         .ok()
-        .filter(|alg| signing_algs.contains(alg))
+        .filter(|alg| ctx.app.signing_algs.contains(alg))
         .ok_or_else(|| {
             BrokerError::Input(format!(
                 "unsupported id_token_signing_alg, must be one of: {}",
-                signing_algs
-                    .iter()
-                    .map(|alg| alg.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
+                SigningAlgorithm::format_list(&ctx.app.signing_algs)
             ))
         })?;
 
