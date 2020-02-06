@@ -1,61 +1,44 @@
 use crate::config::ConfigRc;
 use crate::error::BrokerError;
+use crate::store::CacheKey;
 use crate::web::read_body;
 use headers::{CacheControl, HeaderMapExt};
 use http::StatusCode;
-use log::info;
-use redis::AsyncCommands;
 use serde::de::DeserializeOwned;
 use serde_json as json;
-use std::{cmp::max, fmt, str::from_utf8};
 use url::Url;
-
-/// Represents a Redis key.
-pub enum CacheKey<'a> {
-    Discovery { acct: &'a str },
-    OidcConfig { origin: &'a str },
-    OidcKeySet { origin: &'a str },
-}
-
-impl<'a> fmt::Display for CacheKey<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            CacheKey::Discovery { acct } => write!(f, "cache:discovery:{}", acct),
-            CacheKey::OidcConfig { origin } => write!(f, "cache:configuration:{}", origin),
-            CacheKey::OidcKeySet { origin } => write!(f, "cache:key-set:{}", origin),
-        }
-    }
-}
 
 /// Fetch `url` from cache or using a HTTP GET request, and parse the response as JSON. The
 /// cache is stored in `app.store` with `key`. The `client` is used to make the HTTP GET request,
 /// if necessary.
-pub async fn fetch_json_url<T>(
+pub async fn fetch_json_cached<T>(
     app: &ConfigRc,
     url: Url,
-    key: &CacheKey<'_>,
+    key: CacheKey<'_>,
 ) -> Result<T, BrokerError>
 where
     T: 'static + DeserializeOwned,
 {
-    let mut store_client = app.store.client.clone();
-
+    let key_str = format!("{:?}", key);
     // Try to retrieve the result from cache.
-    let key_str = key.to_string();
-    let data: Option<String> = store_client
-        .get(&key_str)
+    let mut cache_item = app
+        .store
+        .get_cache_item(key)
         .await
         .map_err(|e| BrokerError::Internal(format!("cache lookup failed: {}", e)))?;
+    let data = cache_item
+        .read()
+        .await
+        .map_err(|e| BrokerError::Internal(format!("cache read failed: {}", e)))?;
+    if let Some(data) = data {
+        log::info!("HIT {} - {}", key_str, url);
 
-    if let Some(ref data) = data {
-        info!("HIT {} - {}", key_str, url);
-
-        json::from_str(data)
+        json::from_str(&data)
             .map_err(|e| BrokerError::Internal(format!("bad cache value ({}): {}", e, url)))
     } else {
         // Cache miss, make a request.
         // TODO: Also cache failed requests, perhaps for a shorter time.
-        info!("MISS {} - {}", key_str, url);
+        log::info!("MISS {} - {}", key_str, url);
 
         let hyper_url = url
             .as_str()
@@ -86,16 +69,16 @@ where
             .await
             .map_err(|e| BrokerError::Provider(format!("fetch failed ({}): {}", e, url)))?;
 
-        let data = from_utf8(&chunk)
-            .map_err(|e| BrokerError::Provider(format!("fetch failed ({}): {}", e, url)))?;
+        let data = std::str::from_utf8(&chunk)
+            .map_err(|e| BrokerError::Provider(format!("fetch failed ({}): {}", e, url)))?
+            .to_owned();
 
-        let value = json::from_str(data)
+        let value = json::from_str(&data)
             .map_err(|e| BrokerError::Provider(format!("fetch failed ({}): {}", e, url)))?;
 
         // Cache the response for at least `expire_cache`, but honor longer `max-age`.
-        let seconds = max(app.store.expire_cache, max_age as usize);
-        store_client
-            .set_ex::<_, _, ()>(&key_str, data, seconds)
+        cache_item
+            .write(data, max_age as usize)
             .await
             .map_err(|e| BrokerError::Internal(format!("cache write failed: {}", e)))?;
 

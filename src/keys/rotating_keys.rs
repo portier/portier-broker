@@ -100,13 +100,15 @@ impl RotatingKeys {
             generate_rsa_command,
             rng,
         });
-        let ed25519_keys = match signing_algs.contains(&SigningAlgorithm::EdDsa) {
-            true => Some(KeySet::from_subdir(keysdir.as_ref(), "ed25519", &config).await?),
-            false => None,
+        let ed25519_keys = if signing_algs.contains(&SigningAlgorithm::EdDsa) {
+            Some(KeySet::from_subdir(keysdir.as_ref(), "ed25519", &config).await?)
+        } else {
+            None
         };
-        let rsa_keys = match signing_algs.contains(&SigningAlgorithm::Rs256) {
-            true => Some(KeySet::from_subdir(keysdir.as_ref(), "rsa", &config).await?),
-            false => None,
+        let rsa_keys = if signing_algs.contains(&SigningAlgorithm::Rs256) {
+            Some(KeySet::from_subdir(keysdir.as_ref(), "rsa", &config).await?)
+        } else {
+            None
         };
         Ok(RotatingKeys {
             ed25519_keys,

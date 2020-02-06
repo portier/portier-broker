@@ -2,10 +2,10 @@ use crate::bridges;
 use crate::crypto::SigningAlgorithm;
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
-use crate::store_limits::addr_limiter;
+use crate::store::LimitKey;
 use crate::validation::parse_redirect_uri;
 use crate::web::{html_response, json_response, Context, HandlerResult, ReturnParams};
-use crate::webfinger::{self, Link, Relation};
+use crate::webfinger::{self, Relation};
 use futures_util::future::{self, Either};
 use http::Method;
 use log::info;
@@ -162,14 +162,18 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
         .map_err(|_| BrokerError::Input("login_hint is not a valid email address".to_owned()))?;
 
     // Enforce ratelimit based on the normalized email.
-    if !addr_limiter(
-        &ctx.app.store,
-        email_addr.as_str(),
-        &ctx.app.limit_per_email,
-    )
-    .await?
-    {
-        return Err(BrokerError::RateLimited);
+    let limit_key = LimitKey::PerEmail {
+        addr: email_addr.as_str(),
+    };
+    match ctx.app.store.incr_and_test_limit(limit_key).await {
+        Ok(true) => {}
+        Ok(false) => return Err(BrokerError::RateLimited),
+        Err(e) => {
+            return Err(BrokerError::Internal(format!(
+                "could not test rate limit: {}",
+                e
+            )))
+        }
     }
 
     // Create the session with common data, but do not yet save it.
@@ -181,21 +185,12 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
 
         // Try to authenticate with the first provider.
         // TODO: Queue discovery of links and process in order, with individual timeouts.
-        match links.first() {
+        let link = links.first().ok_or(BrokerError::ProviderCancelled)?;
+        match link.rel {
             // Portier and Google providers share an implementation
-            Some(
-                link @ &Link {
-                    rel: Relation::Portier,
-                    ..
-                },
-            )
-            | Some(
-                link @ &Link {
-                    rel: Relation::Google,
-                    ..
-                },
-            ) => bridges::oidc::auth(ctx, &email_addr, link).await,
-            _ => Err(BrokerError::ProviderCancelled),
+            Relation::Portier | Relation::Google => {
+                bridges::oidc::auth(ctx, &email_addr, link).await
+            }
         }
     };
 

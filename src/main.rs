@@ -10,8 +10,6 @@ mod handlers;
 mod keys;
 mod router;
 mod store;
-mod store_cache;
-mod store_limits;
 mod utils;
 mod validation;
 mod web;

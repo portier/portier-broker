@@ -1,8 +1,7 @@
 use crate::bridges::oidc::GOOGLE_IDP_ORIGIN;
 use crate::crypto::SigningAlgorithm;
 use crate::keys::{self, KeyManager, ManualKeys, RotatingKeys};
-use crate::store;
-use crate::store_limits::Ratelimit;
+use crate::store::{RedisLimitConfig, RedisStore, Store};
 use crate::webfinger::{Link, LinkDef, ParseLinkError, Relation};
 use err_derive::Error;
 use gettext::Catalog;
@@ -148,14 +147,13 @@ pub struct Config {
     pub token_ttl: u16,
     pub key_manager: Box<dyn KeyManager>,
     pub signing_algs: Vec<SigningAlgorithm>,
-    pub store: store::Store,
+    pub store: Box<dyn Store + Send + Sync>,
     pub http_client: HttpClient,
     pub from_name: String,
     pub from_address: String,
     pub smtp_server: String,
     pub smtp_username: Option<String>,
     pub smtp_password: Option<String>,
-    pub limit_per_email: Ratelimit,
     pub domain_overrides: HashMap<String, Vec<Link>>,
     pub google: Option<GoogleConfig>,
     pub res_dir: PathBuf,
@@ -485,29 +483,30 @@ impl ConfigBuilder {
             Box::new(ManualKeys::new(self.keyfiles, self.keytext, &self.signing_algs).await?)
         };
 
-        let store = store::Store::new(
-            self.redis_url.expect("no redis url configured"),
-            self.redis_session_ttl as usize,
-            self.redis_cache_ttl as usize,
-        )
-        .await
-        .expect("unable to instantiate new redis store");
-
         let http_connector = HttpsConnector::new();
         let http_client = hyper::Client::builder().build(http_connector);
 
         let idx = self
             .limit_per_email
             .find('/')
-            .expect("unable to parse limit.per_email format");
-        let (count, unit) = self.limit_per_email.split_at(idx);
-        let ratelimit = Ratelimit {
-            count: count.parse().expect("unable to parse limit count"),
+            .expect("unable to parse limit_per_email format");
+        let (max_count, unit) = self.limit_per_email.split_at(idx);
+        let limit_per_email_config = RedisLimitConfig {
+            max_count: max_count.parse().expect("unable to parse limit count"),
             duration: match unit {
                 "/min" | "/minute" => 60,
                 _ => return Err(From::from("unrecognized limit duration")),
             },
         };
+
+        let store = RedisStore::new(
+            self.redis_url.expect("no redis url configured"),
+            self.redis_session_ttl as usize,
+            self.redis_cache_ttl as usize,
+            limit_per_email_config,
+        )
+        .await
+        .expect("unable to instantiate new redis store");
 
         // Configure default domain overrides for hosted Google
         let mut domain_overrides = HashMap::new();
@@ -542,7 +541,7 @@ impl ConfigBuilder {
             token_ttl: self.token_ttl,
             key_manager,
             signing_algs: self.signing_algs,
-            store,
+            store: Box::new(store),
             http_client,
             from_name: self.from_name,
             from_address: self.from_address.expect("no smtp from address configured"),
@@ -551,7 +550,6 @@ impl ConfigBuilder {
                 .expect("no smtp outserver address configured"),
             smtp_username: self.smtp_username,
             smtp_password: self.smtp_password,
-            limit_per_email: ratelimit,
             domain_overrides,
             google: self.google,
             res_dir,

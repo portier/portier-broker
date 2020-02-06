@@ -142,8 +142,9 @@ impl Context {
             .map_err(|e| BrokerError::Internal(format!("could not serialize session: {}", e)))?;
         self.app
             .store
-            .store_session(&self.session_id, &data)
-            .await?;
+            .store_session(&self.session_id, data)
+            .await
+            .map_err(|e| BrokerError::Internal(format!("could not save a session: {}", e)))?;
         Ok(true)
     }
 
@@ -152,7 +153,13 @@ impl Context {
         assert!(self.session_id.is_empty());
         assert!(self.session_data.is_none());
         assert!(self.return_params.is_none());
-        let data = self.app.store.get_session(id).await?;
+        let data = self
+            .app
+            .store
+            .get_session(id)
+            .await
+            .map_err(|e| BrokerError::Internal(format!("could not load a session: {}", e)))?
+            .ok_or(BrokerError::SessionExpired)?;
         let Session { data, bridge_data } = json::from_str(&data)
             .map_err(|e| BrokerError::Internal(format!("could not deserialize session: {}", e)))?;
         self.return_params = Some(data.return_params.clone());

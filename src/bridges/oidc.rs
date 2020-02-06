@@ -3,8 +3,8 @@ use crate::config::GoogleConfig;
 use crate::crypto::{self, SigningAlgorithm};
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
-use crate::store_cache::{fetch_json_url, CacheKey};
-use crate::utils::{http::ResponseExt, serde::UrlDef};
+use crate::store::CacheKey;
+use crate::utils::{fetch_json_cached, http::ResponseExt, serde::UrlDef};
 use crate::validation;
 use crate::web::{empty_response, Context, HandlerResult};
 use crate::webfinger::{Link, Relation};
@@ -300,10 +300,10 @@ async fn fetch_config(
         .parse()
         .expect("could not build the OpenID Connect configuration URL");
 
-    let provider_config = fetch_json_url::<ProviderConfig>(
+    let provider_config = fetch_json_cached::<ProviderConfig>(
         &ctx.app,
         config_url,
-        &CacheKey::OidcConfig {
+        CacheKey::OidcConfig {
             origin: bridge_data.origin.as_str(),
         },
     )
@@ -332,10 +332,10 @@ async fn fetch_config(
     }
 
     // Grab the keys from the provider.
-    let key_set: ProviderKeys = fetch_json_url(
+    let key_set: ProviderKeys = fetch_json_cached(
         &ctx.app,
         provider_config.jwks_uri.clone(),
-        &CacheKey::OidcKeySet {
+        CacheKey::OidcKeySet {
             origin: bridge_data.origin.as_str(),
         },
     )

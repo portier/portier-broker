@@ -18,7 +18,11 @@ pub async fn complete_auth(ctx: &mut Context) -> HandlerResult {
         .session_data
         .as_ref()
         .expect("complete_auth called without a session");
-    ctx.app.store.remove_session(&ctx.session_id).await?;
+    ctx.app
+        .store
+        .remove_session(&ctx.session_id)
+        .await
+        .map_err(|e| BrokerError::Internal(format!("could not remove a session: {}", e)))?;
 
     let aud = data
         .return_params
