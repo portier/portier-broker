@@ -4,16 +4,17 @@ use crate::web::Session;
 use redis::{aio::MultiplexedConnection as RedisConn, AsyncCommands, RedisError, Script};
 use serde_json as json;
 use std::sync::Arc;
+use std::time::Duration;
 use url::Url;
 
 /// Store implementation using Redis.
 pub struct RedisStore {
     /// The connection.
     client: RedisConn,
-    /// TTL of session keys, in seconds
-    expire_sessions: usize,
-    /// TTL of cache keys, in seconds
-    expire_cache: usize,
+    /// TTL of session keys
+    expire_sessions: Duration,
+    /// TTL of cache keys
+    expire_cache: Duration,
     /// Script used to check a limit.
     limit_script: Arc<Script>,
     /// Configuration for per-email rate limiting.
@@ -23,8 +24,8 @@ pub struct RedisStore {
 impl RedisStore {
     pub async fn new(
         mut url: String,
-        expire_sessions: usize,
-        expire_cache: usize,
+        expire_sessions: Duration,
+        expire_cache: Duration,
         limit_per_email_config: LimitConfig,
     ) -> Result<Self, RedisError> {
         if url.starts_with("http://") {
@@ -67,11 +68,11 @@ impl RedisStore {
 impl SessionStore for RedisStore {
     fn store_session(&self, session_id: &str, data: Session) -> BoxFuture<Result<(), BoxError>> {
         let mut client = self.client.clone();
-        let key = Self::format_session_key(session_id);
         let ttl = self.expire_sessions;
+        let key = Self::format_session_key(session_id);
         Box::pin(async move {
             let data = json::to_string(&data)?;
-            client.set_ex(&key, data, ttl).await?;
+            client.set_ex(&key, data, ttl.as_secs() as usize).await?;
             Ok(())
         })
     }
@@ -128,7 +129,7 @@ impl LimitStore for RedisStore {
         let script = self.limit_script.clone();
         Box::pin(async move {
             let mut invocation = script.prepare_invoke();
-            invocation.key(key).arg(duration);
+            invocation.key(key).arg(duration.as_secs());
             let count: usize = invocation.invoke_async(&mut client).await?;
             Ok(count <= max_count)
         })
@@ -140,11 +141,15 @@ impl Store for RedisStore {}
 struct RedisCacheItem {
     key: String,
     client: RedisConn,
-    expire_cache: usize,
+    expire_cache: Duration,
 }
 
 impl RedisCacheItem {
-    async fn new(key: String, client: RedisConn, expire_cache: usize) -> Result<Self, RedisError> {
+    async fn new(
+        key: String,
+        client: RedisConn,
+        expire_cache: Duration,
+    ) -> Result<Self, RedisError> {
         // TODO: Lock
         Ok(RedisCacheItem {
             client,
@@ -170,12 +175,14 @@ impl CacheItem for RedisCacheItem {
         })
     }
 
-    fn write(&mut self, value: String, max_age: usize) -> BoxFuture<Result<(), BoxError>> {
+    fn write(&mut self, value: String, max_age: Duration) -> BoxFuture<Result<(), BoxError>> {
         let mut client = self.client.clone();
         let key = self.key.clone();
-        let seconds = std::cmp::max(self.expire_cache, max_age);
+        let ttl = std::cmp::max(self.expire_cache, max_age);
         Box::pin(async move {
-            client.set_ex::<_, _, ()>(key, value, seconds).await?;
+            client
+                .set_ex::<_, _, ()>(key, value, ttl.as_secs() as usize)
+                .await?;
             Ok(())
         })
     }

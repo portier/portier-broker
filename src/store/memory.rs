@@ -12,6 +12,13 @@ struct Expiring<T> {
     expires: Instant,
 }
 
+impl<T> Expiring<T> {
+    fn from_duration(inner: T, duration: Duration) -> Self {
+        let expires = Instant::now() + duration;
+        Expiring { inner, expires }
+    }
+}
+
 #[derive(Default)]
 struct Storage {
     sessions: HashMap<String, Expiring<Session>>,
@@ -25,18 +32,18 @@ type StorageRc = Arc<RwLock<Storage>>;
 pub struct MemoryStore {
     /// Structure containing all storage.
     storage: StorageRc,
-    /// TTL of session keys, in seconds
-    expire_sessions: usize,
-    /// TTL of cache keys, in seconds
-    expire_cache: usize,
+    /// TTL of session keys
+    expire_sessions: Duration,
+    /// TTL of cache keys
+    expire_cache: Duration,
     /// Configuration for per-email rate limiting.
     limit_per_email_config: LimitConfig,
 }
 
 impl MemoryStore {
     pub fn new(
-        expire_sessions: usize,
-        expire_cache: usize,
+        expire_sessions: Duration,
+        expire_cache: Duration,
         limit_per_email_config: LimitConfig,
     ) -> Self {
         log::warn!("Storing sessions in memory.");
@@ -58,13 +65,9 @@ impl SessionStore for MemoryStore {
         let key = session_id.to_owned();
         Box::pin(async move {
             let mut storage = storage.write().await;
-            storage.sessions.insert(
-                key,
-                Expiring {
-                    inner: data,
-                    expires: Instant::now() + Duration::from_secs(ttl as u64),
-                },
-            );
+            storage
+                .sessions
+                .insert(key, Expiring::from_duration(data, ttl));
             Ok(())
         })
     }
@@ -129,10 +132,7 @@ impl LimitStore for MemoryStore {
                 Entry::Occupied(mut entry) => {
                     let mut expiring = entry.get_mut();
                     if expiring.expires <= Instant::now() {
-                        *expiring = Expiring {
-                            inner: 1,
-                            expires: Instant::now() + Duration::from_secs(duration as u64),
-                        };
+                        *expiring = Expiring::from_duration(1, duration);
                         1
                     } else {
                         expiring.inner += 1;
@@ -140,10 +140,7 @@ impl LimitStore for MemoryStore {
                     }
                 }
                 Entry::Vacant(entry) => {
-                    entry.insert(Expiring {
-                        inner: 1,
-                        expires: Instant::now() + Duration::from_secs(duration as u64),
-                    });
+                    entry.insert(Expiring::from_duration(1, duration));
                     1
                 }
             };
@@ -157,11 +154,11 @@ impl Store for MemoryStore {}
 struct MemoryCacheItem {
     url: Url,
     storage: StorageRc,
-    expire_cache: usize,
+    expire_cache: Duration,
 }
 
 impl MemoryCacheItem {
-    fn new(url: Url, storage: StorageRc, expire_cache: usize) -> Self {
+    fn new(url: Url, storage: StorageRc, expire_cache: Duration) -> Self {
         // TODO: Lock
         MemoryCacheItem {
             url,
@@ -192,19 +189,15 @@ impl CacheItem for MemoryCacheItem {
         })
     }
 
-    fn write(&mut self, value: String, max_age: usize) -> BoxFuture<Result<(), BoxError>> {
+    fn write(&mut self, value: String, max_age: Duration) -> BoxFuture<Result<(), BoxError>> {
         let storage = self.storage.clone();
         let url = self.url.clone();
-        let seconds = std::cmp::max(self.expire_cache, max_age);
+        let ttl = std::cmp::max(self.expire_cache, max_age);
         Box::pin(async move {
             let mut storage = storage.write().await;
-            storage.cache.insert(
-                url,
-                Expiring {
-                    inner: value,
-                    expires: Instant::now() + Duration::from_secs(seconds as u64),
-                },
-            );
+            storage
+                .cache
+                .insert(url, Expiring::from_duration(value, ttl));
             Ok(())
         })
     }

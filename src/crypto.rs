@@ -208,17 +208,14 @@ pub fn create_jwt(
     nonce: &str,
     signing_alg: SigningAlgorithm,
 ) -> Result<String, SignError> {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
     let payload = json!({
         "aud": aud,
         "email": email_addr.as_str(),
         "email_verified": true,
         "email_original": email,
-        "exp": now + u64::from(app.token_ttl),
-        "iat": now,
+        "exp": (now + app.token_ttl).as_secs(),
+        "iat": now.as_secs(),
         "iss": &app.public_url,
         "sub": email_addr.as_str(),
         "nonce": nonce,

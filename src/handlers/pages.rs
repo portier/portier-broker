@@ -40,7 +40,7 @@ pub async fn static_(ctx: &mut Context) -> HandlerResult {
         .map_err(|e| BrokerError::Internal(format!("static serving failed: {}", e)))?;
     let res = ResponseBuilder::new()
         .request_parts(&ctx.method, &ctx.uri, &ctx.headers)
-        .cache_headers(Some(ctx.app.static_ttl))
+        .cache_headers(Some(ctx.app.static_ttl.as_secs() as u32))
         .build(result)
         .expect("could not build static serving response");
     Ok(res)

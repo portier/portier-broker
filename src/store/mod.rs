@@ -3,6 +3,7 @@ mod redis;
 
 use crate::utils::{BoxError, BoxFuture};
 use crate::web::Session;
+use std::time::Duration;
 use url::Url;
 
 pub use self::memory::*;
@@ -20,7 +21,7 @@ pub trait SessionStore {
 /// Should be locked while alive, and unlock on `drop`.
 pub trait CacheItem: Drop {
     fn read(&self) -> BoxFuture<Result<Option<String>, BoxError>>;
-    fn write(&mut self, value: String, max_age: usize) -> BoxFuture<Result<(), BoxError>>;
+    fn write(&mut self, value: String, max_age: Duration) -> BoxFuture<Result<(), BoxError>>;
 }
 
 /// Interface for storing cache.

@@ -5,15 +5,13 @@ use headers::{CacheControl, HeaderMapExt};
 use http::StatusCode;
 use serde::de::DeserializeOwned;
 use serde_json as json;
+use std::time::Duration;
 use url::Url;
 
 /// Fetch `url` from cache or using a HTTP GET request, and parse the response as JSON. The
 /// cache is stored in `app.store` with `key`. The `client` is used to make the HTTP GET request,
 /// if necessary.
-pub async fn fetch_json_cached<T>(
-    app: &ConfigRc,
-    url: Url,
-) -> Result<T, BrokerError>
+pub async fn fetch_json_cached<T>(app: &ConfigRc, url: Url) -> Result<T, BrokerError>
 where
     T: 'static + DeserializeOwned,
 {
@@ -57,9 +55,11 @@ where
         }
 
         // Grab the max-age directive from the Cache-Control header.
-        let max_age = res.headers().typed_get().map_or(0, |header: CacheControl| {
-            header.max_age().map(|d| d.as_secs()).unwrap_or(0)
-        });
+        let max_age = res
+            .headers()
+            .typed_get()
+            .and_then(|header: CacheControl| header.max_age())
+            .unwrap_or_else(|| Duration::from_secs(0));
 
         // Receive the body.
         let chunk = read_body(res.into_body())
@@ -75,7 +75,7 @@ where
 
         // Cache the response for at least `expire_cache`, but honor longer `max-age`.
         cache_item
-            .write(data, max_age as usize)
+            .write(data, max_age)
             .await
             .map_err(|e| BrokerError::Internal(format!("cache write failed: {}", e)))?;
 

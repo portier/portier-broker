@@ -84,19 +84,19 @@ pub struct RotatingKeys {
 impl RotatingKeys {
     pub async fn new(
         keysdir: impl AsRef<Path>,
-        keys_ttl: u64,
+        keys_ttl: Duration,
         signing_algs: &[SigningAlgorithm],
         generate_rsa_command: Vec<String>,
         rng: impl SecureRandom + Send + Sync + 'static,
     ) -> Result<Self, RotateError> {
         info!(
             "Using rotating keys with a {}s interval and algorithms: {}",
-            keys_ttl,
+            keys_ttl.as_secs(),
             SigningAlgorithm::format_list(signing_algs)
         );
         let rng = Box::new(rng);
         let config = Arc::new(RotateConfig {
-            keys_ttl: Duration::from_secs(keys_ttl),
+            keys_ttl,
             generate_rsa_command,
             rng,
         });

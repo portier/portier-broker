@@ -468,15 +468,11 @@ pub fn return_to_relier(ctx: &Context, params: &[(&str, &str)]) -> Response {
 ///
 /// Serializes the argument value to JSON and returns a HTTP 200 response
 /// code with the serialized JSON as the body.
-pub fn json_response(obj: &json::Value, max_age: u64) -> Response {
+pub fn json_response(obj: &json::Value, max_age: Duration) -> Response {
     let body = json::to_string(&obj).expect("unable to coerce JSON Value into string");
     let mut res = Response::new(Body::from(body));
     res.typed_header(ContentType::json());
-    res.typed_header(
-        CacheControl::new()
-            .with_public()
-            .with_max_age(Duration::from_secs(max_age)),
-    );
+    res.typed_header(CacheControl::new().with_public().with_max_age(max_age));
     res
 }
 

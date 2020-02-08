@@ -16,6 +16,7 @@ use std::{
     io::{Error as IoError, Read},
     path::{Path, PathBuf},
     sync::Arc,
+    time::Duration,
 };
 
 /// The type of HTTP client we use, with TLS enabled.
@@ -142,10 +143,10 @@ pub struct Config {
     pub listen_port: u16,
     pub public_url: String,
     pub allowed_origins: Option<Vec<String>>,
-    pub static_ttl: u32,
-    pub discovery_ttl: u64,
-    pub keys_ttl: u64,
-    pub token_ttl: u16,
+    pub static_ttl: Duration,
+    pub discovery_ttl: Duration,
+    pub keys_ttl: Duration,
+    pub token_ttl: Duration,
     pub key_manager: Box<dyn KeyManager>,
     pub signing_algs: Vec<SigningAlgorithm>,
     pub store: Box<dyn Store + Send + Sync>,
@@ -168,18 +169,18 @@ pub struct ConfigBuilder {
     pub listen_port: u16,
     pub public_url: Option<String>,
     pub allowed_origins: Option<Vec<String>>,
-    pub static_ttl: u32,
-    pub discovery_ttl: u64,
-    pub keys_ttl: u64,
-    pub token_ttl: u16,
+    pub static_ttl: Duration,
+    pub discovery_ttl: Duration,
+    pub keys_ttl: Duration,
+    pub token_ttl: Duration,
     pub keyfiles: Vec<String>,
     pub keytext: Option<String>,
     pub keysdir: Option<String>,
     pub signing_algs: Vec<SigningAlgorithm>,
     pub generate_rsa_command: Vec<String>,
     pub redis_url: Option<String>,
-    pub redis_session_ttl: u16,
-    pub redis_cache_ttl: u16,
+    pub session_ttl: Duration,
+    pub cache_ttl: Duration,
     pub from_name: String,
     pub from_address: Option<String>,
     pub smtp_server: Option<String>,
@@ -198,18 +199,18 @@ impl ConfigBuilder {
             listen_port: 3333,
             public_url: None,
             allowed_origins: None,
-            static_ttl: 604_800,
-            discovery_ttl: 604_800,
-            keys_ttl: 86_400,
-            token_ttl: 600,
+            static_ttl: Duration::from_secs(604_800),
+            discovery_ttl: Duration::from_secs(604_800),
+            keys_ttl: Duration::from_secs(86_400),
+            token_ttl: Duration::from_secs(600),
             keyfiles: Vec::new(),
             keytext: None,
             keysdir: None,
             signing_algs: vec![SigningAlgorithm::Rs256],
             generate_rsa_command: vec![],
             redis_url: None,
-            redis_session_ttl: 900,
-            redis_cache_ttl: 3600,
+            session_ttl: Duration::from_secs(900),
+            cache_ttl: Duration::from_secs(3600),
             from_name: "Portier".to_owned(),
             from_address: None,
             smtp_username: None,
@@ -246,19 +247,19 @@ impl ConfigBuilder {
 
         if let Some(table) = toml_config.headers {
             if let Some(val) = table.static_ttl {
-                self.static_ttl = val;
+                self.static_ttl = Duration::from_secs(val);
             }
             if let Some(val) = table.discovery_ttl {
-                self.discovery_ttl = val;
+                self.discovery_ttl = Duration::from_secs(val);
             }
             if let Some(val) = table.keys_ttl {
-                self.keys_ttl = val;
+                self.keys_ttl = Duration::from_secs(val);
             }
         }
 
         if let Some(table) = toml_config.crypto {
             if let Some(val) = table.token_ttl {
-                self.token_ttl = val;
+                self.token_ttl = Duration::from_secs(val);
             }
             if let Some(mut val) = table.keyfiles {
                 self.keyfiles.append(&mut val);
@@ -276,10 +277,10 @@ impl ConfigBuilder {
         if let Some(table) = toml_config.redis {
             self.redis_url = table.url.or_else(|| self.redis_url.clone());
             if let Some(val) = table.session_ttl {
-                self.redis_session_ttl = val;
+                self.session_ttl = Duration::from_secs(val);
             }
             if let Some(val) = table.cache_ttl {
-                self.redis_cache_ttl = val;
+                self.cache_ttl = Duration::from_secs(val);
             }
         }
 
@@ -367,17 +368,17 @@ impl ConfigBuilder {
         }
 
         if let Some(val) = env_config.static_ttl {
-            self.static_ttl = val;
+            self.static_ttl = Duration::from_secs(val);
         }
         if let Some(val) = env_config.discovery_ttl {
-            self.discovery_ttl = val;
+            self.discovery_ttl = Duration::from_secs(val);
         }
         if let Some(val) = env_config.keys_ttl {
-            self.keys_ttl = val;
+            self.keys_ttl = Duration::from_secs(val);
         }
 
         if let Some(val) = env_config.token_ttl {
-            self.token_ttl = val;
+            self.token_ttl = Duration::from_secs(val);
         }
         if let Some(val) = env_config.keyfiles {
             self.keyfiles = val;
@@ -399,10 +400,10 @@ impl ConfigBuilder {
             self.redis_url = Some(val);
         }
         if let Some(val) = env_config.session_ttl {
-            self.redis_session_ttl = val;
+            self.session_ttl = Duration::from_secs(val);
         }
         if let Some(val) = env_config.cache_ttl {
-            self.redis_cache_ttl = val;
+            self.cache_ttl = Duration::from_secs(val);
         }
 
         if let Some(val) = env_config.from_name {
@@ -483,23 +484,18 @@ impl ConfigBuilder {
         let http_connector = HttpsConnector::new();
         let http_client = hyper::Client::builder().build(http_connector);
 
-        // TODO: The TTL keys don't have to be redis specific.
         let store: Box<dyn Store + Send + Sync> = if let Some(redis_url) = self.redis_url {
             let store = RedisStore::new(
                 redis_url,
-                self.redis_session_ttl as usize,
-                self.redis_cache_ttl as usize,
+                self.session_ttl,
+                self.cache_ttl,
                 self.limit_per_email,
             )
             .await
             .expect("unable to instantiate new redis store");
             Box::new(store)
         } else {
-            let store = MemoryStore::new(
-                self.redis_session_ttl as usize,
-                self.redis_cache_ttl as usize,
-                self.limit_per_email,
-            );
+            let store = MemoryStore::new(self.session_ttl, self.cache_ttl, self.limit_per_email);
             Box::new(store)
         };
 
@@ -579,14 +575,14 @@ struct TomlServerTable {
 
 #[derive(Clone, Debug, Deserialize)]
 struct TomlHeadersTable {
-    static_ttl: Option<u32>,
+    static_ttl: Option<u64>,
     discovery_ttl: Option<u64>,
     keys_ttl: Option<u64>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
 struct TomlCryptoTable {
-    token_ttl: Option<u16>,
+    token_ttl: Option<u64>,
     keyfiles: Option<Vec<String>>,
     keytext: Option<String>,
     keysdir: Option<String>,
@@ -597,8 +593,9 @@ struct TomlCryptoTable {
 #[derive(Clone, Debug, Deserialize)]
 struct TomlRedisTable {
     url: Option<String>,
-    session_ttl: Option<u16>,
-    cache_ttl: Option<u16>,
+    // TODO: These don't have to be Redis specific.
+    session_ttl: Option<u64>,
+    cache_ttl: Option<u64>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -630,18 +627,18 @@ struct EnvConfig {
     port: Option<u16>,
     public_url: Option<String>,
     allowed_origins: Option<Vec<String>>,
-    static_ttl: Option<u32>,
+    static_ttl: Option<u64>,
     discovery_ttl: Option<u64>,
     keys_ttl: Option<u64>,
-    token_ttl: Option<u16>,
+    token_ttl: Option<u64>,
     keyfiles: Option<Vec<String>>,
     keytext: Option<String>,
     keysdir: Option<String>,
     signing_algs: Option<Vec<SigningAlgorithm>>,
     generate_rsa_command: Option<String>,
     redis_url: Option<String>,
-    session_ttl: Option<u16>,
-    cache_ttl: Option<u16>,
+    session_ttl: Option<u64>,
+    cache_ttl: Option<u64>,
     from_name: Option<String>,
     from_address: Option<String>,
     smtp_server: Option<String>,

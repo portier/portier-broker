@@ -2,6 +2,7 @@ use err_derive::Error;
 use std::fmt::{Display, Error as FmtError, Formatter};
 use std::num::ParseIntError;
 use std::str::FromStr;
+use std::time::Duration;
 
 // TODO: Support more units, and an integer amount in the denominator.
 
@@ -21,7 +22,7 @@ pub struct LimitConfig {
     /// Maximum request count within the window before we refuse.
     pub max_count: usize,
     /// Timespan of the entire window, in seconds.
-    pub duration: usize,
+    pub duration: Duration,
 }
 
 impl LimitConfig {
@@ -29,14 +30,14 @@ impl LimitConfig {
     pub fn per_minute(max_count: usize) -> Self {
         LimitConfig {
             max_count,
-            duration: 60,
+            duration: Duration::from_secs(60),
         }
     }
 }
 
 impl Display for LimitConfig {
     fn fmt(&self, f: &mut Formatter) -> Result<(), FmtError> {
-        match self.duration {
+        match self.duration.as_secs() {
             60 => write!(f, "{}/min", self.max_count),
             _ => unimplemented!(),
         }
@@ -52,7 +53,7 @@ impl FromStr for LimitConfig {
         let config = LimitConfig {
             max_count: max_count.parse()?,
             duration: match unit {
-                "/min" | "/minute" => 60,
+                "/min" | "/minute" => Duration::from_secs(60),
                 _ => return Err(LimitConfigError::InvalidDenominator),
             },
         };

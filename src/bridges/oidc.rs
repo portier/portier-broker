@@ -297,17 +297,14 @@ async fn fetch_config(
         .parse()
         .expect("could not build the OpenID Connect configuration URL");
 
-    let provider_config = fetch_json_cached::<ProviderConfig>(
-        &ctx.app,
-        config_url
-    )
-    .await
-    .map_err(|e| {
-        BrokerError::Provider(format!(
-            "could not fetch {}'s configuration: {}",
-            bridge_data.origin, e
-        ))
-    })?;
+    let provider_config = fetch_json_cached::<ProviderConfig>(&ctx.app, config_url)
+        .await
+        .map_err(|e| {
+            BrokerError::Provider(format!(
+                "could not fetch {}'s configuration: {}",
+                bridge_data.origin, e
+            ))
+        })?;
 
     #[cfg(not(feature = "insecure"))]
     {
@@ -326,17 +323,14 @@ async fn fetch_config(
     }
 
     // Grab the keys from the provider.
-    let key_set: ProviderKeys = fetch_json_cached(
-        &ctx.app,
-        provider_config.jwks_uri.clone()
-    )
-    .await
-    .map_err(|e| {
-        BrokerError::Provider(format!(
-            "could not fetch {}'s keys: {}",
-            bridge_data.origin, e
-        ))
-    })?;
+    let key_set: ProviderKeys = fetch_json_cached(&ctx.app, provider_config.jwks_uri.clone())
+        .await
+        .map_err(|e| {
+            BrokerError::Provider(format!(
+                "could not fetch {}'s keys: {}",
+                bridge_data.origin, e
+            ))
+        })?;
 
     Ok((provider_config, key_set))
 }
