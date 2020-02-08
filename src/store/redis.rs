@@ -1,9 +1,10 @@
-use crate::store::{CacheItem, CacheKey, CacheStore, LimitKey, LimitStore, SessionStore, Store};
+use crate::store::{CacheItem, CacheStore, LimitKey, LimitStore, SessionStore, Store};
 use crate::utils::{BoxError, BoxFuture, LimitConfig};
 use crate::web::Session;
 use redis::{aio::MultiplexedConnection as RedisConn, AsyncCommands, RedisError, Script};
 use serde_json as json;
 use std::sync::Arc;
+use url::Url;
 
 /// Store implementation using Redis.
 pub struct RedisStore {
@@ -61,14 +62,6 @@ impl RedisStore {
     fn format_session_key(session_id: &str) -> String {
         format!("session:{}", session_id)
     }
-
-    fn format_cache_key(key: CacheKey) -> String {
-        match key {
-            CacheKey::Discovery { acct } => format!("cache:discovery:{}", acct),
-            CacheKey::OidcConfig { origin } => format!("cache:configuration:{}", origin),
-            CacheKey::OidcKeySet { origin } => format!("cache:key-set:{}", origin),
-        }
-    }
 }
 
 impl SessionStore for RedisStore {
@@ -106,9 +99,9 @@ impl SessionStore for RedisStore {
 impl CacheStore for RedisStore {
     fn get_cache_item(
         &self,
-        key: CacheKey,
+        url: &Url,
     ) -> BoxFuture<Result<Box<dyn CacheItem + Send + Sync>, BoxError>> {
-        let key = RedisStore::format_cache_key(key);
+        let key = url.as_str().to_owned();
         let client = self.client.clone();
         let expire_cache = self.expire_cache;
         Box::pin(async move {

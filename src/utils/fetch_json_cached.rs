@@ -1,6 +1,5 @@
 use crate::config::ConfigRc;
 use crate::error::BrokerError;
-use crate::store::CacheKey;
 use crate::web::read_body;
 use headers::{CacheControl, HeaderMapExt};
 use http::StatusCode;
@@ -14,16 +13,14 @@ use url::Url;
 pub async fn fetch_json_cached<T>(
     app: &ConfigRc,
     url: Url,
-    key: CacheKey<'_>,
 ) -> Result<T, BrokerError>
 where
     T: 'static + DeserializeOwned,
 {
-    let key_str = format!("{:?}", key);
     // Try to retrieve the result from cache.
     let mut cache_item = app
         .store
-        .get_cache_item(key)
+        .get_cache_item(&url)
         .await
         .map_err(|e| BrokerError::Internal(format!("cache lookup failed: {}", e)))?;
     let data = cache_item
@@ -31,14 +28,14 @@ where
         .await
         .map_err(|e| BrokerError::Internal(format!("cache read failed: {}", e)))?;
     if let Some(data) = data {
-        log::info!("HIT {} - {}", key_str, url);
+        log::info!("HIT {}", url);
 
         json::from_str(&data)
             .map_err(|e| BrokerError::Internal(format!("bad cache value ({}): {}", e, url)))
     } else {
         // Cache miss, make a request.
         // TODO: Also cache failed requests, perhaps for a shorter time.
-        log::info!("MISS {} - {}", key_str, url);
+        log::info!("MISS {}", url);
 
         let hyper_url = url
             .as_str()

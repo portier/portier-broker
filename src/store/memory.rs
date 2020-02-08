@@ -1,10 +1,11 @@
-use crate::store::{CacheItem, CacheKey, CacheStore, LimitKey, LimitStore, SessionStore, Store};
+use crate::store::{CacheItem, CacheStore, LimitKey, LimitStore, SessionStore, Store};
 use crate::utils::{BoxError, BoxFuture, LimitConfig};
 use crate::web::Session;
 use std::collections::hash_map::{Entry, HashMap};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
+use url::Url;
 
 struct Expiring<T> {
     inner: T,
@@ -14,7 +15,7 @@ struct Expiring<T> {
 #[derive(Default)]
 struct Storage {
     sessions: HashMap<String, Expiring<Session>>,
-    cache: HashMap<String, Expiring<String>>,
+    cache: HashMap<Url, Expiring<String>>,
     limit_counters: HashMap<String, Expiring<usize>>,
 }
 
@@ -96,18 +97,14 @@ impl SessionStore for MemoryStore {
 impl CacheStore for MemoryStore {
     fn get_cache_item(
         &self,
-        key: CacheKey,
+        url: &Url,
     ) -> BoxFuture<Result<Box<dyn CacheItem + Send + Sync>, BoxError>> {
-        let key = match key {
-            CacheKey::Discovery { acct } => acct.to_owned(),
-            CacheKey::OidcConfig { origin } => origin.to_owned(),
-            CacheKey::OidcKeySet { origin } => origin.to_owned(),
-        };
+        let url = url.clone();
         let storage = self.storage.clone();
         let expire_cache = self.expire_cache;
         Box::pin(async move {
             let item: Box<dyn CacheItem + Send + Sync> =
-                Box::new(MemoryCacheItem::new(key, storage, expire_cache));
+                Box::new(MemoryCacheItem::new(url, storage, expire_cache));
             Ok(item)
         })
     }
@@ -158,16 +155,16 @@ impl LimitStore for MemoryStore {
 impl Store for MemoryStore {}
 
 struct MemoryCacheItem {
-    key: String,
+    url: Url,
     storage: StorageRc,
     expire_cache: usize,
 }
 
 impl MemoryCacheItem {
-    fn new(key: String, storage: StorageRc, expire_cache: usize) -> Self {
+    fn new(url: Url, storage: StorageRc, expire_cache: usize) -> Self {
         // TODO: Lock
         MemoryCacheItem {
-            key,
+            url,
             storage,
             expire_cache,
         }
@@ -183,12 +180,12 @@ impl Drop for MemoryCacheItem {
 impl CacheItem for MemoryCacheItem {
     fn read(&self) -> BoxFuture<Result<Option<String>, BoxError>> {
         let storage = self.storage.clone();
-        let key = self.key.clone();
+        let url = self.url.clone();
         Box::pin(async move {
             let storage = storage.read().await;
             let data = storage
                 .cache
-                .get(&key)
+                .get(&url)
                 .filter(|entry| entry.expires > Instant::now())
                 .map(|entry| entry.inner.clone());
             Ok(data)
@@ -197,12 +194,12 @@ impl CacheItem for MemoryCacheItem {
 
     fn write(&mut self, value: String, max_age: usize) -> BoxFuture<Result<(), BoxError>> {
         let storage = self.storage.clone();
-        let key = self.key.clone();
+        let url = self.url.clone();
         let seconds = std::cmp::max(self.expire_cache, max_age);
         Box::pin(async move {
             let mut storage = storage.write().await;
             storage.cache.insert(
-                key,
+                url,
                 Expiring {
                     inner: value,
                     expires: Instant::now() + Duration::from_secs(seconds as u64),

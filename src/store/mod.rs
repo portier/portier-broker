@@ -3,6 +3,7 @@ mod redis;
 
 use crate::utils::{BoxError, BoxFuture};
 use crate::web::Session;
+use url::Url;
 
 pub use self::memory::*;
 pub use self::redis::*;
@@ -12,15 +13,6 @@ pub trait SessionStore {
     fn store_session(&self, session_id: &str, data: Session) -> BoxFuture<Result<(), BoxError>>;
     fn get_session(&self, session_id: &str) -> BoxFuture<Result<Option<Session>, BoxError>>;
     fn remove_session(&self, session_id: &str) -> BoxFuture<Result<(), BoxError>>;
-}
-
-/// Key for cache items.
-// @TODO: We only do simple GET requests. This can just be a Url.
-#[derive(Clone, Copy, Debug)]
-pub enum CacheKey<'a> {
-    Discovery { acct: &'a str },
-    OidcConfig { origin: &'a str },
-    OidcKeySet { origin: &'a str },
 }
 
 /// A cache query result.
@@ -35,7 +27,7 @@ pub trait CacheItem: Drop {
 pub trait CacheStore {
     fn get_cache_item(
         &self,
-        key: CacheKey,
+        url: &Url,
     ) -> BoxFuture<Result<Box<dyn CacheItem + Send + Sync>, BoxError>>;
 }
 

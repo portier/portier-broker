@@ -3,7 +3,6 @@ use crate::config::GoogleConfig;
 use crate::crypto::{self, SigningAlgorithm};
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
-use crate::store::CacheKey;
 use crate::utils::{fetch_json_cached, http::ResponseExt};
 use crate::validation;
 use crate::web::{empty_response, Context, HandlerResult};
@@ -300,10 +299,7 @@ async fn fetch_config(
 
     let provider_config = fetch_json_cached::<ProviderConfig>(
         &ctx.app,
-        config_url,
-        CacheKey::OidcConfig {
-            origin: bridge_data.origin.as_str(),
-        },
+        config_url
     )
     .await
     .map_err(|e| {
@@ -332,10 +328,7 @@ async fn fetch_config(
     // Grab the keys from the provider.
     let key_set: ProviderKeys = fetch_json_cached(
         &ctx.app,
-        provider_config.jwks_uri.clone(),
-        CacheKey::OidcKeySet {
-            origin: bridge_data.origin.as_str(),
-        },
+        provider_config.jwks_uri.clone()
     )
     .await
     .map_err(|e| {

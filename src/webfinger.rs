@@ -1,7 +1,6 @@
 use crate::config::ConfigRc;
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
-use crate::store::CacheKey;
 use crate::utils::fetch_json_cached;
 use err_derive::Error;
 use serde_derive::{Deserialize, Serialize};
@@ -118,10 +117,7 @@ pub async fn query(app: &ConfigRc, email_addr: &EmailAddress) -> Result<Vec<Link
     .map_err(|e| BrokerError::Internal(format!("could not build webfinger query url: {}", e)))?;
 
     // Make the request.
-    let cache_key = CacheKey::Discovery {
-        acct: email_addr.as_str(),
-    };
-    let descriptor: DescriptorDef = fetch_json_cached(app, url, cache_key).await?;
+    let descriptor: DescriptorDef = fetch_json_cached(app, url).await?;
 
     // Parse the relations.
     let links = descriptor
