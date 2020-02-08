@@ -1,7 +1,8 @@
 use crate::bridges::oidc::GOOGLE_IDP_ORIGIN;
 use crate::crypto::SigningAlgorithm;
 use crate::keys::{self, KeyManager, ManualKeys, RotatingKeys};
-use crate::store::{RedisLimitConfig, RedisStore, Store};
+use crate::store::{RedisStore, Store};
+use crate::utils::LimitConfig;
 use crate::webfinger::{Link, LinkDef, ParseLinkError, Relation};
 use err_derive::Error;
 use gettext::Catalog;
@@ -184,7 +185,7 @@ pub struct ConfigBuilder {
     pub smtp_server: Option<String>,
     pub smtp_username: Option<String>,
     pub smtp_password: Option<String>,
-    pub limit_per_email: String,
+    pub limit_per_email: LimitConfig,
     pub domain_overrides: HashMap<String, Vec<Link>>,
     pub google: Option<GoogleConfig>,
     pub data_dir: PathBuf,
@@ -214,7 +215,7 @@ impl ConfigBuilder {
             smtp_username: None,
             smtp_password: None,
             smtp_server: None,
-            limit_per_email: "5/min".to_owned(),
+            limit_per_email: LimitConfig::per_minute(5),
             domain_overrides: HashMap::new(),
             google: None,
             data_dir: PathBuf::new(),
@@ -486,24 +487,11 @@ impl ConfigBuilder {
         let http_connector = HttpsConnector::new();
         let http_client = hyper::Client::builder().build(http_connector);
 
-        let idx = self
-            .limit_per_email
-            .find('/')
-            .expect("unable to parse limit_per_email format");
-        let (max_count, unit) = self.limit_per_email.split_at(idx);
-        let limit_per_email_config = RedisLimitConfig {
-            max_count: max_count.parse().expect("unable to parse limit count"),
-            duration: match unit {
-                "/min" | "/minute" => 60,
-                _ => return Err(From::from("unrecognized limit duration")),
-            },
-        };
-
         let store = RedisStore::new(
             self.redis_url.expect("no redis url configured"),
             self.redis_session_ttl as usize,
             self.redis_cache_ttl as usize,
-            limit_per_email_config,
+            self.limit_per_email,
         )
         .await
         .expect("unable to instantiate new redis store");
@@ -617,7 +605,7 @@ struct TomlSmtpTable {
 
 #[derive(Clone, Debug, Deserialize)]
 struct TomlLimitTable {
-    per_email: Option<String>,
+    per_email: Option<LimitConfig>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -652,7 +640,7 @@ struct EnvConfig {
     smtp_server: Option<String>,
     smtp_username: Option<String>,
     smtp_password: Option<String>,
-    limit_per_email: Option<String>,
+    limit_per_email: Option<LimitConfig>,
     google_client_id: Option<String>,
     data_dir: Option<String>,
 }

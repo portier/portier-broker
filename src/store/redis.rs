@@ -1,15 +1,7 @@
 use crate::store::{CacheItem, CacheKey, CacheStore, LimitKey, LimitStore, SessionStore, Store};
-use crate::utils::{BoxError, BoxFuture};
+use crate::utils::{BoxError, BoxFuture, LimitConfig};
 use redis::{aio::MultiplexedConnection as RedisConn, AsyncCommands, RedisError, Script};
 use std::sync::Arc;
-
-/// Configuration for a type of rate limiting.
-pub struct RedisLimitConfig {
-    /// Maximum request count within the window before we refuse.
-    pub max_count: usize,
-    /// Timespan of the entire window, in seconds.
-    pub duration: usize,
-}
 
 /// Store implementation using Redis.
 pub struct RedisStore {
@@ -22,7 +14,7 @@ pub struct RedisStore {
     /// Script used to check a limit.
     limit_script: Arc<Script>,
     /// Configuration for per-email rate limiting.
-    limit_per_email_config: RedisLimitConfig,
+    limit_per_email_config: LimitConfig,
 }
 
 impl RedisStore {
@@ -30,7 +22,7 @@ impl RedisStore {
         mut url: String,
         expire_sessions: usize,
         expire_cache: usize,
-        limit_per_email_config: RedisLimitConfig,
+        limit_per_email_config: LimitConfig,
     ) -> Result<Self, RedisError> {
         if url.starts_with("http://") {
             url = url.replace("http://", "redis://");
@@ -127,7 +119,7 @@ impl LimitStore for RedisStore {
                 &self.limit_per_email_config,
             ),
         };
-        let RedisLimitConfig {
+        let LimitConfig {
             max_count,
             duration,
         } = *config;

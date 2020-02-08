@@ -1,6 +1,4 @@
 use matches::matches;
-use serde::{Deserialize, Deserializer};
-use serde::{Serialize, Serializer};
 use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use std::net::Ipv4Addr;
 use std::str::FromStr;
@@ -49,16 +47,6 @@ impl AsRef<str> for EmailAddress {
     /// Return the serialization of this email address.
     fn as_ref(&self) -> &str {
         &self.serialization
-    }
-}
-
-impl Serialize for EmailAddress {
-    /// Serialize this email address as a string.
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        self.as_str().serialize(serializer)
     }
 }
 
@@ -151,6 +139,8 @@ impl Debug for EmailAddress {
         Debug::fmt(&self.serialization, formatter)
     }
 }
+
+serde_string!(EmailAddress);
 
 #[cfg(test)]
 mod tests {

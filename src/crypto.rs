@@ -9,7 +9,6 @@ use ring::{
     rand::SecureRandom,
     signature::{self, UnparsedPublicKey},
 };
-use serde_derive::{Deserialize, Serialize};
 use serde_json as json;
 use serde_json::json;
 use std::fmt;
@@ -19,11 +18,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 type RsaPublicKey = signature::RsaPublicKeyComponents<Vec<u8>>;
 
 /// Token signing algorithms we support.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SigningAlgorithm {
-    #[serde(rename = "EdDSA")]
     EdDsa,
-    #[serde(rename = "RS256")]
     Rs256,
 }
 
@@ -63,6 +60,8 @@ impl std::str::FromStr for SigningAlgorithm {
         }
     }
 }
+
+serde_string!(SigningAlgorithm);
 
 /// The types of public keys we support.
 pub enum SupportedPublicKey {
