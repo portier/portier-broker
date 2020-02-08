@@ -16,7 +16,7 @@ use serde_derive::{Deserialize, Serialize};
 const QUERY_ESCAPE: &AsciiSet = &CONTROLS.add(b' ').add(b'"').add(b'#').add(b'<').add(b'>');
 
 /// Data we store in the session.
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct EmailBridgeData {
     pub code: String,
 }

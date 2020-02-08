@@ -26,7 +26,7 @@ use url::{form_urlencoded, Url};
 pub struct SizeLimitExceeded;
 
 /// A session as stored in Redis.
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Session {
     pub data: SessionData,
     pub bridge_data: BridgeData,
@@ -51,7 +51,7 @@ pub struct ReturnParams {
 }
 
 /// Common session data.
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct SessionData {
     pub return_params: ReturnParams,
     pub email: String,
@@ -136,11 +136,9 @@ impl Context {
             Some(data) => data,
             None => return Ok(false),
         };
-        let data = json::to_string(&Session { data, bridge_data })
-            .map_err(|e| BrokerError::Internal(format!("could not serialize session: {}", e)))?;
         self.app
             .store
-            .store_session(&self.session_id, data)
+            .store_session(&self.session_id, Session { data, bridge_data })
             .await
             .map_err(|e| BrokerError::Internal(format!("could not save a session: {}", e)))?;
         Ok(true)
@@ -151,15 +149,13 @@ impl Context {
         assert!(self.session_id.is_empty());
         assert!(self.session_data.is_none());
         assert!(self.return_params.is_none());
-        let data = self
+        let Session { data, bridge_data } = self
             .app
             .store
             .get_session(id)
             .await
             .map_err(|e| BrokerError::Internal(format!("could not load a session: {}", e)))?
             .ok_or(BrokerError::SessionExpired)?;
-        let Session { data, bridge_data } = json::from_str(&data)
-            .map_err(|e| BrokerError::Internal(format!("could not deserialize session: {}", e)))?;
         self.return_params = Some(data.return_params.clone());
         self.session_id = id.to_owned();
         self.session_data = Some(data);

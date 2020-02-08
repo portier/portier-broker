@@ -20,11 +20,10 @@ module.exports = () => {
     stdio: "inherit",
     cwd: ROOT,
     env: {
-      RUST_LOG: "warn",
+      RUST_LOG: "error",
       RUST_BACKTRACE: "1",
       BROKER_PUBLIC_URL: "http://localhost:3333",
       BROKER_KEYTEXT: pem,
-      BROKER_REDIS_URL: "redis://localhost/0",
       BROKER_FROM_ADDRESS: "portier@example.com",
       BROKER_SMTP_SERVER: "localhost:1025",
       BROKER_LIMIT_PER_EMAIL: "10000/min"

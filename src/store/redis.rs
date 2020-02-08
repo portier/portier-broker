@@ -1,6 +1,8 @@
 use crate::store::{CacheItem, CacheKey, CacheStore, LimitKey, LimitStore, SessionStore, Store};
 use crate::utils::{BoxError, BoxFuture, LimitConfig};
+use crate::web::Session;
 use redis::{aio::MultiplexedConnection as RedisConn, AsyncCommands, RedisError, Script};
+use serde_json as json;
 use std::sync::Arc;
 
 /// Store implementation using Redis.
@@ -32,6 +34,10 @@ impl RedisStore {
         let client = redis::Client::open(url.as_str())?
             .get_multiplexed_tokio_connection()
             .await?;
+
+        log::warn!("Storing sessions in: {}", url);
+        log::warn!("Please always double check this Redis and the connection to it are secure!");
+        log::warn!("(This warning can't be fixed; it's a friendly reminder.)");
 
         let limit_script = Arc::new(Script::new(
             r"
@@ -66,21 +72,23 @@ impl RedisStore {
 }
 
 impl SessionStore for RedisStore {
-    fn store_session(&self, session_id: &str, data: String) -> BoxFuture<Result<(), BoxError>> {
+    fn store_session(&self, session_id: &str, data: Session) -> BoxFuture<Result<(), BoxError>> {
         let mut client = self.client.clone();
         let key = Self::format_session_key(session_id);
         let ttl = self.expire_sessions;
         Box::pin(async move {
+            let data = json::to_string(&data)?;
             client.set_ex(&key, data, ttl).await?;
             Ok(())
         })
     }
 
-    fn get_session(&self, session_id: &str) -> BoxFuture<Result<Option<String>, BoxError>> {
+    fn get_session(&self, session_id: &str) -> BoxFuture<Result<Option<Session>, BoxError>> {
         let mut client = self.client.clone();
         let key = Self::format_session_key(session_id);
         Box::pin(async move {
-            let data = client.get(&key).await?;
+            let data: String = client.get(&key).await?;
+            let data = json::from_str(&data)?;
             Ok(data)
         })
     }

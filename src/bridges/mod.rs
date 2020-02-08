@@ -4,7 +4,7 @@ use crate::web::{return_to_relier, Context, HandlerResult};
 use serde_derive::{Deserialize, Serialize};
 
 /// Session data stored by bridges.
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum BridgeData {
     Email(email::EmailBridgeData),

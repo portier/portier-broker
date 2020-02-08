@@ -19,7 +19,7 @@ pub const GOOGLE_IDP_ORIGIN: &str = "https://accounts.google.com";
 pub const LEEWAY: u64 = 30;
 
 /// Data we store in the session.
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct OidcBridgeData {
     pub link: Link,
     pub origin: String,

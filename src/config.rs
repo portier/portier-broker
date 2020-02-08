@@ -1,7 +1,7 @@
 use crate::bridges::oidc::GOOGLE_IDP_ORIGIN;
 use crate::crypto::SigningAlgorithm;
 use crate::keys::{self, KeyManager, ManualKeys, RotatingKeys};
-use crate::store::{RedisStore, Store};
+use crate::store::{MemoryStore, RedisStore, Store};
 use crate::utils::LimitConfig;
 use crate::webfinger::{Link, ParseLinkError, Relation};
 use err_derive::Error;
@@ -483,14 +483,25 @@ impl ConfigBuilder {
         let http_connector = HttpsConnector::new();
         let http_client = hyper::Client::builder().build(http_connector);
 
-        let store = RedisStore::new(
-            self.redis_url.expect("no redis url configured"),
-            self.redis_session_ttl as usize,
-            self.redis_cache_ttl as usize,
-            self.limit_per_email,
-        )
-        .await
-        .expect("unable to instantiate new redis store");
+        // TODO: The TTL keys don't have to be redis specific.
+        let store: Box<dyn Store + Send + Sync> = if let Some(redis_url) = self.redis_url {
+            let store = RedisStore::new(
+                redis_url,
+                self.redis_session_ttl as usize,
+                self.redis_cache_ttl as usize,
+                self.limit_per_email,
+            )
+            .await
+            .expect("unable to instantiate new redis store");
+            Box::new(store)
+        } else {
+            let store = MemoryStore::new(
+                self.redis_session_ttl as usize,
+                self.redis_cache_ttl as usize,
+                self.limit_per_email,
+            );
+            Box::new(store)
+        };
 
         // Configure default domain overrides for hosted Google
         let mut domain_overrides = HashMap::new();
@@ -525,7 +536,7 @@ impl ConfigBuilder {
             token_ttl: self.token_ttl,
             key_manager,
             signing_algs: self.signing_algs,
-            store: Box::new(store),
+            store,
             http_client,
             from_name: self.from_name,
             from_address: self.from_address.expect("no smtp from address configured"),
