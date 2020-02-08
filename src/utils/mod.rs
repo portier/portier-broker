@@ -3,7 +3,6 @@ mod fetch_json_cached;
 pub mod http;
 mod limit_config;
 pub mod pem;
-pub mod serde;
 
 use std::{error::Error, future::Future, pin::Pin};
 

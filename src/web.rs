@@ -4,7 +4,7 @@ use crate::crypto::{self, SigningAlgorithm};
 use crate::email_address::EmailAddress;
 use crate::error::{BrokerError, BrokerResult};
 use crate::router::router;
-use crate::utils::{http::ResponseExt, serde::UrlDef, BoxError, BoxFuture};
+use crate::utils::{http::ResponseExt, BoxError, BoxFuture};
 use bytes::{Bytes, BytesMut};
 use err_derive::Error;
 use futures_util::stream::StreamExt;
@@ -44,7 +44,6 @@ pub enum ResponseMode {
 /// Parameters used to return to the relying party
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ReturnParams {
-    #[serde(with = "UrlDef")]
     pub redirect_uri: Url,
     pub response_mode: ResponseMode,
     pub response_errors: bool,

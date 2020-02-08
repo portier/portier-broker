@@ -4,7 +4,7 @@ use crate::crypto::{self, SigningAlgorithm};
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
 use crate::store::CacheKey;
-use crate::utils::{fetch_json_cached, http::ResponseExt, serde::UrlDef};
+use crate::utils::{fetch_json_cached, http::ResponseExt};
 use crate::validation;
 use crate::web::{empty_response, Context, HandlerResult};
 use crate::webfinger::{Link, Relation};
@@ -31,9 +31,7 @@ pub struct OidcBridgeData {
 /// OpenID Connect configuration document.
 #[derive(Deserialize)]
 struct ProviderConfig {
-    #[serde(with = "UrlDef")]
     authorization_endpoint: Url,
-    #[serde(with = "UrlDef")]
     jwks_uri: Url,
     #[serde(default = "default_response_modes_supported")]
     response_modes_supported: Vec<String>,

@@ -2,7 +2,7 @@ use crate::config::ConfigRc;
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
 use crate::store::CacheKey;
-use crate::utils::{fetch_json_cached, serde::UrlDef};
+use crate::utils::fetch_json_cached;
 use err_derive::Error;
 use serde_derive::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -64,7 +64,6 @@ pub enum ParseLinkError {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Link {
     pub rel: Relation,
-    #[serde(with = "UrlDef")]
     pub href: Url,
 }
 

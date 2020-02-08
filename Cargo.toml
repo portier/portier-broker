@@ -46,7 +46,6 @@ serde = "1.0.104"
 serde_derive = "1.0.104"
 serde_json = "1.0.45"
 toml = "0.5.6"
-url = "2.1.1"
 
 [dependencies.redis]
 version = "0.15.1"
@@ -55,6 +54,10 @@ features = ["tokio-rt-core"]
 [dependencies.tokio]
 version = "0.2.11"
 features = ["fs", "macros", "process", "rt-threaded", "sync", "time"]
+
+[dependencies.url]
+version = "2.1.1"
+features = ["serde"]
 
 [target.'cfg(unix)'.dependencies]
 sd-notify = "0.1.1"
