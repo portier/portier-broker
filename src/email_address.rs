@@ -1,3 +1,4 @@
+use err_derive::Error;
 use matches::matches;
 use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use std::net::Ipv4Addr;
@@ -10,6 +11,22 @@ fn is_invalid_domain_char(c: char) -> bool {
     )
 }
 
+#[derive(Debug, Error)]
+pub enum ParseEmailError {
+    #[error(display = "missing '@' separator in email address")]
+    NoSeparator,
+    #[error(display = "local part of an email address cannot be empty")]
+    EmptyLocal,
+    #[error(display = "invalid international domain name in email address")]
+    InvalidIdna(#[error(from)] idna::Errors),
+    #[error(display = "domain part of an email address cannot be empty")]
+    EmptyDomain,
+    #[error(display = "email address contains invalid characters in the domain part")]
+    InvalidDomainChars,
+    #[error(display = "email address domain part cannot be a raw IP address")]
+    RawAddrNotAllowed,
+}
+
 #[derive(Clone, PartialEq, Eq)]
 pub struct EmailAddress {
     serialization: String,
@@ -17,27 +34,27 @@ pub struct EmailAddress {
 }
 
 impl FromStr for EmailAddress {
-    type Err = ();
+    type Err = ParseEmailError;
 
     /// Parse and normalize an email address.
     /// https://github.com/portier/portier.github.io/blob/master/specs/Email-Normalization.md
-    fn from_str(input: &str) -> Result<EmailAddress, ()> {
-        let local_end = input.rfind('@').ok_or(())?;
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        let local_end = input.rfind('@').ok_or(ParseEmailError::NoSeparator)?;
         // Transform the local part to lowercase
         let local = input[..local_end].to_lowercase();
         if local == "" {
-            return Err(());
+            return Err(ParseEmailError::EmptyLocal);
         }
         // Verify and normalize the domain
-        let domain = idna::domain_to_ascii(&input[local_end + 1..]).map_err(|_| ())?;
+        let domain = idna::domain_to_ascii(&input[local_end + 1..])?;
         if domain == "" {
-            return Err(());
+            return Err(ParseEmailError::EmptyDomain);
         }
         if domain.find(is_invalid_domain_char).is_some() {
-            return Err(());
+            return Err(ParseEmailError::InvalidDomainChars);
         }
         if domain.parse::<Ipv4Addr>().is_ok() {
-            return Err(());
+            return Err(ParseEmailError::RawAddrNotAllowed);
         }
         Ok(EmailAddress::from_parts(&local, &domain))
     }
@@ -57,28 +74,6 @@ impl EmailAddress {
             serialization: format!("{}@{}", local, domain),
             local_end: local.len(),
         }
-    }
-
-    /// Create an EmailAddress from trusted input.
-    ///
-    /// The input is the already serialized form, preferably extracted from an
-    /// EmailAddress parsed earlier.
-    pub fn from_trusted(input: &str) -> EmailAddress {
-        EmailAddress {
-            serialization: input.to_owned(),
-            local_end: input.rfind('@').expect("no @ found in input"),
-        }
-    }
-
-    /// Deserialize implementation for trusted input.
-    ///
-    /// Because this assumes input is valid, it must be explicitely selected using
-    /// `#[serde(deserialize_with = "EmailAddress::deserialize_trusted")]`
-    pub fn deserialize_trusted<'de, D>(deserializer: D) -> Result<EmailAddress, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        <&str>::deserialize(deserializer).map(|s| EmailAddress::from_trusted(s))
     }
 
     /// Return the serialization.
@@ -151,7 +146,7 @@ mod tests {
         fn parse(input: &str, output: &str) {
             assert_eq!(
                 input.parse::<EmailAddress>().unwrap(),
-                EmailAddress::from_trusted(output)
+                output.parse::<EmailAddress>().unwrap()
             );
         }
         parse("example.foo+bar@example.com", "example.foo+bar@example.com");
@@ -178,7 +173,7 @@ mod tests {
         fn parse(input: &str, output: &str) {
             assert_eq!(
                 input.parse::<EmailAddress>().unwrap().normalize_google(),
-                EmailAddress::from_trusted(output)
+                output.parse::<EmailAddress>().unwrap()
             );
         }
         parse("example@gmail.com", "example@gmail.com");

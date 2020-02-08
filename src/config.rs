@@ -3,7 +3,7 @@ use crate::crypto::SigningAlgorithm;
 use crate::keys::{self, KeyManager, ManualKeys, RotatingKeys};
 use crate::store::{RedisStore, Store};
 use crate::utils::LimitConfig;
-use crate::webfinger::{Link, LinkDef, ParseLinkError, Relation};
+use crate::webfinger::{Link, ParseLinkError, Relation};
 use err_derive::Error;
 use gettext::Catalog;
 use hyper_tls::HttpsConnector;
@@ -301,10 +301,6 @@ impl ConfigBuilder {
 
         if let Some(table) = toml_config.domain_overrides {
             for (domain, links) in table {
-                let links = links
-                    .iter()
-                    .map(Link::from_de_link)
-                    .collect::<Result<_, _>>()?;
                 self.domain_overrides.insert(domain, links);
             }
         }
@@ -557,7 +553,7 @@ struct TomlConfig {
     redis: Option<TomlRedisTable>,
     smtp: Option<TomlSmtpTable>,
     limit: Option<TomlLimitTable>,
-    domain_overrides: Option<HashMap<String, Vec<LinkDef>>>,
+    domain_overrides: Option<HashMap<String, Vec<Link>>>,
     google: Option<TomlGoogleTable>,
 }
 

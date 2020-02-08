@@ -5,6 +5,7 @@ use crate::store::CacheKey;
 use crate::utils::fetch_json_cached;
 use err_derive::Error;
 use serde_derive::{Deserialize, Serialize};
+use std::fmt::{Display, Error as FmtError, Formatter};
 use std::str::FromStr;
 use url::Url;
 
@@ -35,15 +36,25 @@ pub enum ParseRelationError {
 }
 
 /// Parsed and validated webfinger relation
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Relation {
     Portier,
     Google,
 }
 
+impl Display for Relation {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), FmtError> {
+        match self {
+            Relation::Portier => Display::fmt(WEBFINGER_PORTIER_REL, f),
+            Relation::Google => Display::fmt(WEBFINGER_GOOGLE_REL, f),
+        }
+    }
+}
+
 impl FromStr for Relation {
     type Err = ParseRelationError;
-    fn from_str(s: &str) -> Result<Relation, ParseRelationError> {
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             WEBFINGER_PORTIER_REL => Ok(Relation::Portier),
             WEBFINGER_GOOGLE_REL => Ok(Relation::Google),
@@ -51,6 +62,8 @@ impl FromStr for Relation {
         }
     }
 }
+
+serde_string!(Relation);
 
 #[derive(Debug, Error)]
 pub enum ParseLinkError {

@@ -55,7 +55,6 @@ pub struct ReturnParams {
 pub struct SessionData {
     pub return_params: ReturnParams,
     pub email: String,
-    #[serde(deserialize_with = "EmailAddress::deserialize_trusted")]
     pub email_addr: EmailAddress,
     pub nonce: String,
     pub signing_alg: SigningAlgorithm,
