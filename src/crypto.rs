@@ -1,8 +1,9 @@
+use crate::agents::SignJws;
 use crate::bridges::oidc::ProviderKey;
 use crate::config::Config;
 use crate::email_address::EmailAddress;
-use crate::keys::SignError;
 use crate::utils::base64url;
+use crate::utils::keys::SignError;
 use ring::{
     digest,
     error::Unspecified,
@@ -200,7 +201,7 @@ pub fn verify_jws(
 ///
 /// Builds the JSON payload, then signs it using the last key provided in
 /// the configuration object.
-pub fn create_jwt(
+pub async fn create_jwt(
     app: &Config,
     email: &str,
     email_addr: &EmailAddress,
@@ -209,16 +210,20 @@ pub fn create_jwt(
     signing_alg: SigningAlgorithm,
 ) -> Result<String, SignError> {
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    let payload = json!({
-        "aud": aud,
-        "email": email_addr.as_str(),
-        "email_verified": true,
-        "email_original": email,
-        "exp": (now + app.token_ttl).as_secs(),
-        "iat": now.as_secs(),
-        "iss": &app.public_url,
-        "sub": email_addr.as_str(),
-        "nonce": nonce,
-    });
-    app.key_manager.sign_jws(&payload, signing_alg, &app.rng)
+    app.key_manager
+        .send(SignJws {
+            payload: json!({
+                "aud": aud,
+                "email": email_addr.as_str(),
+                "email_verified": true,
+                "email_original": email,
+                "exp": (now + app.token_ttl).as_secs(),
+                "iat": now.as_secs(),
+                "iss": &app.public_url,
+                "sub": email_addr.as_str(),
+                "nonce": nonce,
+            }),
+            signing_alg,
+        })
+        .await
 }

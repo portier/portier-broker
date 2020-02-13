@@ -1,7 +1,9 @@
-use crate::agents::{FetchAgent, MemoryStore, RedisStore, StoreSender};
+use crate::agents::{
+    FetchAgent, KeyManagerSender, ManualKeys, ManualKeysError, MemoryStore, RedisStore,
+    RotatingKeys, RotatingKeysError, StoreSender,
+};
 use crate::bridges::oidc::GOOGLE_IDP_ORIGIN;
 use crate::crypto::SigningAlgorithm;
-use crate::keys::{self, KeyManager, ManualKeys, RotatingKeys};
 use crate::utils::{agent::Agent, LimitConfig};
 use crate::webfinger::{Link, ParseLinkError, Relation};
 use err_derive::Error;
@@ -28,9 +30,9 @@ pub enum ConfigError {
     #[error(display = "TOML error: {}", _0)]
     Toml(#[error(source)] toml::de::Error),
     #[error(display = "keys configuration error: {}", _0)]
-    ManualKeys(#[error(source)] keys::ConfigError),
+    ManualKeys(#[error(source)] ManualKeysError),
     #[error(display = "rotating keys configuration error: {}", _0)]
-    RotatingKeys(#[error(source)] keys::RotateError),
+    RotatingKeys(#[error(source)] RotatingKeysError),
     #[error(display = "domain override configuration error: {}", _0)]
     DomainOverride(#[error(source)] ParseLinkError),
 }
@@ -143,7 +145,7 @@ pub struct Config {
     pub discovery_ttl: Duration,
     pub keys_ttl: Duration,
     pub token_ttl: Duration,
-    pub key_manager: Box<dyn KeyManager>,
+    pub key_manager: Box<dyn KeyManagerSender>,
     pub signing_algs: Vec<SigningAlgorithm>,
     pub store: Box<dyn StoreSender>,
     pub from_name: String,
@@ -453,7 +455,7 @@ impl ConfigBuilder {
         .unwrap();
 
         // Child structs
-        let key_manager: Box<dyn KeyManager> = if let Some(keysdir) = self.keysdir {
+        let key_manager: Box<dyn KeyManagerSender> = if let Some(keysdir) = self.keysdir {
             if !self.keyfiles.is_empty() || self.keytext.is_some() {
                 return Err("keysdir cannot be combined with keyfiles / keytext".into());
             }
@@ -462,18 +464,26 @@ impl ConfigBuilder {
             {
                 return Err("generate_rsa_command is required for rotating RSA keys".into());
             }
-            Box::new(
-                RotatingKeys::new(
-                    keysdir,
-                    self.keys_ttl,
-                    &self.signing_algs,
-                    self.generate_rsa_command,
-                    rng.clone(),
-                )
-                .await?,
+            let key_manager = RotatingKeys::new(
+                keysdir,
+                self.keys_ttl,
+                &self.signing_algs,
+                self.generate_rsa_command,
+                rng.clone(),
             )
+            .await?
+            .start();
+            Box::new(key_manager)
         } else {
-            Box::new(ManualKeys::new(self.keyfiles, self.keytext, &self.signing_algs).await?)
+            let key_manager = ManualKeys::new(
+                self.keyfiles,
+                self.keytext,
+                &self.signing_algs,
+                Box::new(rng.clone()),
+            )
+            .await?
+            .start();
+            Box::new(key_manager)
         };
 
         let fetcher = FetchAgent::new().start();

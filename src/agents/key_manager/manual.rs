@@ -1,5 +1,7 @@
+use crate::agents::*;
 use crate::crypto::SigningAlgorithm;
-use crate::keys::{KeyManager, NamedKeyPair, SignError};
+use crate::utils::agent::*;
+use crate::utils::keys::{NamedKeyPair, SignError};
 use crate::utils::pem::{self, ParsedKeyPair};
 use err_derive::Error;
 use log::{info, warn};
@@ -7,12 +9,11 @@ use ring::{
     rand::SecureRandom,
     signature::{Ed25519KeyPair, RsaKeyPair},
 };
-use serde_json as json;
 use tokio::fs::File;
 use tokio::io::BufReader;
 
 #[derive(Debug, Error)]
-pub enum ConfigError {
+pub enum ManualKeysError {
     #[error(display = "could not parse keytext: {}", _0)]
     InvalidKeytext(#[error(source)] pem::ParseError),
     #[error(display = "no PEM data found in keytext")]
@@ -25,6 +26,7 @@ pub enum ConfigError {
 pub struct ManualKeys {
     ed25519_keys: Vec<NamedKeyPair<Ed25519KeyPair>>,
     rsa_keys: Vec<NamedKeyPair<RsaKeyPair>>,
+    rng: Box<dyn SecureRandom + Send>,
 }
 
 impl ManualKeys {
@@ -32,7 +34,8 @@ impl ManualKeys {
         keyfiles: Vec<String>,
         keytext: Option<String>,
         signing_algs: &[SigningAlgorithm],
-    ) -> Result<Self, ConfigError> {
+        rng: Box<dyn SecureRandom + Send>,
+    ) -> Result<Self, ManualKeysError> {
         info!(
             "Using manual key management with algorithms: {}",
             SigningAlgorithm::format_list(signing_algs)
@@ -79,7 +82,7 @@ impl ManualKeys {
         if let Some(keytext) = keytext {
             let mut key_pairs = pem::parse_key_pairs(keytext.as_bytes()).await?;
             if key_pairs.is_empty() {
-                return Err(ConfigError::EmptyKeytext);
+                return Err(ManualKeysError::EmptyKeytext);
             } else {
                 parsed.append(&mut key_pairs);
             }
@@ -104,7 +107,7 @@ impl ManualKeys {
                 SigningAlgorithm::EdDsa => ed25519_keys.is_empty(),
                 SigningAlgorithm::Rs256 => rsa_keys.is_empty(),
             } {
-                return Err(ConfigError::MissingKeys {
+                return Err(ManualKeysError::MissingKeys {
                     signing_alg: *signing_alg,
                 });
             }
@@ -113,35 +116,37 @@ impl ManualKeys {
         Ok(Self {
             ed25519_keys,
             rsa_keys,
+            rng,
         })
     }
 }
 
-impl KeyManager for ManualKeys {
-    fn sign_jws(
-        &self,
-        payload: &json::Value,
-        signing_alg: SigningAlgorithm,
-        rng: &dyn SecureRandom,
-    ) -> Result<String, SignError> {
-        match signing_alg {
+impl Agent for ManualKeys {}
+
+impl Handler<SignJws> for ManualKeys {
+    fn handle(&mut self, message: SignJws, reply: ReplySender<SignJws>) {
+        let maybe_jws = match message.signing_alg {
             SigningAlgorithm::EdDsa => self
                 .ed25519_keys
                 .last()
-                .ok_or_else(|| SignError::UnsupportedAlgorithm(signing_alg))?
-                .sign_jws(payload, rng),
+                .map(|key| key.sign_jws(&message.payload, &*self.rng)),
             SigningAlgorithm::Rs256 => self
                 .rsa_keys
                 .last()
-                .ok_or_else(|| SignError::UnsupportedAlgorithm(signing_alg))?
-                .sign_jws(payload, rng),
-        }
-    }
-
-    /// Get a list of JWKs containing public keys.
-    fn public_jwks(&self) -> Vec<json::Value> {
-        let ed25519_jwks = self.ed25519_keys.iter().map(NamedKeyPair::public_jwk);
-        let rsa_jwks = self.rsa_keys.iter().map(NamedKeyPair::public_jwk);
-        ed25519_jwks.chain(rsa_jwks).collect()
+                .map(|key| key.sign_jws(&message.payload, &*self.rng)),
+        };
+        reply.send(
+            maybe_jws.unwrap_or_else(|| Err(SignError::UnsupportedAlgorithm(message.signing_alg))),
+        );
     }
 }
+
+impl Handler<GetPublicJwks> for ManualKeys {
+    fn handle(&mut self, _message: GetPublicJwks, reply: ReplySender<GetPublicJwks>) {
+        let ed25519_jwks = self.ed25519_keys.iter().map(NamedKeyPair::public_jwk);
+        let rsa_jwks = self.rsa_keys.iter().map(NamedKeyPair::public_jwk);
+        reply.send(ed25519_jwks.chain(rsa_jwks).collect())
+    }
+}
+
+impl KeyManagerSender for Addr<ManualKeys> {}

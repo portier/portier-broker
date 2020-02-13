@@ -1,9 +1,3 @@
-mod manual_keys;
-mod rotating_keys;
-
-pub use manual_keys::*;
-pub use rotating_keys::*;
-
 use crate::crypto::SigningAlgorithm;
 use crate::utils::base64url;
 use err_derive::Error;
@@ -13,8 +7,7 @@ use ring::{
     rand::SecureRandom,
     signature::{self, Ed25519KeyPair, KeyPair, RsaKeyPair},
 };
-use serde_json as json;
-use serde_json::json;
+use serde_json::{json, Value as JsonValue};
 
 #[derive(Debug, Error)]
 pub enum SignError {
@@ -30,20 +23,6 @@ impl From<ring::error::Unspecified> for SignError {
     }
 }
 
-/// Trait implemented by key management strategies.
-pub trait KeyManager: Send + Sync {
-    /// Create a JSON Web Signature (JWS) for the given JSON structure.
-    fn sign_jws(
-        &self,
-        payload: &json::Value,
-        signing_alg: SigningAlgorithm,
-        rng: &dyn SecureRandom,
-    ) -> Result<String, SignError>;
-
-    /// Get a list of JWKs containing public keys.
-    fn public_jwks(&self) -> Vec<json::Value>;
-}
-
 /// A named key pair, for use in JWS signing.
 pub struct NamedKeyPair<T: KeyPairExt> {
     pub kid: String,
@@ -52,12 +31,16 @@ pub struct NamedKeyPair<T: KeyPairExt> {
 
 impl<T: KeyPairExt> NamedKeyPair<T> {
     /// Create a JSON Web Signature (JWS) for the given JSON structure.
-    fn sign_jws(&self, payload: &json::Value, rng: &dyn SecureRandom) -> Result<String, SignError> {
+    pub fn sign_jws(
+        &self,
+        payload: &JsonValue,
+        rng: &dyn SecureRandom,
+    ) -> Result<String, SignError> {
         self.key_pair.sign_jws(&self.kid, payload, rng)
     }
 
     /// Return JSON represenation of the public key for use in JWK key sets.
-    fn public_jwk(&self) -> json::Value {
+    pub fn public_jwk(&self) -> JsonValue {
         self.key_pair.public_jwk(&self.kid)
     }
 }
@@ -84,12 +67,12 @@ pub trait KeyPairExt {
     fn sign_jws(
         &self,
         kid: &str,
-        payload: &json::Value,
+        payload: &JsonValue,
         rng: &dyn SecureRandom,
     ) -> Result<String, SignError>;
 
     /// Return JSON represenation of the public key for use in JWK key sets.
-    fn public_jwk(&self, kid: &str) -> json::Value;
+    fn public_jwk(&self, kid: &str) -> JsonValue;
 }
 
 impl KeyPairExt for Ed25519KeyPair {
@@ -107,7 +90,7 @@ impl KeyPairExt for Ed25519KeyPair {
     fn sign_jws(
         &self,
         kid: &str,
-        payload: &json::Value,
+        payload: &JsonValue,
         _rng: &dyn SecureRandom,
     ) -> Result<String, SignError> {
         let header = json!({ "kid": kid, "alg": "EdDSA" }).to_string();
@@ -122,7 +105,7 @@ impl KeyPairExt for Ed25519KeyPair {
         Ok(data)
     }
 
-    fn public_jwk(&self, kid: &str) -> json::Value {
+    fn public_jwk(&self, kid: &str) -> JsonValue {
         let public = self.public_key();
         json!({
             "kty": "OKP",
@@ -154,7 +137,7 @@ impl KeyPairExt for RsaKeyPair {
     fn sign_jws(
         &self,
         kid: &str,
-        payload: &json::Value,
+        payload: &JsonValue,
         rng: &dyn SecureRandom,
     ) -> Result<String, SignError> {
         let header = json!({ "kid": kid, "alg": "RS256" }).to_string();
@@ -170,7 +153,7 @@ impl KeyPairExt for RsaKeyPair {
         Ok(data)
     }
 
-    fn public_jwk(&self, kid: &str) -> json::Value {
+    fn public_jwk(&self, kid: &str) -> JsonValue {
         fn json_big_num(v: Positive) -> String {
             base64url::encode(v.big_endian_without_leading_zero())
         }

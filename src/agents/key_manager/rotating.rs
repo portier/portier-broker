@@ -1,6 +1,8 @@
+use crate::agents::*;
 use crate::crypto::SigningAlgorithm;
-use crate::keys::{KeyManager, KeyPairExt, NamedKeyPair, SignError};
 use crate::utils::{
+    agent::*,
+    keys::{KeyPairExt, NamedKeyPair, SignError},
     pem::{self, ParsedKeyPair},
     BoxFuture,
 };
@@ -24,7 +26,7 @@ use tokio::process::Command;
 use tokio::task;
 
 #[derive(Debug, Error)]
-pub enum RotateError {
+pub enum RotatingKeysError {
     #[error(display = "could not open '{}': {}", path, error)]
     Open {
         path: String,
@@ -88,7 +90,7 @@ impl RotatingKeys {
         signing_algs: &[SigningAlgorithm],
         generate_rsa_command: Vec<String>,
         rng: impl SecureRandom + Send + Sync + 'static,
-    ) -> Result<Self, RotateError> {
+    ) -> Result<Self, RotatingKeysError> {
         info!(
             "Using rotating keys with a {}s interval and algorithms: {}",
             keys_ttl.as_secs(),
@@ -117,35 +119,33 @@ impl RotatingKeys {
     }
 }
 
-impl KeyManager for RotatingKeys {
-    fn sign_jws(
-        &self,
-        payload: &json::Value,
-        signing_alg: SigningAlgorithm,
-        rng: &dyn SecureRandom,
-    ) -> Result<String, SignError> {
-        // TODO: Read-locking is blocking.
-        match signing_alg {
-            SigningAlgorithm::EdDsa => self
-                .ed25519_keys
-                .as_ref()
-                .ok_or_else(|| SignError::UnsupportedAlgorithm(signing_alg))?
-                .read()
-                .unwrap()
-                .current
-                .sign_jws(payload, rng),
-            SigningAlgorithm::Rs256 => self
-                .rsa_keys
-                .as_ref()
-                .ok_or_else(|| SignError::UnsupportedAlgorithm(signing_alg))?
-                .read()
-                .unwrap()
-                .current
-                .sign_jws(payload, rng),
-        }
-    }
+impl Agent for RotatingKeys {}
 
-    fn public_jwks(&self) -> Vec<json::Value> {
+impl Handler<SignJws> for RotatingKeys {
+    fn handle(&mut self, message: SignJws, reply: ReplySender<SignJws>) {
+        // TODO: Read-locking is blocking.
+        let maybe_jws = match message.signing_alg {
+            SigningAlgorithm::EdDsa => self.ed25519_keys.as_ref().map(|key_set| {
+                let key_set = key_set.read().unwrap();
+                key_set
+                    .current
+                    .sign_jws(&message.payload, &*key_set.config.rng)
+            }),
+            SigningAlgorithm::Rs256 => self.rsa_keys.as_ref().map(|key_set| {
+                let key_set = key_set.read().unwrap();
+                key_set
+                    .current
+                    .sign_jws(&message.payload, &*key_set.config.rng)
+            }),
+        };
+        reply.send(
+            maybe_jws.unwrap_or_else(|| Err(SignError::UnsupportedAlgorithm(message.signing_alg))),
+        );
+    }
+}
+
+impl Handler<GetPublicJwks> for RotatingKeys {
+    fn handle(&mut self, _message: GetPublicJwks, reply: ReplySender<GetPublicJwks>) {
         // TODO: Read-locking is blocking.
         let mut jwks = vec![];
         if let Some(ref key_set) = self.ed25519_keys {
@@ -154,9 +154,11 @@ impl KeyManager for RotatingKeys {
         if let Some(ref key_set) = self.rsa_keys {
             jwks.append(&mut key_set.read().unwrap().public_jwks());
         }
-        jwks
+        reply.send(jwks)
     }
 }
+
+impl KeyManagerSender for Addr<RotatingKeys> {}
 
 /// Thread-safe handle to a KeySet.
 type KeySetHandle<T> = Arc<RwLock<KeySet<T>>>;
@@ -182,13 +184,13 @@ where
         keysdir: impl AsRef<Path>,
         subdir: &str,
         config: &Arc<RotateConfig>,
-    ) -> Result<KeySetHandle<T>, RotateError> {
+    ) -> Result<KeySetHandle<T>, RotatingKeysError> {
         let mut dir = keysdir.as_ref().to_path_buf();
         dir.push(subdir);
 
         fs::create_dir_all(&dir)
             .await
-            .map_err(|error| RotateError::Mkdir {
+            .map_err(|error| RotatingKeysError::Mkdir {
                 path: dir.to_string_lossy().into_owned(),
                 error,
             })?;
@@ -208,7 +210,7 @@ where
             let mtime = fs::metadata(&next_path)
                 .await
                 .and_then(|meta| meta.modified())
-                .map_err(|error| RotateError::StatMtime {
+                .map_err(|error| RotatingKeysError::StatMtime {
                     path: next_path.to_string_lossy().into_owned(),
                     error,
                 })?;
@@ -322,7 +324,10 @@ trait GeneratedKeyPair: KeyPairExt + Sized {
     fn generate(config: Arc<RotateConfig>, out_file: PathBuf) -> BoxFuture<NamedKeyPair<Self>>;
 
     /// Convert a ParsedKeyPair, if it is of the correct type.
-    fn from_parsed(parsed: ParsedKeyPair, path: &Path) -> Result<NamedKeyPair<Self>, RotateError>;
+    fn from_parsed(
+        parsed: ParsedKeyPair,
+        path: &Path,
+    ) -> Result<NamedKeyPair<Self>, RotatingKeysError>;
 }
 
 impl GeneratedKeyPair for Ed25519KeyPair {
@@ -343,10 +348,13 @@ impl GeneratedKeyPair for Ed25519KeyPair {
         })
     }
 
-    fn from_parsed(parsed: ParsedKeyPair, path: &Path) -> Result<NamedKeyPair<Self>, RotateError> {
+    fn from_parsed(
+        parsed: ParsedKeyPair,
+        path: &Path,
+    ) -> Result<NamedKeyPair<Self>, RotatingKeysError> {
         match parsed {
             ParsedKeyPair::Ed25519(inner) => Ok(inner.into()),
-            other => Err(RotateError::InvalidKeyType {
+            other => Err(RotatingKeysError::InvalidKeyType {
                 path: path.to_string_lossy().into_owned(),
                 want: "Ed25519",
                 found: other.kind(),
@@ -394,10 +402,13 @@ impl GeneratedKeyPair for RsaKeyPair {
         })
     }
 
-    fn from_parsed(parsed: ParsedKeyPair, path: &Path) -> Result<NamedKeyPair<Self>, RotateError> {
+    fn from_parsed(
+        parsed: ParsedKeyPair,
+        path: &Path,
+    ) -> Result<NamedKeyPair<Self>, RotatingKeysError> {
         match parsed {
             ParsedKeyPair::Rsa(inner) => Ok(inner.into()),
-            other => Err(RotateError::InvalidKeyType {
+            other => Err(RotatingKeysError::InvalidKeyType {
                 path: path.to_string_lossy().into_owned(),
                 want: "RSA",
                 found: other.kind(),
@@ -413,14 +424,14 @@ impl GeneratedKeyPair for RsaKeyPair {
 /// Note that this function may block.
 async fn read_key_file<T: KeyPairExt + GeneratedKeyPair>(
     path: &Path,
-) -> Result<Option<NamedKeyPair<T>>, RotateError> {
+) -> Result<Option<NamedKeyPair<T>>, RotatingKeysError> {
     let file = match File::open(path).await {
         Ok(file) => file,
         Err(error) => {
             if error.kind() == IoErrorKind::NotFound {
                 return Ok(None);
             } else {
-                return Err(RotateError::Open {
+                return Err(RotatingKeysError::Open {
                     path: path.to_string_lossy().into_owned(),
                     error,
                 });
@@ -429,12 +440,12 @@ async fn read_key_file<T: KeyPairExt + GeneratedKeyPair>(
     };
     let mut key_pairs = pem::parse_key_pairs(BufReader::new(file))
         .await
-        .map_err(|error| RotateError::Parse {
+        .map_err(|error| RotatingKeysError::Parse {
             path: path.to_string_lossy().into_owned(),
             error,
         })?;
     if key_pairs.len() != 1 {
-        return Err(RotateError::ExpectedOneKey {
+        return Err(RotatingKeysError::ExpectedOneKey {
             path: path.to_string_lossy().into_owned(),
             found: key_pairs.len(),
         });

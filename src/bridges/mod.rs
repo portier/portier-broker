@@ -40,6 +40,7 @@ pub async fn complete_auth(ctx: &mut Context) -> HandlerResult {
         &data.nonce,
         data.signing_alg,
     )
+    .await
     .map_err(|err| {
         // Currently, the only possible failure here is that we accepted a signing algorithm
         // from the RP that suddenly disappeared from our config. Treat as an internal error.

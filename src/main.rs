@@ -8,7 +8,6 @@ mod crypto;
 mod email_address;
 mod error;
 mod handlers;
-mod keys;
 mod router;
 mod utils;
 mod validation;

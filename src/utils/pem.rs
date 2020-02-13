@@ -1,7 +1,7 @@
 // This file is based on code from rustls 0.16.0. (Licensed Apache 2.0, MIT, ISC)
 
 use crate::crypto::SigningAlgorithm;
-use crate::keys::KeyPairExt;
+use crate::utils::keys::KeyPairExt;
 use err_derive::Error;
 use ring::pkcs8::Document;
 use ring::signature::{Ed25519KeyPair, RsaKeyPair};

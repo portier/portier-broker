@@ -1,4 +1,4 @@
-use crate::agents::IncrAndTestLimit;
+use crate::agents::{GetPublicJwks, IncrAndTestLimit};
 use crate::bridges;
 use crate::crypto::SigningAlgorithm;
 use crate::email_address::EmailAddress;
@@ -42,7 +42,7 @@ pub async fn discovery(ctx: &mut Context) -> HandlerResult {
 /// tokens issued by this daemon instance.
 pub async fn key_set(ctx: &mut Context) -> HandlerResult {
     let obj = json!({
-        "keys": ctx.app.key_manager.public_jwks()
+        "keys": ctx.app.key_manager.send(GetPublicJwks).await
     });
     Ok(json_response(&obj, ctx.app.keys_ttl))
 }
