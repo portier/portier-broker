@@ -18,11 +18,12 @@ use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use std::mem;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::fs::{self, File};
 use tokio::io::BufReader;
 use tokio::process::Command;
+use tokio::sync::RwLock;
 use tokio::task;
 
 #[derive(Debug, Error)]
@@ -123,38 +124,47 @@ impl Agent for RotatingKeys {}
 
 impl Handler<SignJws> for RotatingKeys {
     fn handle(&mut self, message: SignJws, reply: ReplySender<SignJws>) {
-        // TODO: Read-locking is blocking.
-        let maybe_jws = match message.signing_alg {
-            SigningAlgorithm::EdDsa => self.ed25519_keys.as_ref().map(|key_set| {
-                let key_set = key_set.read().unwrap();
-                key_set
-                    .current
-                    .sign_jws(&message.payload, &*key_set.config.rng)
-            }),
-            SigningAlgorithm::Rs256 => self.rsa_keys.as_ref().map(|key_set| {
-                let key_set = key_set.read().unwrap();
-                key_set
-                    .current
-                    .sign_jws(&message.payload, &*key_set.config.rng)
-            }),
-        };
-        reply.send(
-            maybe_jws.unwrap_or_else(|| Err(SignError::UnsupportedAlgorithm(message.signing_alg))),
-        );
+        match message.signing_alg {
+            SigningAlgorithm::EdDsa => {
+                let key_set = self.ed25519_keys.clone();
+                reply.later(move || async move {
+                    let key_set = key_set
+                        .ok_or_else(|| SignError::UnsupportedAlgorithm(message.signing_alg))?;
+                    let key_set = key_set.read().await;
+                    key_set
+                        .current
+                        .sign_jws(&message.payload, &*key_set.config.rng)
+                });
+            }
+            SigningAlgorithm::Rs256 => {
+                let key_set = self.rsa_keys.clone();
+                reply.later(move || async move {
+                    let key_set = key_set
+                        .ok_or_else(|| SignError::UnsupportedAlgorithm(message.signing_alg))?;
+                    let key_set = key_set.read().await;
+                    key_set
+                        .current
+                        .sign_jws(&message.payload, &*key_set.config.rng)
+                });
+            }
+        }
     }
 }
 
 impl Handler<GetPublicJwks> for RotatingKeys {
     fn handle(&mut self, _message: GetPublicJwks, reply: ReplySender<GetPublicJwks>) {
-        // TODO: Read-locking is blocking.
-        let mut jwks = vec![];
-        if let Some(ref key_set) = self.ed25519_keys {
-            jwks.append(&mut key_set.read().unwrap().public_jwks());
-        }
-        if let Some(ref key_set) = self.rsa_keys {
-            jwks.append(&mut key_set.read().unwrap().public_jwks());
-        }
-        reply.send(jwks)
+        let ed25519_keys = self.ed25519_keys.clone();
+        let rsa_keys = self.rsa_keys.clone();
+        reply.later(move || async move {
+            let mut jwks = vec![];
+            if let Some(key_set) = ed25519_keys {
+                jwks.append(&mut key_set.read().await.public_jwks());
+            }
+            if let Some(key_set) = rsa_keys {
+                jwks.append(&mut key_set.read().await.public_jwks());
+            }
+            jwks
+        })
     }
 }
 
@@ -254,12 +264,11 @@ where
     /// Check if we should rotate keys, and return how long to delay the next check.
     async fn check_expiry(handle: KeySetHandle<T>) -> Duration {
         let read_handle = handle.clone();
-        let (keys_ttl, mtime) = task::spawn_blocking(move || {
-            let key_set = read_handle.read().expect("could not read-lock key set");
+        let (keys_ttl, mtime) = async {
+            let key_set = read_handle.read().await;
             (key_set.config.keys_ttl, key_set.mtime)
-        })
-        .await
-        .unwrap();
+        }
+        .await;
         let delay = if let Ok(age) = SystemTime::now().duration_since(mtime) {
             keys_ttl.checked_sub(age)
         } else {
@@ -278,26 +287,22 @@ where
     ///
     /// If this fails, we panic, because it may happen at an arbitrary moment at run-time.
     async fn rotate(handle: KeySetHandle<T>) {
-        let read_handle = handle.clone();
-        let (config, next_path) = task::spawn_blocking(move || {
-            let key_set = read_handle.read().expect("could not read-lock key set");
-            std::fs::rename(&key_set.current_path, &key_set.previous_path)
+        let (config, next_path) = async {
+            let key_set = handle.read().await;
+            fs::rename(&key_set.current_path, &key_set.previous_path)
+                .await
                 .expect("could not rename current key for rotation");
-            std::fs::rename(&key_set.next_path, &key_set.current_path)
+            fs::rename(&key_set.next_path, &key_set.current_path)
+                .await
                 .expect("could not rename next key for rotation");
             (key_set.config.clone(), key_set.next_path.clone())
-        })
-        .await
-        .unwrap();
+        }
+        .await;
         let mut tmp = T::generate(config, next_path).await;
-        task::spawn_blocking(move || {
-            let mut key_set = handle.write().expect("could not write-lock key set");
-            mem::swap(&mut key_set.next, &mut tmp);
-            mem::swap(&mut key_set.current, &mut tmp);
-            key_set.previous = Some(tmp);
-        })
-        .await
-        .unwrap()
+        let mut key_set = handle.write().await;
+        mem::swap(&mut key_set.next, &mut tmp);
+        mem::swap(&mut key_set.current, &mut tmp);
+        key_set.previous = Some(tmp);
     }
 }
 
@@ -420,8 +425,6 @@ impl GeneratedKeyPair for RsaKeyPair {
 /// Read a single key pair of type `T` from `path`.
 ///
 /// Returns `None` when the file does not exist.
-///
-/// Note that this function may block.
 async fn read_key_file<T: KeyPairExt + GeneratedKeyPair>(
     path: &Path,
 ) -> Result<Option<NamedKeyPair<T>>, RotatingKeysError> {
