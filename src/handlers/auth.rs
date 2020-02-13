@@ -1,8 +1,8 @@
+use crate::agents::IncrAndTestLimit;
 use crate::bridges;
 use crate::crypto::SigningAlgorithm;
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
-use crate::store::LimitKey;
 use crate::validation::parse_redirect_uri;
 use crate::web::{html_response, json_response, Context, HandlerResult, ReturnParams};
 use crate::webfinger::{self, Relation};
@@ -162,10 +162,14 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
         .map_err(|_| BrokerError::Input("login_hint is not a valid email address".to_owned()))?;
 
     // Enforce ratelimit based on the normalized email.
-    let limit_key = LimitKey::PerEmail {
-        addr: email_addr.as_str(),
-    };
-    match ctx.app.store.incr_and_test_limit(limit_key).await {
+    match ctx
+        .app
+        .store
+        .send(IncrAndTestLimit::PerEmail {
+            addr: email_addr.as_str().to_owned(),
+        })
+        .await
+    {
         Ok(true) => {}
         Ok(false) => return Err(BrokerError::RateLimited),
         Err(e) => {

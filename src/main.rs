@@ -1,6 +1,7 @@
 #[macro_use]
 mod macros;
 
+mod agents;
 mod bridges;
 mod config;
 mod crypto;
@@ -9,7 +10,6 @@ mod error;
 mod handlers;
 mod keys;
 mod router;
-mod store;
 mod utils;
 mod validation;
 mod web;

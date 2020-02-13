@@ -20,7 +20,7 @@ module.exports = () => {
     stdio: "inherit",
     cwd: ROOT,
     env: {
-      RUST_LOG: "error",
+      RUST_LOG: process.env.RUST_LOG || "error",
       RUST_BACKTRACE: "1",
       BROKER_PUBLIC_URL: "http://localhost:3333",
       BROKER_KEYTEXT: pem,

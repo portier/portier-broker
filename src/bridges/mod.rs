@@ -1,3 +1,4 @@
+use crate::agents::DeleteSession;
 use crate::crypto;
 use crate::error::BrokerError;
 use crate::web::{return_to_relier, Context, HandlerResult};
@@ -20,7 +21,9 @@ pub async fn complete_auth(ctx: &mut Context) -> HandlerResult {
         .expect("complete_auth called without a session");
     ctx.app
         .store
-        .remove_session(&ctx.session_id)
+        .send(DeleteSession {
+            session_id: ctx.session_id.clone(),
+        })
         .await
         .map_err(|e| BrokerError::Internal(format!("could not remove a session: {}", e)))?;
 

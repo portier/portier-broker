@@ -1,3 +1,4 @@
+use crate::agents::{GetSession, SaveSession};
 use crate::bridges::BridgeData;
 use crate::config::ConfigRc;
 use crate::crypto::{self, SigningAlgorithm};
@@ -138,7 +139,10 @@ impl Context {
         };
         self.app
             .store
-            .store_session(&self.session_id, Session { data, bridge_data })
+            .send(SaveSession {
+                session_id: self.session_id.clone(),
+                data: Session { data, bridge_data },
+            })
             .await
             .map_err(|e| BrokerError::Internal(format!("could not save a session: {}", e)))?;
         Ok(true)
@@ -152,7 +156,9 @@ impl Context {
         let Session { data, bridge_data } = self
             .app
             .store
-            .get_session(id)
+            .send(GetSession {
+                session_id: id.to_owned(),
+            })
             .await
             .map_err(|e| BrokerError::Internal(format!("could not load a session: {}", e)))?
             .ok_or(BrokerError::SessionExpired)?;

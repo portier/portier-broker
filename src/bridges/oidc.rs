@@ -1,9 +1,10 @@
+use crate::agents::CachedFetch;
 use crate::bridges::{complete_auth, BridgeData};
 use crate::config::GoogleConfig;
 use crate::crypto::{self, SigningAlgorithm};
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
-use crate::utils::{fetch_json_cached, http::ResponseExt};
+use crate::utils::http::ResponseExt;
 use crate::validation;
 use crate::web::{empty_response, Context, HandlerResult};
 use crate::webfinger::{Link, Relation};
@@ -297,7 +298,10 @@ async fn fetch_config(
         .parse()
         .expect("could not build the OpenID Connect configuration URL");
 
-    let provider_config = fetch_json_cached::<ProviderConfig>(&ctx.app, config_url)
+    let provider_config = ctx
+        .app
+        .store
+        .send(CachedFetch { url: config_url })
         .await
         .map_err(|e| {
             BrokerError::Provider(format!(
@@ -305,6 +309,12 @@ async fn fetch_config(
                 bridge_data.origin, e
             ))
         })?;
+    let provider_config: ProviderConfig = serde_json::from_str(&provider_config).map_err(|e| {
+        BrokerError::Provider(format!(
+            "could not parse {}'s configuration: {}",
+            bridge_data.origin, e
+        ))
+    })?;
 
     #[cfg(not(feature = "insecure"))]
     {
@@ -323,7 +333,12 @@ async fn fetch_config(
     }
 
     // Grab the keys from the provider.
-    let key_set: ProviderKeys = fetch_json_cached(&ctx.app, provider_config.jwks_uri.clone())
+    let key_set = ctx
+        .app
+        .store
+        .send(CachedFetch {
+            url: provider_config.jwks_uri.clone(),
+        })
         .await
         .map_err(|e| {
             BrokerError::Provider(format!(
@@ -331,6 +346,12 @@ async fn fetch_config(
                 bridge_data.origin, e
             ))
         })?;
+    let key_set: ProviderKeys = serde_json::from_str(&key_set).map_err(|e| {
+        BrokerError::Provider(format!(
+            "could not parse{}'s keys: {}",
+            bridge_data.origin, e
+        ))
+    })?;
 
     Ok((provider_config, key_set))
 }

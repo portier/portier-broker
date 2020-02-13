@@ -1,12 +1,11 @@
+use crate::agents::{FetchAgent, MemoryStore, RedisStore, StoreSender};
 use crate::bridges::oidc::GOOGLE_IDP_ORIGIN;
 use crate::crypto::SigningAlgorithm;
 use crate::keys::{self, KeyManager, ManualKeys, RotatingKeys};
-use crate::store::{MemoryStore, RedisStore, Store};
-use crate::utils::LimitConfig;
+use crate::utils::{agent::Agent, LimitConfig};
 use crate::webfinger::{Link, ParseLinkError, Relation};
 use err_derive::Error;
 use gettext::Catalog;
-use hyper_tls::HttpsConnector;
 use ring::rand::{SecureRandom, SystemRandom};
 use serde_derive::Deserialize;
 use std::{
@@ -18,9 +17,6 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-
-/// The type of HTTP client we use, with TLS enabled.
-pub type HttpClient = hyper::Client<HttpsConnector<hyper::client::HttpConnector>>;
 
 /// Union of all possible error types seen while parsing.
 #[derive(Debug, Error)]
@@ -149,8 +145,7 @@ pub struct Config {
     pub token_ttl: Duration,
     pub key_manager: Box<dyn KeyManager>,
     pub signing_algs: Vec<SigningAlgorithm>,
-    pub store: Box<dyn Store + Send + Sync>,
-    pub http_client: HttpClient,
+    pub store: Box<dyn StoreSender>,
     pub from_name: String,
     pub from_address: String,
     pub smtp_server: String,
@@ -481,21 +476,27 @@ impl ConfigBuilder {
             Box::new(ManualKeys::new(self.keyfiles, self.keytext, &self.signing_algs).await?)
         };
 
-        let http_connector = HttpsConnector::new();
-        let http_client = hyper::Client::builder().build(http_connector);
-
-        let store: Box<dyn Store + Send + Sync> = if let Some(redis_url) = self.redis_url {
+        let fetcher = FetchAgent::new().start();
+        let store: Box<dyn StoreSender> = if let Some(redis_url) = self.redis_url {
             let store = RedisStore::new(
                 redis_url,
                 self.session_ttl,
                 self.cache_ttl,
                 self.limit_per_email,
+                fetcher,
             )
             .await
-            .expect("unable to instantiate new redis store");
+            .expect("unable to instantiate new redis store")
+            .start();
             Box::new(store)
         } else {
-            let store = MemoryStore::new(self.session_ttl, self.cache_ttl, self.limit_per_email);
+            let store = MemoryStore::new(
+                self.session_ttl,
+                self.cache_ttl,
+                self.limit_per_email,
+                fetcher,
+            )
+            .start();
             Box::new(store)
         };
 
@@ -533,7 +534,6 @@ impl ConfigBuilder {
             key_manager,
             signing_algs: self.signing_algs,
             store,
-            http_client,
             from_name: self.from_name,
             from_address: self.from_address.expect("no smtp from address configured"),
             smtp_server: self

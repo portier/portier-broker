@@ -1,7 +1,7 @@
+use crate::agents::CachedFetch;
 use crate::config::ConfigRc;
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
-use crate::utils::fetch_json_cached;
 use err_derive::Error;
 use serde_derive::{Deserialize, Serialize};
 use std::fmt::{Display, Error as FmtError, Formatter};
@@ -117,7 +117,13 @@ pub async fn query(app: &ConfigRc, email_addr: &EmailAddress) -> Result<Vec<Link
     .map_err(|e| BrokerError::Internal(format!("could not build webfinger query url: {}", e)))?;
 
     // Make the request.
-    let descriptor: DescriptorDef = fetch_json_cached(app, url).await?;
+    let descriptor = app
+        .store
+        .send(CachedFetch { url })
+        .await
+        .map_err(|e| BrokerError::Provider(format!("webfinger request failed: {}", e)))?;
+    let descriptor: DescriptorDef = serde_json::from_str(&descriptor)
+        .map_err(|e| BrokerError::Provider(format!("invalid webfinger response: {}", e)))?;
 
     // Parse the relations.
     let links = descriptor
