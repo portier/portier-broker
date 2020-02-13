@@ -93,7 +93,33 @@ impl Agent for MemoryStore {
 
 impl Handler<Gc> for MemoryStore {
     fn handle(&mut self, _message: Gc, reply: ReplySender<Gc>) {
-        // TODO
+        self.sessions = self
+            .sessions
+            .drain()
+            .filter(|(_, ref entry)| entry.is_alive())
+            .collect();
+        self.cache = self
+            .cache
+            .drain()
+            .filter(|(_, ref slot)| {
+                // For cache items, only remove if we have the sole reference. Otherwise, a fetch
+                // might still be in progress. Locking should be immediate if true.
+                if let Ok(maybe_entry) = slot.try_lock() {
+                    Arc::strong_count(slot) > 1
+                        || maybe_entry
+                            .as_ref()
+                            .filter(|entry| entry.is_alive())
+                            .is_some()
+                } else {
+                    true
+                }
+            })
+            .collect();
+        self.limits = self
+            .limits
+            .drain()
+            .filter(|(_, ref entry)| entry.is_alive())
+            .collect();
         reply.send(())
     }
 }
