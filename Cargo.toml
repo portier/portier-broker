@@ -10,7 +10,7 @@ license = "MIT/Apache-2.0"
 edition = "2018"
 
 [features]
-default = []
+default = ["redis"]
 insecure = []
 
 [[bin]]
@@ -48,6 +48,7 @@ serde_json = "1.0.45"
 toml = "0.5.6"
 
 [dependencies.redis]
+optional = true
 version = "0.15.1"
 features = ["tokio-rt-core"]
 

@@ -1,6 +1,6 @@
 use crate::agents::{
-    FetchAgent, KeyManagerSender, ManualKeys, ManualKeysError, MemoryStore, RedisStore,
-    RotatingKeys, RotatingKeysError, StoreSender,
+    self, FetchAgent, KeyManagerSender, ManualKeys, ManualKeysError, RotatingKeys,
+    RotatingKeysError, StoreSender,
 };
 use crate::bridges::oidc::GOOGLE_IDP_ORIGIN;
 use crate::crypto::SigningAlgorithm;
@@ -486,28 +486,33 @@ impl ConfigBuilder {
             Box::new(key_manager)
         };
 
-        let fetcher = FetchAgent::new().start();
-        let store: Box<dyn StoreSender> = if let Some(redis_url) = self.redis_url {
-            let store = RedisStore::new(
-                redis_url,
-                self.session_ttl,
-                self.cache_ttl,
-                self.limit_per_email,
-                fetcher,
-            )
-            .await
-            .expect("unable to instantiate new redis store")
-            .start();
-            Box::new(store)
-        } else {
-            let store = MemoryStore::new(
-                self.session_ttl,
-                self.cache_ttl,
-                self.limit_per_email,
-                fetcher,
-            )
-            .start();
-            Box::new(store)
+        let store: Box<dyn StoreSender> = match self.redis_url {
+            #[cfg(feature = "redis")]
+            Some(redis_url) => {
+                let addr = agents::RedisStore::new(
+                    redis_url,
+                    self.session_ttl,
+                    self.cache_ttl,
+                    self.limit_per_email,
+                    FetchAgent::new().start(),
+                )
+                .await
+                .expect("unable to instantiate new redis store")
+                .start();
+                Box::new(addr)
+            }
+            #[cfg(not(feature = "redis"))]
+            Some(_) => panic!("Redis storage requested, but this build does not support it."),
+            None => {
+                let addr = agents::MemoryStore::new(
+                    self.session_ttl,
+                    self.cache_ttl,
+                    self.limit_per_email,
+                    FetchAgent::new().start(),
+                )
+                .start();
+                Box::new(addr)
+            }
         };
 
         // Configure default domain overrides for hosted Google

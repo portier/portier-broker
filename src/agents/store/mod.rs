@@ -65,7 +65,9 @@ pub trait StoreSender:
 }
 
 mod memory;
-mod redis;
-
 pub use self::memory::*;
+
+#[cfg(feature = "redis")]
+mod redis;
+#[cfg(feature = "redis")]
 pub use self::redis::*;
