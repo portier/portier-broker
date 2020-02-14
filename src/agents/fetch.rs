@@ -62,7 +62,7 @@ impl Handler<FetchUrl> for FetchAgent {
             .parse()
             .expect("failed to convert Url to Hyper Url");
         let future = self.client.get(hyper_url);
-        reply.later(move || async {
+        reply.later(async {
             let res = future.await?;
             if res.status() != StatusCode::OK {
                 return Err(FetchError::NotOK(res.status()));

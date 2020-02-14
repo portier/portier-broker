@@ -157,7 +157,7 @@ impl Handler<CachedFetch> for MemoryStore {
         let fetcher = self.fetcher.clone();
         let slot = self.cache.entry(message.url.clone()).or_default().clone();
         let expire_cache = self.expire_cache;
-        reply.later(move || async move {
+        reply.later(async move {
             let mut slot = slot.lock().await;
             if let Some(entry) = slot.as_ref().filter(|entry| entry.is_alive()) {
                 return Ok(entry.inner.clone());

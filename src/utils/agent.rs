@@ -14,9 +14,9 @@
 
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
-use tokio::sync::{oneshot, Mutex};
+use tokio::sync::oneshot;
 
 /// A trait for messages that can be sent to an agent.
 pub trait Message: Send + 'static {
@@ -39,12 +39,11 @@ impl<M: Message> ReplySender<M> {
     }
 
     /// Spawn an async task that returns a reply later.
-    pub fn later<R, F>(self, f: F)
+    pub fn later<F>(self, f: F)
     where
-        R: Future<Output = M::Reply> + Send,
-        F: (FnOnce() -> R) + Send + 'static,
+        F: Future<Output = M::Reply> + Send + 'static,
     {
-        tokio::spawn(async move { self.send(f().await) });
+        tokio::spawn(async move { self.send(f.await) });
     }
 }
 
@@ -92,8 +91,6 @@ pub trait Handler<M: Message> {
     ///
     /// A reply channel is provided to send the reply, and it can live longer than the function,
     /// which allows agents to spawn an async task while continuing with the next message.
-    ///
-    /// Note that this function runs within the Tokio run-time, and should not block.
     fn handle(&mut self, message: M, reply: ReplySender<M>);
 }
 
@@ -114,8 +111,8 @@ impl<T> Addr<T> {
     {
         let (tx, rx) = oneshot::channel();
         let agent = self.agent.clone();
-        tokio::task::spawn(async move {
-            let mut agent = agent.lock().await;
+        tokio::task::spawn_blocking(move || {
+            let mut agent = agent.lock().unwrap();
             agent.handle(message, ReplySender { tx });
         });
         ReplyReceiver { rx }

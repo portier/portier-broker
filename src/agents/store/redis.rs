@@ -72,7 +72,7 @@ impl Handler<SaveSession> for RedisStore {
     fn handle(&mut self, message: SaveSession, reply: ReplySender<SaveSession>) {
         let mut client = self.client.clone();
         let ttl = self.expire_sessions;
-        reply.later(move || async move {
+        reply.later(async move {
             let key = Self::format_session_key(&message.session_id);
             let data = serde_json::to_string(&message.data)?;
             client.set_ex(&key, data, ttl.as_secs() as usize).await?;
@@ -84,7 +84,7 @@ impl Handler<SaveSession> for RedisStore {
 impl Handler<GetSession> for RedisStore {
     fn handle(&mut self, message: GetSession, reply: ReplySender<GetSession>) {
         let mut client = self.client.clone();
-        reply.later(move || async move {
+        reply.later(async move {
             let key = Self::format_session_key(&message.session_id);
             let data: String = client.get(&key).await?;
             let data = serde_json::from_str(&data)?;
@@ -96,7 +96,7 @@ impl Handler<GetSession> for RedisStore {
 impl Handler<DeleteSession> for RedisStore {
     fn handle(&mut self, message: DeleteSession, reply: ReplySender<DeleteSession>) {
         let mut client = self.client.clone();
-        reply.later(move || async move {
+        reply.later(async move {
             let key = Self::format_session_key(&message.session_id);
             client.del(&key).await?;
             Ok(())
@@ -109,8 +109,8 @@ impl Handler<CachedFetch> for RedisStore {
         let mut client = self.client.clone();
         let fetcher = self.fetcher.clone();
         let expire_cache = self.expire_cache;
-        reply.later(move || async move {
-            // TODO: Locking
+        reply.later(async move {
+            // TODO: Add locking to coordinate fetches across workers.
             let key = message.url.as_str().to_owned();
             if let Some(data) = client.get(key).await? {
                 Ok(data)
@@ -137,7 +137,7 @@ impl Handler<IncrAndTestLimit> for RedisStore {
                 self.limit_per_email_config,
             ),
         };
-        reply.later(move || async move {
+        reply.later(async move {
             let mut invocation = script.prepare_invoke();
             invocation.key(key).arg(config.duration.as_secs());
             let count: usize = invocation.invoke_async(&mut client).await?;
