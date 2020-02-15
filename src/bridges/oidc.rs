@@ -4,13 +4,12 @@ use crate::config::GoogleConfig;
 use crate::crypto::{self, SigningAlgorithm};
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
-use crate::utils::http::ResponseExt;
+use crate::utils::{http::ResponseExt, unix_timestamp};
 use crate::validation;
 use crate::web::{empty_response, Context, HandlerResult};
 use crate::webfinger::{Link, Relation};
 use http::StatusCode;
 use serde_derive::{Deserialize, Serialize};
-use std::time::{SystemTime, UNIX_EPOCH};
 use url::Url;
 
 /// The origin of the Google identity provider.
@@ -251,10 +250,7 @@ pub async fn callback(ctx: &mut Context) -> HandlerResult {
     check_token_field!(aud == bridge_data.client_id, "aud", descr);
     check_token_field!(nonce == bridge_data.nonce, "nonce", descr);
 
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
+    let now = unix_timestamp();
     let exp = exp.checked_add(LEEWAY).unwrap_or(u64::min_value());
     let iat = iat.checked_sub(LEEWAY).unwrap_or(u64::max_value());
     check_token_field!(now < exp, "exp", descr);

@@ -71,3 +71,8 @@ pub use self::memory::*;
 mod redis;
 #[cfg(feature = "redis")]
 pub use self::redis::*;
+
+#[cfg(feature = "rusqlite")]
+mod rusqlite;
+#[cfg(feature = "rusqlite")]
+pub use self::rusqlite::*;

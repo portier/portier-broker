@@ -124,7 +124,7 @@ impl ManualKeys {
 impl Agent for ManualKeys {}
 
 impl Handler<SignJws> for ManualKeys {
-    fn handle(&mut self, message: SignJws, reply: ReplySender<SignJws>) {
+    fn handle(&mut self, message: SignJws, cx: Context<Self, SignJws>) {
         let maybe_jws = match message.signing_alg {
             SigningAlgorithm::EdDsa => self
                 .ed25519_keys
@@ -135,17 +135,17 @@ impl Handler<SignJws> for ManualKeys {
                 .last()
                 .map(|key| key.sign_jws(&message.payload, &*self.rng)),
         };
-        reply.send(
+        cx.reply(
             maybe_jws.unwrap_or_else(|| Err(SignError::UnsupportedAlgorithm(message.signing_alg))),
         );
     }
 }
 
 impl Handler<GetPublicJwks> for ManualKeys {
-    fn handle(&mut self, _message: GetPublicJwks, reply: ReplySender<GetPublicJwks>) {
+    fn handle(&mut self, _message: GetPublicJwks, cx: Context<Self, GetPublicJwks>) {
         let ed25519_jwks = self.ed25519_keys.iter().map(NamedKeyPair::public_jwk);
         let rsa_jwks = self.rsa_keys.iter().map(NamedKeyPair::public_jwk);
-        reply.send(ed25519_jwks.chain(rsa_jwks).collect())
+        cx.reply(ed25519_jwks.chain(rsa_jwks).collect())
     }
 }
 

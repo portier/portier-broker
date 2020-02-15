@@ -37,7 +37,7 @@ impl RedisStore {
             .get_multiplexed_tokio_connection()
             .await?;
 
-        log::warn!("Storing sessions in: {}", url);
+        log::warn!("Storing sessions in Redis at {}", url);
         log::warn!("Please always double check this Redis and the connection to it are secure!");
         log::warn!("(This warning can't be fixed; it's a friendly reminder.)");
 
@@ -69,10 +69,10 @@ impl RedisStore {
 impl Agent for RedisStore {}
 
 impl Handler<SaveSession> for RedisStore {
-    fn handle(&mut self, message: SaveSession, reply: ReplySender<SaveSession>) {
+    fn handle(&mut self, message: SaveSession, cx: Context<Self, SaveSession>) {
         let mut client = self.client.clone();
         let ttl = self.expire_sessions;
-        reply.later(async move {
+        cx.reply_later(async move {
             let key = Self::format_session_key(&message.session_id);
             let data = serde_json::to_string(&message.data)?;
             client.set_ex(&key, data, ttl.as_secs() as usize).await?;
@@ -82,9 +82,9 @@ impl Handler<SaveSession> for RedisStore {
 }
 
 impl Handler<GetSession> for RedisStore {
-    fn handle(&mut self, message: GetSession, reply: ReplySender<GetSession>) {
+    fn handle(&mut self, message: GetSession, cx: Context<Self, GetSession>) {
         let mut client = self.client.clone();
-        reply.later(async move {
+        cx.reply_later(async move {
             let key = Self::format_session_key(&message.session_id);
             let data: String = client.get(&key).await?;
             let data = serde_json::from_str(&data)?;
@@ -94,9 +94,9 @@ impl Handler<GetSession> for RedisStore {
 }
 
 impl Handler<DeleteSession> for RedisStore {
-    fn handle(&mut self, message: DeleteSession, reply: ReplySender<DeleteSession>) {
+    fn handle(&mut self, message: DeleteSession, cx: Context<Self, DeleteSession>) {
         let mut client = self.client.clone();
-        reply.later(async move {
+        cx.reply_later(async move {
             let key = Self::format_session_key(&message.session_id);
             client.del(&key).await?;
             Ok(())
@@ -105,13 +105,13 @@ impl Handler<DeleteSession> for RedisStore {
 }
 
 impl Handler<CachedFetch> for RedisStore {
-    fn handle(&mut self, message: CachedFetch, reply: ReplySender<CachedFetch>) {
+    fn handle(&mut self, message: CachedFetch, cx: Context<Self, CachedFetch>) {
         let mut client = self.client.clone();
         let fetcher = self.fetcher.clone();
         let expire_cache = self.expire_cache;
-        reply.later(async move {
+        cx.reply_later(async move {
             // TODO: Add locking to coordinate fetches across workers.
-            let key = message.url.as_str().to_owned();
+            let key = format!("cache:{}", message.url);
             if let Some(data) = client.get(key).await? {
                 Ok(data)
             } else {
@@ -128,16 +128,16 @@ impl Handler<CachedFetch> for RedisStore {
 }
 
 impl Handler<IncrAndTestLimit> for RedisStore {
-    fn handle(&mut self, message: IncrAndTestLimit, reply: ReplySender<IncrAndTestLimit>) {
+    fn handle(&mut self, message: IncrAndTestLimit, cx: Context<Self, IncrAndTestLimit>) {
         let mut client = self.client.clone();
         let script = self.limit_script.clone();
         let (key, config) = match message {
             IncrAndTestLimit::PerEmail { addr } => (
-                format!("ratelimit::addr:{}", addr),
+                format!("ratelimit:per-email:{}", addr),
                 self.limit_per_email_config,
             ),
         };
-        reply.later(async move {
+        cx.reply_later(async move {
             let mut invocation = script.prepare_invoke();
             invocation.key(key).arg(config.duration.as_secs());
             let count: usize = invocation.invoke_async(&mut client).await?;

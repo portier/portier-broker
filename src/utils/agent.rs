@@ -15,7 +15,7 @@
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
-use std::task::{Context, Poll};
+use std::task::{self, Poll};
 use tokio::sync::oneshot;
 
 /// A trait for messages that can be sent to an agent.
@@ -24,40 +24,58 @@ pub trait Message: Send + 'static {
     type Reply: Send + 'static;
 }
 
-/// Channel type used by agents to send replies.
+/// Context passed to handlers, used to send a reply.
 ///
 /// The agent must call one of `send` or `later` to consume the sender, and may not otherwise drop
 /// the sender without sending a reply.
-pub struct ReplySender<M: Message> {
+pub struct Context<A, M: Message> {
     tx: oneshot::Sender<M::Reply>,
+    addr: Addr<A>,
 }
 
-impl<M: Message> ReplySender<M> {
+impl<A, M: Message> Context<A, M> {
     /// Send a reply to the message.
-    pub fn send(self, reply: M::Reply) {
+    pub fn reply(self, reply: M::Reply) {
         let _ = self.tx.send(reply);
     }
 
+    /// Execute the function and send the return value as the reply.
+    ///
+    /// This is useful for blocks of code that operate on Result, and would benefit from using the
+    /// `?`-operator.
+    pub fn reply_with<F>(self, f: F)
+    where
+        F: FnOnce() -> M::Reply,
+    {
+        let _ = self.tx.send(f());
+    }
+
     /// Spawn an async task that returns a reply later.
-    pub fn later<F>(self, f: F)
+    pub fn reply_later<F>(self, f: F)
     where
         F: Future<Output = M::Reply> + Send + 'static,
     {
-        tokio::spawn(async move { self.send(f.await) });
+        let Context { tx, .. } = self;
+        tokio::spawn(async move {
+            let _ = tx.send(f.await);
+        });
+    }
+
+    /// Get the address of the agent itself.
+    pub fn addr(&self) -> &Addr<A> {
+        &self.addr
     }
 }
 
-/// Channel type used to receive replies from an agent.
-///
-/// This can simply be used as a `Future`.
-pub struct ReplyReceiver<T> {
+/// Future for a reply from an agent.
+pub struct ReplyFuture<T> {
     rx: oneshot::Receiver<T>,
 }
 
-impl<T> Future for ReplyReceiver<T> {
+impl<T> Future for ReplyFuture<T> {
     type Output = T;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut task::Context) -> Poll<Self::Output> {
         Pin::new(&mut self.rx)
             .poll(cx)
             .map(|val| val.expect("agent did not send a reply"))
@@ -83,43 +101,49 @@ pub trait Agent: Sized {
 }
 
 /// Trait implemented by agents for each message type they handle.
-pub trait Handler<M: Message> {
+pub trait Handler<M: Message>: Sized {
     /// Handle the message.
     ///
     /// Handlers are called one-by-one as messages arrive; the next message won't be picked up
     /// until the function returns. Handlers have mutable access to the agent itself.
     ///
-    /// A reply channel is provided to send the reply, and it can live longer than the function,
-    /// which allows agents to spawn an async task while continuing with the next message.
-    fn handle(&mut self, message: M, reply: ReplySender<M>);
+    /// A context is provided to send the reply, and it can live longer than the function, which
+    /// allows agents to spawn an async task while continuing with the next message.
+    fn handle(&mut self, message: M, cx: Context<Self, M>);
 }
 
 /// An address to an agent.
 ///
 /// Can be cheaply cloned, and is used to send messages to the agent. It's also possible to
 /// abstract over a message type by casting it to a `dyn Sender<M>`.
-pub struct Addr<T> {
-    agent: Arc<Mutex<T>>,
+pub struct Addr<A> {
+    agent: Arc<Mutex<A>>,
 }
 
-impl<T> Addr<T> {
+impl<A> Addr<A> {
     /// Sends a message to the agent.
-    pub fn send<M>(&self, message: M) -> ReplyReceiver<M::Reply>
+    pub fn send<M>(&self, message: M) -> ReplyFuture<M::Reply>
     where
         M: Message,
-        T: Handler<M> + Send + 'static,
+        A: Handler<M> + Send + 'static,
     {
         let (tx, rx) = oneshot::channel();
-        let agent = self.agent.clone();
+        let addr = self.clone();
         tokio::task::spawn_blocking(move || {
-            let mut agent = agent.lock().unwrap();
-            agent.handle(message, ReplySender { tx });
+            let mut agent = addr.agent.lock().expect("agent lock poisoned");
+            agent.handle(
+                message,
+                Context {
+                    tx,
+                    addr: addr.clone(),
+                },
+            );
         });
-        ReplyReceiver { rx }
+        ReplyFuture { rx }
     }
 }
 
-impl<T> Clone for Addr<T> {
+impl<A> Clone for Addr<A> {
     fn clone(&self) -> Self {
         let agent = self.agent.clone();
         Addr { agent }
@@ -129,15 +153,15 @@ impl<T> Clone for Addr<T> {
 /// Trait implemented by `Addr` that allows trait objects to be created per message.
 pub trait Sender<M: Message>: Send + Sync {
     /// Sends a message of this type to the agent.
-    fn send(&self, message: M) -> ReplyReceiver<M::Reply>;
+    fn send(&self, message: M) -> ReplyFuture<M::Reply>;
 }
 
-impl<M, T> Sender<M> for Addr<T>
+impl<M, A> Sender<M> for Addr<A>
 where
     M: Message,
-    T: Handler<M> + Send + 'static,
+    A: Handler<M> + Send + 'static,
 {
-    fn send(&self, message: M) -> ReplyReceiver<M::Reply> {
-        Addr::<T>::send(self, message)
+    fn send(&self, message: M) -> ReplyFuture<M::Reply> {
+        Addr::<A>::send(self, message)
     }
 }

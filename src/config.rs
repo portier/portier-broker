@@ -176,6 +176,8 @@ pub struct ConfigBuilder {
     pub signing_algs: Vec<SigningAlgorithm>,
     pub generate_rsa_command: Vec<String>,
     pub redis_url: Option<String>,
+    pub sqlite_db: Option<String>,
+    pub memory_storage: bool,
     pub session_ttl: Duration,
     pub cache_ttl: Duration,
     pub from_name: String,
@@ -206,6 +208,8 @@ impl ConfigBuilder {
             signing_algs: vec![SigningAlgorithm::Rs256],
             generate_rsa_command: vec![],
             redis_url: None,
+            sqlite_db: None,
+            memory_storage: false,
             session_ttl: Duration::from_secs(900),
             cache_ttl: Duration::from_secs(3600),
             from_name: "Portier".to_owned(),
@@ -273,6 +277,8 @@ impl ConfigBuilder {
 
         if let Some(table) = toml_config.redis {
             self.redis_url = table.url.or_else(|| self.redis_url.clone());
+            self.sqlite_db = table.sqlite_db.or_else(|| self.sqlite_db.clone());
+            self.memory_storage = table.memory_storage.unwrap_or(self.memory_storage);
             if let Some(val) = table.session_ttl {
                 self.session_ttl = Duration::from_secs(val);
             }
@@ -396,6 +402,12 @@ impl ConfigBuilder {
         if let Some(val) = env_config.redis_url {
             self.redis_url = Some(val);
         }
+        if let Some(val) = env_config.sqlite_db {
+            self.sqlite_db = Some(val);
+        }
+        if let Some(val) = env_config.memory_storage {
+            self.memory_storage = val;
+        }
         if let Some(val) = env_config.session_ttl {
             self.session_ttl = Duration::from_secs(val);
         }
@@ -486,34 +498,63 @@ impl ConfigBuilder {
             Box::new(key_manager)
         };
 
-        let store: Box<dyn StoreSender> = match self.redis_url {
-            #[cfg(feature = "redis")]
-            Some(redis_url) => {
-                let addr = agents::RedisStore::new(
-                    redis_url,
-                    self.session_ttl,
-                    self.cache_ttl,
-                    self.limit_per_email,
-                    FetchAgent::new().start(),
-                )
-                .await
-                .expect("unable to instantiate new redis store")
-                .start();
-                Box::new(addr)
-            }
-            #[cfg(not(feature = "redis"))]
-            Some(_) => panic!("Redis storage requested, but this build does not support it."),
-            None => {
-                let addr = agents::MemoryStore::new(
-                    self.session_ttl,
-                    self.cache_ttl,
-                    self.limit_per_email,
-                    FetchAgent::new().start(),
-                )
-                .start();
-                Box::new(addr)
-            }
-        };
+        let store: Box<dyn StoreSender> =
+            match (self.redis_url, self.sqlite_db, self.memory_storage) {
+                #[cfg(feature = "redis")]
+                (Some(redis_url), None, false) => {
+                    let addr = agents::RedisStore::new(
+                        redis_url,
+                        self.session_ttl,
+                        self.cache_ttl,
+                        self.limit_per_email,
+                        FetchAgent::new().start(),
+                    )
+                    .await
+                    .expect("unable to instantiate new Redis store")
+                    .start();
+                    Box::new(addr)
+                }
+                #[cfg(not(feature = "redis"))]
+                (Some(_), None, false) => {
+                    panic!("Redis storage requested, but this build does not support it.")
+                }
+
+                #[cfg(feature = "rusqlite")]
+                (None, Some(sqlite_db), false) => {
+                    let addr = agents::RusqliteStore::new(
+                        sqlite_db,
+                        self.session_ttl,
+                        self.cache_ttl,
+                        self.limit_per_email,
+                        FetchAgent::new().start(),
+                    )
+                    .await
+                    .expect("unable to instantiate new SQLite store")
+                    .start();
+                    Box::new(addr)
+                }
+                #[cfg(not(feature = "rusqlite"))]
+                (None, Some(_), false) => {
+                    panic!("SQLite storage requested, but this build does not support it.")
+                }
+
+                (None, None, true) => {
+                    let addr = agents::MemoryStore::new(
+                        self.session_ttl,
+                        self.cache_ttl,
+                        self.limit_per_email,
+                        FetchAgent::new().start(),
+                    )
+                    .start();
+                    Box::new(addr)
+                }
+
+                (None, None, false) => {
+                    panic!("Must specify one of redis_url, sqlite_db or memory_storage")
+                }
+
+                _ => panic!("Can only specify one of redis_url, sqlite_db or memory_storage"),
+            };
 
         // Configure default domain overrides for hosted Google
         let mut domain_overrides = HashMap::new();
@@ -609,6 +650,8 @@ struct TomlCryptoTable {
 struct TomlRedisTable {
     url: Option<String>,
     // TODO: These don't have to be Redis specific.
+    sqlite_db: Option<String>,
+    memory_storage: Option<bool>,
     session_ttl: Option<u64>,
     cache_ttl: Option<u64>,
 }
@@ -652,6 +695,8 @@ struct EnvConfig {
     signing_algs: Option<Vec<SigningAlgorithm>>,
     generate_rsa_command: Option<String>,
     redis_url: Option<String>,
+    sqlite_db: Option<String>,
+    memory_storage: Option<bool>,
     session_ttl: Option<u64>,
     cache_ttl: Option<u64>,
     from_name: Option<String>,

@@ -123,11 +123,11 @@ impl RotatingKeys {
 impl Agent for RotatingKeys {}
 
 impl Handler<SignJws> for RotatingKeys {
-    fn handle(&mut self, message: SignJws, reply: ReplySender<SignJws>) {
+    fn handle(&mut self, message: SignJws, cx: Context<Self, SignJws>) {
         match message.signing_alg {
             SigningAlgorithm::EdDsa => {
                 let key_set = self.ed25519_keys.clone();
-                reply.later(async move {
+                cx.reply_later(async move {
                     let key_set = key_set
                         .ok_or_else(|| SignError::UnsupportedAlgorithm(message.signing_alg))?;
                     let key_set = key_set.read().await;
@@ -138,7 +138,7 @@ impl Handler<SignJws> for RotatingKeys {
             }
             SigningAlgorithm::Rs256 => {
                 let key_set = self.rsa_keys.clone();
-                reply.later(async move {
+                cx.reply_later(async move {
                     let key_set = key_set
                         .ok_or_else(|| SignError::UnsupportedAlgorithm(message.signing_alg))?;
                     let key_set = key_set.read().await;
@@ -152,10 +152,10 @@ impl Handler<SignJws> for RotatingKeys {
 }
 
 impl Handler<GetPublicJwks> for RotatingKeys {
-    fn handle(&mut self, _message: GetPublicJwks, reply: ReplySender<GetPublicJwks>) {
+    fn handle(&mut self, _message: GetPublicJwks, cx: Context<Self, GetPublicJwks>) {
         let ed25519_keys = self.ed25519_keys.clone();
         let rsa_keys = self.rsa_keys.clone();
-        reply.later(async move {
+        cx.reply_later(async move {
             let mut jwks = vec![];
             if let Some(key_set) = ed25519_keys {
                 jwks.append(&mut key_set.read().await.public_jwks());

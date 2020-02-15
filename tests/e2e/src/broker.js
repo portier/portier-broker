@@ -23,6 +23,7 @@ module.exports = () => {
       RUST_LOG: process.env.RUST_LOG || "error",
       RUST_BACKTRACE: "1",
       BROKER_PUBLIC_URL: "http://localhost:3333",
+      BROKER_MEMORY_STORAGE: "true",
       BROKER_KEYTEXT: pem,
       BROKER_FROM_ADDRESS: "portier@example.com",
       BROKER_SMTP_SERVER: "localhost:1025",

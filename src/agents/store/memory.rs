@@ -92,7 +92,7 @@ impl Agent for MemoryStore {
 }
 
 impl Handler<Gc> for MemoryStore {
-    fn handle(&mut self, _message: Gc, reply: ReplySender<Gc>) {
+    fn handle(&mut self, _message: Gc, cx: Context<Self, Gc>) {
         self.sessions = self
             .sessions
             .drain()
@@ -120,44 +120,44 @@ impl Handler<Gc> for MemoryStore {
             .drain()
             .filter(|(_, ref entry)| entry.is_alive())
             .collect();
-        reply.send(())
+        cx.reply(())
     }
 }
 
 impl Handler<SaveSession> for MemoryStore {
-    fn handle(&mut self, message: SaveSession, reply: ReplySender<SaveSession>) {
+    fn handle(&mut self, message: SaveSession, cx: Context<Self, SaveSession>) {
         self.sessions.insert(
             message.session_id,
             Expiring::from_duration(message.data, self.expire_sessions),
         );
-        reply.send(Ok(()))
+        cx.reply(Ok(()))
     }
 }
 
 impl Handler<GetSession> for MemoryStore {
-    fn handle(&mut self, message: GetSession, reply: ReplySender<GetSession>) {
+    fn handle(&mut self, message: GetSession, cx: Context<Self, GetSession>) {
         let data = self
             .sessions
             .get(&message.session_id)
             .filter(|entry| entry.is_alive())
             .map(|entry| entry.inner.clone());
-        reply.send(Ok(data))
+        cx.reply(Ok(data))
     }
 }
 
 impl Handler<DeleteSession> for MemoryStore {
-    fn handle(&mut self, message: DeleteSession, reply: ReplySender<DeleteSession>) {
+    fn handle(&mut self, message: DeleteSession, cx: Context<Self, DeleteSession>) {
         self.sessions.remove(&message.session_id);
-        reply.send(Ok(()))
+        cx.reply(Ok(()))
     }
 }
 
 impl Handler<CachedFetch> for MemoryStore {
-    fn handle(&mut self, message: CachedFetch, reply: ReplySender<CachedFetch>) {
+    fn handle(&mut self, message: CachedFetch, cx: Context<Self, CachedFetch>) {
         let fetcher = self.fetcher.clone();
         let slot = self.cache.entry(message.url.clone()).or_default().clone();
         let expire_cache = self.expire_cache;
-        reply.later(async move {
+        cx.reply_later(async move {
             let mut slot = slot.lock().await;
             if let Some(entry) = slot.as_ref().filter(|entry| entry.is_alive()) {
                 return Ok(entry.inner.clone());
@@ -171,7 +171,7 @@ impl Handler<CachedFetch> for MemoryStore {
 }
 
 impl Handler<IncrAndTestLimit> for MemoryStore {
-    fn handle(&mut self, message: IncrAndTestLimit, reply: ReplySender<IncrAndTestLimit>) {
+    fn handle(&mut self, message: IncrAndTestLimit, cx: Context<Self, IncrAndTestLimit>) {
         let config = match message {
             IncrAndTestLimit::PerEmail { .. } => self.limit_per_email_config,
         };
@@ -191,7 +191,7 @@ impl Handler<IncrAndTestLimit> for MemoryStore {
                 1
             }
         };
-        reply.send(Ok(count <= config.max_count));
+        cx.reply(Ok(count <= config.max_count));
     }
 }
 

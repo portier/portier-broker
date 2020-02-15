@@ -1,4 +1,4 @@
-use crate::utils::agent::{Agent, Handler, Message, ReplySender};
+use crate::utils::agent::{Agent, Context, Handler, Message};
 use crate::utils::BoxError;
 use crate::web::read_body;
 use err_derive::Error;
@@ -55,14 +55,14 @@ impl FetchAgent {
 impl Agent for FetchAgent {}
 
 impl Handler<FetchUrl> for FetchAgent {
-    fn handle(&mut self, message: FetchUrl, reply: ReplySender<FetchUrl>) {
+    fn handle(&mut self, message: FetchUrl, cx: Context<Self, FetchUrl>) {
         let FetchUrl { url } = message;
         let hyper_url = url
             .as_str()
             .parse()
             .expect("failed to convert Url to Hyper Url");
         let future = self.client.get(hyper_url);
-        reply.later(async {
+        cx.reply_later(async {
             let res = future.await?;
             if res.status() != StatusCode::OK {
                 return Err(FetchError::NotOK(res.status()));
