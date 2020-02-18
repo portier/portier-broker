@@ -126,7 +126,10 @@ impl ConfigBuilder {
             keyfiles: Vec::new(),
             keytext: None,
             signing_algs: vec![SigningAlgorithm::Rs256],
-            generate_rsa_command: vec![],
+            generate_rsa_command: "openssl genrsa 2048"
+                .split_whitespace()
+                .map(|arg| arg.to_owned())
+                .collect(),
 
             redis_url: None,
             sqlite_db: None,
