@@ -24,8 +24,8 @@ impl Message for GetPublicJwks {
 /// `impl KeyManagerSender for Addr<FoobarKeyManager> {}`
 pub trait KeyManagerSender: Sender<SignJws> + Sender<GetPublicJwks> {}
 
-mod manual;
-mod rotating;
+pub mod manual;
+pub mod rotating;
 
-pub use self::manual::*;
-pub use self::rotating::*;
+pub use self::manual::{ManualKeys, ManualKeysError};
+pub use self::rotating::{Expiring, KeySet, RotateKeys, RotatingKeys, UpdateKeys};

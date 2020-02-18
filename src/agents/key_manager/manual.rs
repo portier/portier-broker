@@ -9,8 +9,9 @@ use ring::{
     rand::SecureRandom,
     signature::{Ed25519KeyPair, RsaKeyPair},
 };
-use tokio::fs::File;
-use tokio::io::BufReader;
+use std::fs::File;
+use std::io::BufReader;
+use std::sync::Arc;
 
 #[derive(Debug, Error)]
 pub enum ManualKeysError {
@@ -26,15 +27,15 @@ pub enum ManualKeysError {
 pub struct ManualKeys {
     ed25519_keys: Vec<NamedKeyPair<Ed25519KeyPair>>,
     rsa_keys: Vec<NamedKeyPair<RsaKeyPair>>,
-    rng: Box<dyn SecureRandom + Send>,
+    rng: Arc<dyn SecureRandom + Send + Sync>,
 }
 
 impl ManualKeys {
-    pub async fn new(
+    pub fn new(
         keyfiles: Vec<String>,
         keytext: Option<String>,
         signing_algs: &[SigningAlgorithm],
-        rng: Box<dyn SecureRandom + Send>,
+        rng: Arc<dyn SecureRandom + Send + Sync>,
     ) -> Result<Self, ManualKeysError> {
         info!(
             "Using manual key management with algorithms: {}",
@@ -42,7 +43,7 @@ impl ManualKeys {
         );
         let mut parsed = vec![];
         for keyfile in &keyfiles {
-            let file = match File::open(keyfile).await {
+            let file = match File::open(keyfile) {
                 Ok(file) => file,
                 Err(err) => {
                     warn!("Ignoring keyfile '{}', could not open: {}", keyfile, err);
@@ -50,7 +51,7 @@ impl ManualKeys {
                 }
             };
 
-            let key_pairs = match pem::parse_key_pairs(BufReader::new(file)).await {
+            let key_pairs = match pem::parse_key_pairs(BufReader::new(file)) {
                 Ok(key_pairs) => key_pairs,
                 Err(err) => {
                     warn!("Ignoring keyfile '{}', could not parse: {}", keyfile, err);
@@ -80,7 +81,7 @@ impl ManualKeys {
             parsed.append(&mut key_pairs);
         }
         if let Some(keytext) = keytext {
-            let mut key_pairs = pem::parse_key_pairs(keytext.as_bytes()).await?;
+            let mut key_pairs = pem::parse_key_pairs(keytext.as_bytes())?;
             if key_pairs.is_empty() {
                 return Err(ManualKeysError::EmptyKeytext);
             } else {

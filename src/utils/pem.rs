@@ -3,10 +3,8 @@
 use crate::crypto::SigningAlgorithm;
 use crate::utils::keys::KeyPairExt;
 use err_derive::Error;
-use ring::pkcs8::Document;
 use ring::signature::{Ed25519KeyPair, RsaKeyPair};
-use std::io::{Cursor, Error as IoError, Read};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+use std::io::{BufRead, Cursor, Error as IoError, Read};
 
 const RSA_START_MARK: &str = "-----BEGIN RSA PRIVATE KEY-----";
 const RSA_END_MARK: &str = "-----END RSA PRIVATE KEY-----";
@@ -19,15 +17,6 @@ pub enum ParsedKeyPair {
 }
 
 impl ParsedKeyPair {
-    /// Describe the type of key pair.
-    pub fn kind(&self) -> &'static str {
-        use ParsedKeyPair::*;
-        match self {
-            Ed25519(_) => "Ed25519",
-            Rsa(_) => "RSA",
-        }
-    }
-
     /// Get the signing algorithm for this key type.
     pub fn signing_alg(&self) -> SigningAlgorithm {
         use ParsedKeyPair::*;
@@ -55,10 +44,7 @@ enum State {
 }
 
 /// Parse all supported key pairs from a PEM stream.
-pub async fn parse_key_pairs<R>(mut reader: R) -> Result<Vec<ParsedKeyPair>, ParseError>
-where
-    R: AsyncBufReadExt + Unpin,
-{
+pub fn parse_key_pairs(mut reader: impl BufRead) -> Result<Vec<ParsedKeyPair>, ParseError> {
     let mut key_pairs = Vec::new();
     let mut b64buf = String::new();
     let mut state = State::Scan;
@@ -66,7 +52,7 @@ where
     let mut raw_line = Vec::<u8>::new();
     loop {
         raw_line.clear();
-        let len = reader.read_until(b'\n', &mut raw_line).await?;
+        let len = reader.read_until(b'\n', &mut raw_line)?;
 
         if len == 0 {
             return Ok(key_pairs);
@@ -108,25 +94,23 @@ where
     }
 }
 
-/// Write a PKCS #8 document as PEM to a stream.
-pub async fn write_pkcs8<W>(doc: &Document, mut writer: W) -> Result<(), IoError>
-where
-    W: AsyncWriteExt + Unpin,
-{
-    let b64 = base64::encode(doc);
+/// Convert a PKCS #8 document to a PEM string.
+pub fn from_der(der: &[u8]) -> String {
+    let mut res = String::new();
+    let b64 = base64::encode(der);
     let mut cursor = Cursor::new(b64.as_bytes());
-    writer.write_all(PKCS8_START_MARK.as_bytes()).await?;
-    writer.write_all(&[0xa]).await?;
+    res.push_str(PKCS8_START_MARK);
+    res.push('\n');
     let mut buf = [0u8; 64];
     loop {
         let size = cursor.read(&mut buf[..]).unwrap();
         if size == 0 {
             break;
         }
-        writer.write_all(&buf[..size]).await?;
-        writer.write_all(&[0xa]).await?;
+        res.push_str(std::str::from_utf8(&buf[..size]).unwrap());
+        res.push('\n');
     }
-    writer.write_all(PKCS8_END_MARK.as_bytes()).await?;
-    writer.write_all(&[0xa]).await?;
-    Ok(())
+    res.push_str(PKCS8_END_MARK);
+    res.push('\n');
+    res
 }

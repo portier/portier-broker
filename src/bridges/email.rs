@@ -32,7 +32,7 @@ pub struct EmailBridgeData {
 /// form results in the same callback as the email link.
 pub async fn auth(ctx: &mut Context, email_addr: &EmailAddress) -> HandlerResult {
     // Generate a 12-character one-time pad.
-    let code = random_zbase32(12, &ctx.app.rng);
+    let code = random_zbase32(12, &*ctx.app.rng);
     // For display, we split it in two groups of 6.
     let code_fmt = [&code[0..6], &code[6..12]].join(" ");
 

@@ -1,5 +1,8 @@
 use crate::crypto::SigningAlgorithm;
-use crate::utils::base64url;
+use crate::utils::{
+    base64url,
+    pem::{self, ParsedKeyPair},
+};
 use err_derive::Error;
 use ring::{
     digest,
@@ -8,6 +11,9 @@ use ring::{
     signature::{self, Ed25519KeyPair, KeyPair, RsaKeyPair},
 };
 use serde_json::{json, Value as JsonValue};
+use std::ffi::OsString;
+use std::process::{Command, Stdio};
+use std::sync::Arc;
 
 #[derive(Debug, Error)]
 pub enum SignError {
@@ -52,7 +58,7 @@ impl<T: KeyPairExt> From<T> for NamedKeyPair<T> {
     }
 }
 
-/// Additional KeyPair methods we implement for key pair types we support.
+/// Additional `KeyPair` methods we implement for key pair types we support.
 pub trait KeyPairExt {
     /// Generate an ID for the key by hashing the public components.
     ///
@@ -98,7 +104,6 @@ impl KeyPairExt for Ed25519KeyPair {
         data.push_str(&base64url::encode(&header));
         data.push('.');
         data.push_str(&base64url::encode(&payload.to_string()));
-        // TODO: Maybe treat this as blocking?
         let sig = self.sign(data.as_bytes());
         data.push('.');
         data.push_str(&base64url::encode(&sig));
@@ -146,7 +151,6 @@ impl KeyPairExt for RsaKeyPair {
         data.push('.');
         data.push_str(&base64url::encode(&payload.to_string()));
         let mut sig = vec![0; self.public_modulus_len()];
-        // TODO: RNG is blocking
         self.sign(&signature::RSA_PKCS1_SHA256, rng, data.as_bytes(), &mut sig)?;
         data.push('.');
         data.push_str(&base64url::encode(&sig));
@@ -168,5 +172,64 @@ impl KeyPairExt for RsaKeyPair {
             "n": json_big_num(n),
             "e": json_big_num(e),
         })
+    }
+}
+
+/// Trait for key pair types we can generate.
+pub trait GeneratedKeyPair: KeyPairExt + Sized {
+    /// Configuration required for generating a key pair.
+    type Config;
+
+    /// Generate a new key pair.
+    ///
+    /// If this fails, we panic, because it may happen at an arbitrary moment at run-time.
+    fn generate(config: Self::Config) -> String;
+
+    /// Convert a ParsedKeyPair, if it is of the correct type.
+    fn from_parsed(parsed: ParsedKeyPair) -> Option<Self>;
+}
+
+impl GeneratedKeyPair for Ed25519KeyPair {
+    type Config = Arc<dyn SecureRandom>;
+
+    fn generate(config: Self::Config) -> String {
+        let doc = Self::generate_pkcs8(&*config).expect("could not generate Ed25519 key pair");
+        pem::from_der(doc.as_ref())
+    }
+
+    fn from_parsed(parsed: ParsedKeyPair) -> Option<Self> {
+        match parsed {
+            ParsedKeyPair::Ed25519(inner) => Some(inner),
+            _ => None,
+        }
+    }
+}
+
+impl GeneratedKeyPair for RsaKeyPair {
+    type Config = Vec<String>;
+
+    fn generate(config: Vec<String>) -> String {
+        let mut args: Vec<OsString> = config.iter().map(|arg| arg.into()).collect();
+        let program = args.remove(0);
+        let output = Command::new(program)
+            .args(args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .output()
+            .expect("Failed to run command to generate RSA key");
+        if !output.status.success() {
+            panic!(
+                "Command to generate RSA key failed with status {}",
+                output.status
+            );
+        }
+        String::from_utf8(output.stdout).expect("Generated RSA is not UTF-8")
+    }
+
+    fn from_parsed(parsed: ParsedKeyPair) -> Option<Self> {
+        match parsed {
+            ParsedKeyPair::Rsa(inner) => Some(inner),
+            _ => None,
+        }
     }
 }

@@ -120,7 +120,7 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
         .ok_or_else(|| {
             BrokerError::Input(format!(
                 "unsupported id_token_signing_alg, must be one of: {}",
-                SigningAlgorithm::format_list(&ctx.app.signing_algs)
+                SigningAlgorithm::format_list(&*ctx.app.signing_algs)
             ))
         })?;
 

@@ -1,4 +1,4 @@
-use crate::agents::CachedFetch;
+use crate::agents::FetchUrlCached;
 use crate::config::ConfigRc;
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
@@ -119,7 +119,7 @@ pub async fn query(app: &ConfigRc, email_addr: &EmailAddress) -> Result<Vec<Link
     // Make the request.
     let descriptor = app
         .store
-        .send(CachedFetch { url })
+        .send(FetchUrlCached { url })
         .await
         .map_err(|e| BrokerError::Provider(format!("webfinger request failed: {}", e)))?;
     let descriptor: DescriptorDef = serde_json::from_str(&descriptor)

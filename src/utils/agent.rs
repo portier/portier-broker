@@ -105,7 +105,7 @@ pub trait Handler<M: Message>: Sized {
     /// Handle the message.
     ///
     /// Handlers are called one-by-one as messages arrive; the next message won't be picked up
-    /// until the function returns. Handlers have mutable access to the agent itself.
+    /// until the function returns. Handlers can block and have mutable access to the agent itself.
     ///
     /// A context is provided to send the reply, and it can live longer than the function, which
     /// allows agents to spawn an async task while continuing with the next message.
@@ -127,6 +127,11 @@ impl<A> Addr<A> {
         M: Message,
         A: Handler<M> + Send + 'static,
     {
+        log::debug!(
+            "Sending {:?} to {:?}",
+            std::any::type_name::<M>(),
+            std::any::type_name::<A>()
+        );
         let (tx, rx) = oneshot::channel();
         let addr = self.clone();
         tokio::task::spawn_blocking(move || {

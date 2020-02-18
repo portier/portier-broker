@@ -1,6 +1,5 @@
 use crate::agents::{
-    self, FetchAgent, KeyManagerSender, ManualKeys, ManualKeysError, RotatingKeys,
-    RotatingKeysError, StoreSender,
+    self, FetchAgent, KeyManagerSender, ManualKeys, ManualKeysError, RotatingKeys, StoreSender,
 };
 use crate::bridges::oidc::GOOGLE_IDP_ORIGIN;
 use crate::crypto::SigningAlgorithm;
@@ -31,8 +30,6 @@ pub enum ConfigError {
     Toml(#[error(source)] toml::de::Error),
     #[error(display = "keys configuration error: {}", _0)]
     ManualKeys(#[error(source)] ManualKeysError),
-    #[error(display = "rotating keys configuration error: {}", _0)]
-    RotatingKeys(#[error(source)] RotatingKeysError),
     #[error(display = "domain override configuration error: {}", _0)]
     DomainOverride(#[error(source)] ParseLinkError),
 }
@@ -147,7 +144,7 @@ pub struct Config {
     pub token_ttl: Duration,
     pub key_manager: Box<dyn KeyManagerSender>,
     pub signing_algs: Vec<SigningAlgorithm>,
-    pub store: Box<dyn StoreSender>,
+    pub store: Arc<dyn StoreSender>,
     pub from_name: String,
     pub from_address: String,
     pub smtp_server: String,
@@ -158,7 +155,7 @@ pub struct Config {
     pub res_dir: PathBuf,
     pub templates: Templates,
     pub i18n: I18n,
-    pub rng: SystemRandom,
+    pub rng: Arc<dyn SecureRandom + Send + Sync>,
 }
 
 pub struct ConfigBuilder {
@@ -172,7 +169,6 @@ pub struct ConfigBuilder {
     pub token_ttl: Duration,
     pub keyfiles: Vec<String>,
     pub keytext: Option<String>,
-    pub keysdir: Option<String>,
     pub signing_algs: Vec<SigningAlgorithm>,
     pub generate_rsa_command: Vec<String>,
     pub redis_url: Option<String>,
@@ -204,7 +200,6 @@ impl ConfigBuilder {
             token_ttl: Duration::from_secs(600),
             keyfiles: Vec::new(),
             keytext: None,
-            keysdir: None,
             signing_algs: vec![SigningAlgorithm::Rs256],
             generate_rsa_command: vec![],
             redis_url: None,
@@ -266,7 +261,6 @@ impl ConfigBuilder {
                 self.keyfiles.append(&mut val);
             }
             self.keytext = table.keytext.or_else(|| self.keytext.clone());
-            self.keysdir = table.keysdir.or_else(|| self.keysdir.clone());
             if let Some(val) = table.signing_algs {
                 self.signing_algs = val;
             }
@@ -389,9 +383,6 @@ impl ConfigBuilder {
         if let Some(val) = env_config.keytext {
             self.keytext = Some(val);
         }
-        if let Some(val) = env_config.keysdir {
-            self.keysdir = Some(val);
-        }
         if let Some(val) = env_config.signing_algs {
             self.signing_algs = val;
         }
@@ -456,49 +447,19 @@ impl ConfigBuilder {
 
         // Create the secure random number generate.
         // Per SystemRandom docs, call `fill` once here to prepare the generator.
-        let rng = tokio::task::spawn_blocking(|| {
+        let rng: Arc<dyn SecureRandom + Send + Sync> = tokio::task::spawn_blocking(|| {
             let rng = SystemRandom::new();
             let mut dummy = [0u8; 16];
             rng.fill(&mut dummy)
                 .expect("secure random number generator failed to initialize");
-            rng
+            Arc::new(rng)
         })
         .await
         .unwrap();
 
         // Child structs
-        let key_manager: Box<dyn KeyManagerSender> = if let Some(keysdir) = self.keysdir {
-            if !self.keyfiles.is_empty() || self.keytext.is_some() {
-                return Err("keysdir cannot be combined with keyfiles / keytext".into());
-            }
-            if self.signing_algs.contains(&SigningAlgorithm::Rs256)
-                && self.generate_rsa_command.is_empty()
-            {
-                return Err("generate_rsa_command is required for rotating RSA keys".into());
-            }
-            let key_manager = RotatingKeys::new(
-                keysdir,
-                self.keys_ttl,
-                &self.signing_algs,
-                self.generate_rsa_command,
-                rng.clone(),
-            )
-            .await?
-            .start();
-            Box::new(key_manager)
-        } else {
-            let key_manager = ManualKeys::new(
-                self.keyfiles,
-                self.keytext,
-                &self.signing_algs,
-                Box::new(rng.clone()),
-            )
-            .await?
-            .start();
-            Box::new(key_manager)
-        };
-
-        let store: Box<dyn StoreSender> =
+        let fetcher = FetchAgent::new().start();
+        let store: Arc<dyn StoreSender> =
             match (self.redis_url, self.sqlite_db, self.memory_storage) {
                 #[cfg(feature = "redis")]
                 (Some(redis_url), None, false) => {
@@ -507,12 +468,12 @@ impl ConfigBuilder {
                         self.session_ttl,
                         self.cache_ttl,
                         self.limit_per_email,
-                        FetchAgent::new().start(),
+                        fetcher,
                     )
                     .await
                     .expect("unable to instantiate new Redis store")
                     .start();
-                    Box::new(addr)
+                    Arc::new(addr)
                 }
                 #[cfg(not(feature = "redis"))]
                 (Some(_), None, false) => {
@@ -526,12 +487,12 @@ impl ConfigBuilder {
                         self.session_ttl,
                         self.cache_ttl,
                         self.limit_per_email,
-                        FetchAgent::new().start(),
+                        fetcher,
                     )
                     .await
                     .expect("unable to instantiate new SQLite store")
                     .start();
-                    Box::new(addr)
+                    Arc::new(addr)
                 }
                 #[cfg(not(feature = "rusqlite"))]
                 (None, Some(_), false) => {
@@ -543,10 +504,10 @@ impl ConfigBuilder {
                         self.session_ttl,
                         self.cache_ttl,
                         self.limit_per_email,
-                        FetchAgent::new().start(),
+                        fetcher,
                     )
                     .start();
-                    Box::new(addr)
+                    Arc::new(addr)
                 }
 
                 (None, None, false) => {
@@ -554,6 +515,32 @@ impl ConfigBuilder {
                 }
 
                 _ => panic!("Can only specify one of redis_url, sqlite_db or memory_storage"),
+            };
+
+        let key_manager: Box<dyn KeyManagerSender> =
+            if !self.keyfiles.is_empty() || self.keytext.is_some() {
+                let key_manager =
+                    ManualKeys::new(self.keyfiles, self.keytext, &self.signing_algs, rng.clone())?
+                        .start();
+                Box::new(key_manager)
+            } else {
+                if self.signing_algs.contains(&SigningAlgorithm::Rs256)
+                    && self.generate_rsa_command.is_empty()
+                {
+                    return Err("generate_rsa_command is required for rotating RSA keys".into());
+                }
+                let key_manager = RotatingKeys::new(
+                    store.clone(),
+                    self.keys_ttl,
+                    &self.signing_algs,
+                    self.generate_rsa_command,
+                    rng.clone(),
+                )
+                .start();
+                key_manager
+                    .send(crate::agents::key_manager::rotating::Init)
+                    .await;
+                Box::new(key_manager)
             };
 
         // Configure default domain overrides for hosted Google
@@ -641,7 +628,6 @@ struct TomlCryptoTable {
     token_ttl: Option<u64>,
     keyfiles: Option<Vec<String>>,
     keytext: Option<String>,
-    keysdir: Option<String>,
     signing_algs: Option<Vec<SigningAlgorithm>>,
     generate_rsa_command: Option<Vec<String>>,
 }
@@ -691,7 +677,6 @@ struct EnvConfig {
     token_ttl: Option<u64>,
     keyfiles: Option<Vec<String>>,
     keytext: Option<String>,
-    keysdir: Option<String>,
     signing_algs: Option<Vec<SigningAlgorithm>>,
     generate_rsa_command: Option<String>,
     redis_url: Option<String>,

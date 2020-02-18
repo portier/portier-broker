@@ -2,457 +2,377 @@ use crate::agents::*;
 use crate::crypto::SigningAlgorithm;
 use crate::utils::{
     agent::*,
-    keys::{KeyPairExt, NamedKeyPair, SignError},
-    pem::{self, ParsedKeyPair},
-    BoxFuture,
+    keys::{GeneratedKeyPair, KeyPairExt, NamedKeyPair, SignError},
+    pem, DelayQueueTask,
 };
-use err_derive::Error;
-use log::{info, warn};
 use ring::{
     rand::SecureRandom,
     signature::{Ed25519KeyPair, RsaKeyPair},
 };
-use serde_json as json;
-use std::ffi::OsString;
-use std::io::{Error as IoError, ErrorKind as IoErrorKind};
-use std::mem;
-use std::path::{Path, PathBuf};
-use std::process::Stdio;
+use serde_derive::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::io::Cursor;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
-use tokio::fs::{self, File};
-use tokio::io::BufReader;
-use tokio::process::Command;
-use tokio::sync::RwLock;
-use tokio::task;
 
-#[derive(Debug, Error)]
-pub enum RotatingKeysError {
-    #[error(display = "could not open '{}': {}", path, error)]
-    Open {
-        path: String,
-        #[error(source, nofrom)]
-        error: IoError,
-    },
-    #[error(display = "could not create directory '{}': {}", path, error)]
-    Mkdir {
-        path: String,
-        #[error(source, nofrom)]
-        error: IoError,
-    },
-    #[error(
-        display = "could not determine last modification time of '{}': {}",
-        path,
-        error
-    )]
-    StatMtime {
-        path: String,
-        #[error(source, nofrom)]
-        error: IoError,
-    },
-    #[error(display = "could not parse file '{}': {}", path, error)]
-    Parse {
-        path: String,
-        #[error(source, nofrom)]
-        error: pem::ParseError,
-    },
-    #[error(
-        display = "invalid type of key in '{}', want {}, found {}",
-        path,
-        want,
-        found
-    )]
-    InvalidKeyType {
-        path: String,
-        want: &'static str,
-        found: &'static str,
-    },
-    #[error(display = "expected exactly one key in '{}', found {}", path, found)]
-    ExpectedOneKey { path: String, found: usize },
+/// Message used to initialize the key manager.
+// TODO: Maybe we can change something about agent structure to get rid of this.
+pub struct Init;
+impl Message for Init {
+    type Reply = ();
 }
 
-/// Struct that contains configuration we pass around.
-struct RotateConfig {
-    keys_ttl: Duration,
-    generate_rsa_command: Vec<String>,
-    rng: Box<dyn SecureRandom + Send + Sync>,
+/// Message used to do post-init checks.
+pub struct Check;
+impl Message for Check {
+    type Reply = ();
 }
 
-/// KeyManager where we rotating 3 keys of each type.
+/// Message requesting a key set be updated.
+///
+/// The store sends this message to load the initial keys, when it has updated the key set, or when
+/// it noticed another worker has updated the key set (if applicable).
+///
+/// When received, the key manager will try to install keys, or start rotation if necessary by
+/// sending `RotateKeysLocked` to the store. If keys were successfully installed, a timer will be
+/// set for the next rotation, which is also initiated with `RotateKeysLocked`.
+pub struct UpdateKeys(pub KeySet);
+impl Message for UpdateKeys {
+    type Reply = ();
+}
+
+/// Message requesting keys be rotated.
+///
+/// This message is part of a larger flow that starts with the key manager sending
+/// `RotateKeysLocked` to the store, to acquire an exclusive lock. Once locked, the store then
+/// sends `RotateKeys` back to let the key manager handle actual rotation.
+///
+/// The current key set is provided by the sender. The key manager will then inspect expiry times
+/// and update the key set as necessary. A new key set is returned only if changes were made.
+///
+/// If the key manager returns an new key set, the store should save it, then send `UpdateKeys` to
+/// the key manager to install the new key set. The returned key set is guaranteed to have at least
+/// `current` and `next` keys set.
+///
+/// (The store is also responsible for notifying other workers of key updates, if applicable.)
+pub struct RotateKeys(pub KeySet);
+impl Message for RotateKeys {
+    type Reply = Option<KeySet>;
+}
+
+/// Combines any type with an `SystemTime` expiry time.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Expiring<T> {
+    pub value: T,
+    pub expires: SystemTime,
+}
+
+impl<T> Expiring<T> {
+    /// Whether this value has not yet expired.
+    pub fn is_alive(&self) -> bool {
+        self.expires > SystemTime::now()
+    }
+}
+
+/// A rotating set of 3 keys.
+///
+/// This is the storage representation, and contains each of the keys in PEM format.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct KeySet {
+    pub signing_alg: SigningAlgorithm,
+    pub current: Option<Expiring<String>>,
+    pub next: Option<Expiring<String>>,
+    pub previous: Option<String>,
+}
+
+impl KeySet {
+    /// Create an empty key set.
+    pub fn empty(signing_alg: SigningAlgorithm) -> Self {
+        KeySet {
+            signing_alg,
+            current: None,
+            next: None,
+            previous: None,
+        }
+    }
+}
+
+/// Internal variant of `KeySet` where the PEM was parsed.
+struct ActiveKeySet<T: KeyPairExt + GeneratedKeyPair> {
+    current: NamedKeyPair<T>,
+    next: NamedKeyPair<T>,
+    previous: Option<NamedKeyPair<T>>,
+}
+
+impl<T: KeyPairExt + GeneratedKeyPair> ActiveKeySet<T> {
+    fn parse(key_set: &KeySet) -> Self {
+        let current = key_set
+            .current
+            .as_ref()
+            .map(|entry| Self::parse_one(&entry.value).into())
+            .expect("Provided key set does not have a current key");
+        let next = key_set
+            .next
+            .as_ref()
+            .map(|entry| Self::parse_one(&entry.value).into())
+            .expect("Provided key set does not have a next key");
+        let previous = key_set
+            .previous
+            .as_ref()
+            .map(|value| Self::parse_one(&value).into());
+        Self {
+            current,
+            next,
+            previous,
+        }
+    }
+
+    fn parse_one(pem: &str) -> T {
+        let mut key_pairs =
+            pem::parse_key_pairs(Cursor::new(pem)).expect("Could not parsed key as PEM");
+        if key_pairs.len() != 1 {
+            panic!("Expected exactly one key in PEM");
+        }
+        let key_pair = key_pairs.pop().unwrap();
+        T::from_parsed(key_pair).expect("Found key pair of incorrect type")
+    }
+
+    fn append_public_jwks(&self, vec: &mut Vec<serde_json::Value>) {
+        vec.push(self.current.public_jwk());
+        vec.push(self.next.public_jwk());
+        if let Some(previous) = self.previous.as_ref() {
+            vec.push(previous.public_jwk());
+        }
+    }
+}
+
+/// KeyManager where we rotate 3 keys of each type.
 pub struct RotatingKeys {
-    ed25519_keys: Option<KeySetHandle<Ed25519KeyPair>>,
-    rsa_keys: Option<KeySetHandle<RsaKeyPair>>,
+    store: Arc<dyn StoreSender>,
+    keys_ttl: Duration,
+    signing_algs: HashSet<SigningAlgorithm>,
+    generate_rsa_command: Vec<String>,
+    rng: Arc<dyn SecureRandom + Send + Sync>,
+    ed25519_keys: Option<ActiveKeySet<Ed25519KeyPair>>,
+    rsa_keys: Option<ActiveKeySet<RsaKeyPair>>,
+    delays: Option<DelayQueueTask<SigningAlgorithm>>,
 }
 
 impl RotatingKeys {
-    pub async fn new(
-        keysdir: impl AsRef<Path>,
+    pub fn new(
+        store: Arc<dyn StoreSender>,
         keys_ttl: Duration,
         signing_algs: &[SigningAlgorithm],
         generate_rsa_command: Vec<String>,
-        rng: impl SecureRandom + Send + Sync + 'static,
-    ) -> Result<Self, RotatingKeysError> {
-        info!(
+        rng: Arc<dyn SecureRandom + Send + Sync>,
+    ) -> Self {
+        log::info!(
             "Using rotating keys with a {}s interval and algorithms: {}",
             keys_ttl.as_secs(),
             SigningAlgorithm::format_list(signing_algs)
         );
-        let rng = Box::new(rng);
-        let config = Arc::new(RotateConfig {
+        RotatingKeys {
+            store,
             keys_ttl,
+            signing_algs: signing_algs.iter().cloned().collect(),
             generate_rsa_command,
             rng,
-        });
-        let ed25519_keys = if signing_algs.contains(&SigningAlgorithm::EdDsa) {
-            Some(KeySet::from_subdir(keysdir.as_ref(), "ed25519", &config).await?)
-        } else {
-            None
-        };
-        let rsa_keys = if signing_algs.contains(&SigningAlgorithm::Rs256) {
-            Some(KeySet::from_subdir(keysdir.as_ref(), "rsa", &config).await?)
-        } else {
-            None
-        };
-        Ok(RotatingKeys {
-            ed25519_keys,
-            rsa_keys,
-        })
+            ed25519_keys: None,
+            rsa_keys: None,
+            delays: None,
+        }
+    }
+
+    fn generate_one(&self, signing_alg: SigningAlgorithm) -> String {
+        use SigningAlgorithm::*;
+        match signing_alg {
+            EdDsa => Ed25519KeyPair::generate(self.rng.clone()),
+            Rs256 => RsaKeyPair::generate(self.generate_rsa_command.clone()),
+        }
     }
 }
 
 impl Agent for RotatingKeys {}
 
-impl Handler<SignJws> for RotatingKeys {
-    fn handle(&mut self, message: SignJws, cx: Context<Self, SignJws>) {
-        match message.signing_alg {
-            SigningAlgorithm::EdDsa => {
-                let key_set = self.ed25519_keys.clone();
-                cx.reply_later(async move {
-                    let key_set = key_set
-                        .ok_or_else(|| SignError::UnsupportedAlgorithm(message.signing_alg))?;
-                    let key_set = key_set.read().await;
-                    key_set
-                        .current
-                        .sign_jws(&message.payload, &*key_set.config.rng)
-                });
-            }
-            SigningAlgorithm::Rs256 => {
-                let key_set = self.rsa_keys.clone();
-                cx.reply_later(async move {
-                    let key_set = key_set
-                        .ok_or_else(|| SignError::UnsupportedAlgorithm(message.signing_alg))?;
-                    let key_set = key_set.read().await;
-                    key_set
-                        .current
-                        .sign_jws(&message.payload, &*key_set.config.rng)
-                });
+impl Handler<Init> for RotatingKeys {
+    fn handle(&mut self, _message: Init, cx: Context<Self, Init>) {
+        // Initialize timer task.
+        let store = self.store.clone();
+        self.delays = Some(DelayQueueTask::spawn(move |signing_alg| {
+            log::info!(
+                "Reached expiry time for {} keys, attempting rotation.",
+                signing_alg
+            );
+            store.send(RotateKeysLocked(signing_alg));
+        }));
+
+        // Enable key rotation in the store.
+        let me = cx.addr().clone();
+        let store = self.store.clone();
+        let enable_msg = EnableRotatingKeys {
+            key_manager: cx.addr().clone(),
+            signing_algs: self.signing_algs.clone(),
+        };
+        cx.reply_later(async move {
+            store.send(enable_msg).await;
+            me.send(Check).await;
+        });
+    }
+}
+
+impl Handler<Check> for RotatingKeys {
+    fn handle(&mut self, _message: Check, cx: Context<Self, Check>) {
+        // Make sure key sets are present for all algorithms.
+        for signing_alg in &self.signing_algs {
+            use SigningAlgorithm::*;
+            if match signing_alg {
+                EdDsa => self.ed25519_keys.is_none(),
+                Rs256 => self.rsa_keys.is_none(),
+            } {
+                panic!("Store did not provide a key set for {}", signing_alg);
             }
         }
+        cx.reply(());
+    }
+}
+
+impl Handler<UpdateKeys> for RotatingKeys {
+    fn handle(&mut self, message: UpdateKeys, cx: Context<Self, UpdateKeys>) {
+        let key_set = message.0;
+
+        // Start rotation if the store loaded incomplete or expired keys.
+        let has_current = key_set
+            .current
+            .as_ref()
+            .filter(|entry| entry.is_alive())
+            .is_some();
+        let has_next = key_set
+            .next
+            .as_ref()
+            .filter(|entry| entry.is_alive())
+            .is_some();
+        if !has_current || !has_next {
+            let store = self.store.clone();
+            return cx.reply_later(async move {
+                log::info!(
+                    "Store loaded incomplete or expired keys for {}, attempting rotation.",
+                    key_set.signing_alg
+                );
+                store.send(RotateKeysLocked(key_set.signing_alg)).await;
+            });
+        }
+
+        // Parse and activate keys. After this, we can be sure usable keys are loaded.
+        use SigningAlgorithm::*;
+        match key_set.signing_alg {
+            Rs256 => self.rsa_keys = Some(ActiveKeySet::parse(&key_set)),
+            EdDsa => self.ed25519_keys = Some(ActiveKeySet::parse(&key_set)),
+        }
+
+        // Sanity checks.
+        let KeySet {
+            signing_alg,
+            current,
+            next,
+            ..
+        } = key_set;
+        let current = current.unwrap();
+        let next = next.unwrap();
+        assert!(next.expires > current.expires);
+
+        // Set a timer for the next rotation.
+        let delays = self.delays.clone();
+        cx.reply_later(async move {
+            delays.unwrap().insert(signing_alg, current.expires).await;
+            log::info!("New {} keys installed.", signing_alg);
+        });
+    }
+}
+
+impl Handler<RotateKeys> for RotatingKeys {
+    fn handle(&mut self, message: RotateKeys, cx: Context<Self, RotateKeys>) {
+        // Sanity checks.
+        let KeySet {
+            signing_alg,
+            mut current,
+            mut next,
+            mut previous,
+        } = message.0;
+        if let (&Some(ref current), &Some(ref next)) = (&current, &next) {
+            assert!(next.expires > current.expires);
+        }
+
+        // Rotate twice, in case we skipped some time and `next` has also expired.
+        for _ in 0..2 {
+            if current.as_ref().filter(|entry| entry.is_alive()).is_none() {
+                previous = current.map(|entry| entry.value);
+                current = next;
+                next = None;
+            } else if let Some(entry) = next.as_ref() {
+                assert!(entry.is_alive());
+                break;
+            }
+        }
+
+        if current.is_some() && next.is_some() {
+            log::info!("No keys rotated for {}", signing_alg);
+            return cx.reply(None);
+        }
+
+        if current.is_none() {
+            current = Some(Expiring {
+                value: self.generate_one(signing_alg),
+                expires: SystemTime::now() + self.keys_ttl,
+            });
+            log::info!("Generated current key for {}.", signing_alg);
+        }
+        if next.is_none() {
+            next = Some(Expiring {
+                value: self.generate_one(signing_alg),
+                expires: current.as_ref().unwrap().expires + self.keys_ttl,
+            });
+            log::info!("Generated next key for {}.", signing_alg);
+        }
+
+        cx.reply(Some(KeySet {
+            signing_alg,
+            current,
+            next,
+            previous,
+        }));
+    }
+}
+
+impl Handler<SignJws> for RotatingKeys {
+    fn handle(&mut self, message: SignJws, cx: Context<Self, SignJws>) {
+        use SigningAlgorithm::*;
+        let maybe_jws = match message.signing_alg {
+            EdDsa => self
+                .ed25519_keys
+                .as_ref()
+                .map(|set| set.current.sign_jws(&message.payload, &*self.rng)),
+            Rs256 => self
+                .rsa_keys
+                .as_ref()
+                .map(|set| set.current.sign_jws(&message.payload, &*self.rng)),
+        };
+        cx.reply(
+            maybe_jws.unwrap_or_else(|| Err(SignError::UnsupportedAlgorithm(message.signing_alg))),
+        )
     }
 }
 
 impl Handler<GetPublicJwks> for RotatingKeys {
     fn handle(&mut self, _message: GetPublicJwks, cx: Context<Self, GetPublicJwks>) {
-        let ed25519_keys = self.ed25519_keys.clone();
-        let rsa_keys = self.rsa_keys.clone();
-        cx.reply_later(async move {
-            let mut jwks = vec![];
-            if let Some(key_set) = ed25519_keys {
-                jwks.append(&mut key_set.read().await.public_jwks());
-            }
-            if let Some(key_set) = rsa_keys {
-                jwks.append(&mut key_set.read().await.public_jwks());
-            }
-            jwks
-        })
+        let mut jwks = vec![];
+        if let Some(ref key_set) = self.ed25519_keys {
+            key_set.append_public_jwks(&mut jwks);
+        }
+        if let Some(ref key_set) = self.rsa_keys {
+            key_set.append_public_jwks(&mut jwks);
+        }
+        cx.reply(jwks);
     }
 }
 
 impl KeyManagerSender for Addr<RotatingKeys> {}
-
-/// Thread-safe handle to a KeySet.
-type KeySetHandle<T> = Arc<RwLock<KeySet<T>>>;
-
-/// A rotating set of 3 keys of a single type.
-struct KeySet<T: KeyPairExt> {
-    config: Arc<RotateConfig>,
-    mtime: SystemTime,
-    current: NamedKeyPair<T>,
-    current_path: PathBuf,
-    next: NamedKeyPair<T>,
-    next_path: PathBuf,
-    previous: Option<NamedKeyPair<T>>,
-    previous_path: PathBuf,
-}
-
-impl<T> KeySet<T>
-where
-    T: KeyPairExt + GeneratedKeyPair + Send + Sync + 'static,
-{
-    /// Read key pairs of type `T` from a subdir of `keysdir`.
-    async fn from_subdir(
-        keysdir: impl AsRef<Path>,
-        subdir: &str,
-        config: &Arc<RotateConfig>,
-    ) -> Result<KeySetHandle<T>, RotatingKeysError> {
-        let mut dir = keysdir.as_ref().to_path_buf();
-        dir.push(subdir);
-
-        fs::create_dir_all(&dir)
-            .await
-            .map_err(|error| RotatingKeysError::Mkdir {
-                path: dir.to_string_lossy().into_owned(),
-                error,
-            })?;
-
-        let mut current_path = dir.clone();
-        current_path.push("current.pem");
-        let current = match read_key_file::<T>(&current_path).await? {
-            Some(key_pair) => key_pair,
-            None => T::generate(config.clone(), current_path.clone()).await,
-        };
-
-        // The last modification time of `next.pem`, along with `keys_ttl`,
-        // is used to determine when the next rotation should happen.
-        let mut next_path = dir.clone();
-        next_path.push("next.pem");
-        let (next, mtime) = if let Some(key_pair) = read_key_file::<T>(&next_path).await? {
-            let mtime = fs::metadata(&next_path)
-                .await
-                .and_then(|meta| meta.modified())
-                .map_err(|error| RotatingKeysError::StatMtime {
-                    path: next_path.to_string_lossy().into_owned(),
-                    error,
-                })?;
-            (key_pair, mtime)
-        } else {
-            (
-                T::generate(config.clone(), next_path.clone()).await,
-                SystemTime::now(),
-            )
-        };
-
-        let mut previous_path = dir;
-        previous_path.push("previous.pem");
-        let previous = read_key_file::<T>(&previous_path).await?;
-
-        let key_set = Arc::new(RwLock::new(KeySet {
-            config: config.clone(),
-            mtime,
-            current,
-            current_path,
-            next,
-            next_path,
-            previous,
-            previous_path,
-        }));
-
-        let initial_delay = Self::check_expiry(key_set.clone()).await;
-        task::spawn(Self::rotate_loop(key_set.clone(), initial_delay));
-
-        Ok(key_set)
-    }
-
-    /// The async loop that performs key rotation when necessary.
-    async fn rotate_loop(handle: KeySetHandle<T>, mut delay: Duration) {
-        loop {
-            tokio::time::delay_for(delay).await;
-            delay = Self::check_expiry(handle.clone()).await;
-        }
-    }
-
-    /// Check if we should rotate keys, and return how long to delay the next check.
-    async fn check_expiry(handle: KeySetHandle<T>) -> Duration {
-        let read_handle = handle.clone();
-        let (keys_ttl, mtime) = async {
-            let key_set = read_handle.read().await;
-            (key_set.config.keys_ttl, key_set.mtime)
-        }
-        .await;
-        let delay = if let Ok(age) = SystemTime::now().duration_since(mtime) {
-            keys_ttl.checked_sub(age)
-        } else {
-            warn!("Key set mtime is from the future, treating as bad input.");
-            None
-        };
-        if let Some(delay) = delay {
-            delay
-        } else {
-            Self::rotate(handle).await;
-            keys_ttl
-        }
-    }
-
-    /// Rotate keys in memory and on disk.
-    ///
-    /// If this fails, we panic, because it may happen at an arbitrary moment at run-time.
-    async fn rotate(handle: KeySetHandle<T>) {
-        let (config, next_path) = async {
-            let key_set = handle.read().await;
-            fs::rename(&key_set.current_path, &key_set.previous_path)
-                .await
-                .expect("could not rename current key for rotation");
-            fs::rename(&key_set.next_path, &key_set.current_path)
-                .await
-                .expect("could not rename next key for rotation");
-            (key_set.config.clone(), key_set.next_path.clone())
-        }
-        .await;
-        let mut tmp = T::generate(config, next_path).await;
-        let mut key_set = handle.write().await;
-        mem::swap(&mut key_set.next, &mut tmp);
-        mem::swap(&mut key_set.current, &mut tmp);
-        key_set.previous = Some(tmp);
-    }
-}
-
-impl<T: KeyPairExt> KeySet<T> {
-    /// Get a list of JWKs containing public keys.
-    fn public_jwks(&self) -> Vec<json::Value> {
-        let mut list = vec![self.current.public_jwk(), self.next.public_jwk()];
-        if let Some(ref previous) = self.previous {
-            list.push(previous.public_jwk());
-        }
-        list
-    }
-}
-
-/// Trait for key pair types we can generate.
-trait GeneratedKeyPair: KeyPairExt + Sized {
-    /// Generate a new key pair.
-    ///
-    /// If this fails, we panic, because it may happen at an arbitrary moment at run-time.
-    ///
-    /// This should log a message at info-level on success.
-    ///
-    /// Note that this function may block.
-    fn generate(config: Arc<RotateConfig>, out_file: PathBuf) -> BoxFuture<NamedKeyPair<Self>>;
-
-    /// Convert a ParsedKeyPair, if it is of the correct type.
-    fn from_parsed(
-        parsed: ParsedKeyPair,
-        path: &Path,
-    ) -> Result<NamedKeyPair<Self>, RotatingKeysError>;
-}
-
-impl GeneratedKeyPair for Ed25519KeyPair {
-    fn generate(config: Arc<RotateConfig>, out_file: PathBuf) -> BoxFuture<NamedKeyPair<Self>> {
-        Box::pin(async move {
-            let doc =
-                Self::generate_pkcs8(&*config.rng).expect("could not generate Ed25519 key pair");
-            let key_pair =
-                Self::from_pkcs8(doc.as_ref()).expect("could not parse generated Ed25519 key pair");
-            let file = File::create(&out_file)
-                .await
-                .expect("could not open generated key pair output file");
-            pem::write_pkcs8(&doc, file)
-                .await
-                .expect("could not write generated key pair to output file");
-            info!("Generated new Ed25519 key: {:?}", out_file);
-            key_pair.into()
-        })
-    }
-
-    fn from_parsed(
-        parsed: ParsedKeyPair,
-        path: &Path,
-    ) -> Result<NamedKeyPair<Self>, RotatingKeysError> {
-        match parsed {
-            ParsedKeyPair::Ed25519(inner) => Ok(inner.into()),
-            other => Err(RotatingKeysError::InvalidKeyType {
-                path: path.to_string_lossy().into_owned(),
-                want: "Ed25519",
-                found: other.kind(),
-            }),
-        }
-    }
-}
-
-impl GeneratedKeyPair for RsaKeyPair {
-    fn generate(config: Arc<RotateConfig>, out_file: PathBuf) -> BoxFuture<NamedKeyPair<Self>> {
-        Box::pin(async move {
-            let mut args: Vec<OsString> = config
-                .generate_rsa_command
-                .iter()
-                .map(|arg| arg.into())
-                .collect();
-            let program = args.remove(0);
-            let file = if let Some(part) = args.iter_mut().find(|part| part.as_os_str() == "{}") {
-                *part = out_file.clone().into();
-                None
-            } else {
-                let file = File::create(&out_file)
-                    .await
-                    .expect("could not open generated key pair output file");
-                Some(file)
-            };
-            let mut command = Command::new(program);
-            command.args(args).stdin(Stdio::null());
-            if let Some(file) = file {
-                command.stdout(file.into_std().await);
-            }
-            let status = command
-                .status()
-                .await
-                .expect("Failed to run command to generate RSA key");
-            if !status.success() {
-                panic!("Command to generate RSA key failed with status {}", status);
-            }
-            let key_pair = read_key_file(&out_file)
-                .await
-                .expect("could not read generated RSA key file")
-                .expect("generated RSA key file not found");
-            info!("Generated new RSA key: {:?}", out_file);
-            key_pair
-        })
-    }
-
-    fn from_parsed(
-        parsed: ParsedKeyPair,
-        path: &Path,
-    ) -> Result<NamedKeyPair<Self>, RotatingKeysError> {
-        match parsed {
-            ParsedKeyPair::Rsa(inner) => Ok(inner.into()),
-            other => Err(RotatingKeysError::InvalidKeyType {
-                path: path.to_string_lossy().into_owned(),
-                want: "RSA",
-                found: other.kind(),
-            }),
-        }
-    }
-}
-
-/// Read a single key pair of type `T` from `path`.
-///
-/// Returns `None` when the file does not exist.
-async fn read_key_file<T: KeyPairExt + GeneratedKeyPair>(
-    path: &Path,
-) -> Result<Option<NamedKeyPair<T>>, RotatingKeysError> {
-    let file = match File::open(path).await {
-        Ok(file) => file,
-        Err(error) => {
-            if error.kind() == IoErrorKind::NotFound {
-                return Ok(None);
-            } else {
-                return Err(RotatingKeysError::Open {
-                    path: path.to_string_lossy().into_owned(),
-                    error,
-                });
-            }
-        }
-    };
-    let mut key_pairs = pem::parse_key_pairs(BufReader::new(file))
-        .await
-        .map_err(|error| RotatingKeysError::Parse {
-            path: path.to_string_lossy().into_owned(),
-            error,
-        })?;
-    if key_pairs.len() != 1 {
-        return Err(RotatingKeysError::ExpectedOneKey {
-            path: path.to_string_lossy().into_owned(),
-            found: key_pairs.len(),
-        });
-    }
-    let key_pair = key_pairs.pop().unwrap();
-    Ok(Some(T::from_parsed(key_pair, path)?))
-}

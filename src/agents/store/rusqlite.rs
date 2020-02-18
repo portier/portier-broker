@@ -1,6 +1,7 @@
 use crate::agents::*;
+use crate::crypto::SigningAlgorithm;
 use crate::utils::{agent::*, unix_timestamp, LimitConfig};
-use rusqlite::{Connection, Error as SqlError, OptionalExtension, ToSql, NO_PARAMS};
+use ::rusqlite::{Connection, Error as SqlError, OptionalExtension, ToSql, NO_PARAMS};
 use std::time::Duration;
 use tokio::task::spawn_blocking;
 use url::Url;
@@ -30,6 +31,12 @@ impl Message for SaveCache {
     type Reply = Result<(), SqlError>;
 }
 
+/// Message used internally to save a key set.
+struct SaveKeys(KeySet);
+impl Message for SaveKeys {
+    type Reply = Result<(), SqlError>;
+}
+
 /// Store implementation using memory.
 pub struct RusqliteStore {
     /// TTL of session keys
@@ -42,6 +49,8 @@ pub struct RusqliteStore {
     conn: Connection,
     /// The agent used for fetching on cache miss.
     fetcher: Addr<FetchAgent>,
+    /// Key manager if rotating keys are enabled.
+    key_manager: Option<Addr<RotatingKeys>>,
 }
 
 impl RusqliteStore {
@@ -66,6 +75,7 @@ impl RusqliteStore {
                 limit_per_email_config,
                 conn,
                 fetcher,
+                key_manager: None,
             })
         })
         .await
@@ -137,11 +147,31 @@ impl RusqliteStore {
             );
             CREATE INDEX rate_limits_expires ON rate_limits (expires);
 
+            CREATE TABLE key_sets (
+                signing_alg TEXT NOT NULL PRIMARY KEY,
+                key_set TEXT NOT NULL
+            );
+
             PRAGMA user_version = 1;
             COMMIT;
             ",
         )?;
         Ok(())
+    }
+
+    fn get_key_set(&mut self, signing_alg: SigningAlgorithm) -> KeySet {
+        self.conn
+            .query_row(
+                "SELECT key_set FROM key_sets WHERE signing_alg = ?1 LIMIT 1",
+                params![&signing_alg.as_str()],
+                |row| row.get(0),
+            )
+            .optional()
+            .expect("Could not fetch keys from SQLite")
+            .map(|data: String| {
+                serde_json::from_str(&data).expect("Invalid key set JSON in SQLite")
+            })
+            .unwrap_or_else(|| KeySet::empty(signing_alg))
     }
 }
 
@@ -221,9 +251,8 @@ impl Handler<DeleteSession> for RusqliteStore {
     }
 }
 
-impl Handler<CachedFetch> for RusqliteStore {
-    fn handle(&mut self, message: CachedFetch, cx: Context<Self, CachedFetch>) {
-        // TODO: Add locking to coordinate fetches across workers.
+impl Handler<FetchUrlCached> for RusqliteStore {
+    fn handle(&mut self, message: FetchUrlCached, cx: Context<Self, FetchUrlCached>) {
         let now = unix_timestamp() as i64;
         let data: Result<Option<String>, SqlError> = self
             .conn
@@ -275,10 +304,9 @@ impl Handler<IncrAndTestLimit> for RusqliteStore {
     fn handle(&mut self, message: IncrAndTestLimit, cx: Context<Self, IncrAndTestLimit>) {
         cx.reply_with(move || {
             let (id, config) = match message {
-                IncrAndTestLimit::PerEmail { addr } => (
-                    format!("per-email:{}", addr),
-                    self.limit_per_email_config,
-                ),
+                IncrAndTestLimit::PerEmail { addr } => {
+                    (format!("per-email:{}", addr), self.limit_per_email_config)
+                }
             };
             let expires = (unix_timestamp() + config.duration.as_secs()) as i64;
             let tx = self.conn.transaction()?;
@@ -299,6 +327,52 @@ impl Handler<IncrAndTestLimit> for RusqliteStore {
             tx.commit()?;
             Ok(count as usize <= config.max_count)
         })
+    }
+}
+
+impl Handler<EnableRotatingKeys> for RusqliteStore {
+    fn handle(&mut self, message: EnableRotatingKeys, cx: Context<Self, EnableRotatingKeys>) {
+        self.key_manager = Some(message.key_manager.clone());
+        let mut update_msgs = Vec::with_capacity(message.signing_algs.len());
+        for signing_alg in &message.signing_algs {
+            let key_set = self.get_key_set(*signing_alg);
+            update_msgs.push(UpdateKeys(key_set.clone()));
+        }
+        cx.reply_later(async move {
+            for update_msg in update_msgs {
+                message.key_manager.send(update_msg).await;
+            }
+        });
+    }
+}
+
+impl Handler<RotateKeysLocked> for RusqliteStore {
+    fn handle(&mut self, message: RotateKeysLocked, cx: Context<Self, RotateKeysLocked>) {
+        let me = cx.addr().clone();
+        let key_set = self.get_key_set(message.0);
+        let key_manager = self.key_manager.as_ref().unwrap().clone();
+        cx.reply_later(async move {
+            if let Some(key_set) = key_manager.send(RotateKeys(key_set)).await {
+                me.send(SaveKeys(key_set.clone()))
+                    .await
+                    .expect("Could not save keys to SQLite");
+                key_manager.send(UpdateKeys(key_set)).await;
+            }
+        });
+    }
+}
+
+impl Handler<SaveKeys> for RusqliteStore {
+    fn handle(&mut self, message: SaveKeys, cx: Context<Self, SaveKeys>) {
+        let key_set = message.0;
+        cx.reply_with(move || {
+            let data = serde_json::to_string(&key_set).expect("Could not encode key set as JSON");
+            self.conn.execute(
+                "REPLACE INTO key_sets (signing_alg, key_set) VALUES (?1, ?2)",
+                params![&key_set.signing_alg.as_str(), &data],
+            )?;
+            Ok(())
+        });
     }
 }
 
