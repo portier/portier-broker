@@ -58,7 +58,6 @@ struct TomlServerTable {
     listen_port: Option<u16>,
     public_url: Option<String>,
     allowed_origins: Option<Vec<String>>,
-    data_dir: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -73,8 +72,6 @@ struct TomlCryptoTable {
     token_ttl: Option<u64>,
     keyfiles: Option<Vec<String>>,
     keytext: Option<String>,
-    signing_algs: Option<Vec<SigningAlgorithm>>,
-    generate_rsa_command: Option<Vec<String>>,
 }
 
 #[derive(Deserialize)]
@@ -137,9 +134,6 @@ impl TomlConfig {
             if parsed.allowed_origins.is_none() {
                 parsed.allowed_origins = table.allowed_origins.clone();
             }
-            if parsed.data_dir.is_none() {
-                parsed.data_dir = table.data_dir.clone();
-            }
         }
 
         if let Some(ref table) = parsed.headers {
@@ -165,12 +159,6 @@ impl TomlConfig {
             }
             if parsed.keytext.is_none() {
                 parsed.keytext = table.keytext.clone();
-            }
-            if parsed.signing_algs.is_none() {
-                parsed.signing_algs = table.signing_algs.clone();
-            }
-            if parsed.generate_rsa_command.is_none() {
-                parsed.generate_rsa_command = table.generate_rsa_command.clone();
             }
         }
 
