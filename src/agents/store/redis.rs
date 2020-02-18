@@ -1,6 +1,7 @@
 use crate::agents::*;
+use crate::config::LimitConfig;
 use crate::crypto::SigningAlgorithm;
-use crate::utils::{agent::*, LimitConfig};
+use crate::utils::agent::*;
 use ::redis::{
     aio::MultiplexedConnection as RedisConn, pipe, AsyncCommands, Client as RedisClient,
     RedisError, Script,

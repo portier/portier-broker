@@ -1,6 +1,7 @@
 use crate::agents::*;
+use crate::config::LimitConfig;
 use crate::crypto::SigningAlgorithm;
-use crate::utils::{agent::*, LimitConfig};
+use crate::utils::agent::*;
 use crate::web::Session;
 use std::collections::hash_map::{Entry, HashMap};
 use std::sync::Arc;

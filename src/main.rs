@@ -61,9 +61,7 @@ async fn main() {
 
     let mut builder = ConfigBuilder::new();
     if let Some(ref path) = args.arg_CONFIG {
-        builder
-            .update_from_file(path)
-            .unwrap_or_else(|err| panic!(format!("failed to read config file: {}", err)));
+        builder.update_from_file(path);
     }
     builder.update_from_common_env();
     builder.update_from_broker_env();

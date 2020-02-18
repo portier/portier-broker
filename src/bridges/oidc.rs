@@ -1,6 +1,5 @@
 use crate::agents::FetchUrlCached;
 use crate::bridges::{complete_auth, BridgeData};
-use crate::config::GoogleConfig;
 use crate::crypto::{self, SigningAlgorithm};
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
@@ -112,9 +111,9 @@ pub async fn auth(ctx: &mut Context, email_addr: &EmailAddress, link: &Link) -> 
         }
         // Delegate to the OpenID Connect bridge for Google, if configured.
         Relation::Google => {
-            let GoogleConfig { ref client_id } = ctx
+            let client_id = ctx
                 .app
-                .google
+                .google_client_id
                 .as_ref()
                 .ok_or(BrokerError::ProviderCancelled)?;
             if provider_origin != GOOGLE_IDP_ORIGIN {

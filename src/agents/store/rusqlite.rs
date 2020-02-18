@@ -1,6 +1,7 @@
 use crate::agents::*;
+use crate::config::LimitConfig;
 use crate::crypto::SigningAlgorithm;
-use crate::utils::{agent::*, unix_timestamp, LimitConfig};
+use crate::utils::{agent::*, unix_timestamp};
 use ::rusqlite::{Connection, Error as SqlError, OptionalExtension, ToSql, NO_PARAMS};
 use std::time::Duration;
 use tokio::task::spawn_blocking;
