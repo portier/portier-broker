@@ -1,11 +1,7 @@
 {
   "name": "Portier Broker",
   "description": "Portier Broker reference implementation, written in Rust. Learn more at https://portier.github.io/.",
-  "keywords": [
-    "Portier",
-    "Passwordless",
-    "Authentication"
-  ],
+  "keywords": ["Portier", "Passwordless", "Authentication"],
   "website": "https://portier.github.io/",
   "repository": "https://github.com/portier/portier-broker",
   "success_url": "https://github.com/portier/portier.github.io/blob/master/Self-Hosting.md",
@@ -37,15 +33,9 @@
       "size": "free"
     }
   },
-  "addons": [
-    "heroku-redis:hobby-dev",
-    "sendgrid:starter"
-  ],
+  "addons": ["heroku-redis:hobby-dev", "sendgrid:starter"],
   "stack": "heroku-16",
   "buildpacks": [
-    {
-      "url": "https://github.com/heroku/heroku-buildpack-apt"
-    },
     {
       "url": "https://github.com/emk/heroku-buildpack-rust"
     }
