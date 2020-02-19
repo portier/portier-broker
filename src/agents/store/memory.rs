@@ -100,6 +100,7 @@ impl Agent for MemoryStore {
         let addr = addr.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(60));
+            interval.tick().await;
             loop {
                 interval.tick().await;
                 addr.send(Gc).await;
