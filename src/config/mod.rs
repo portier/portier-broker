@@ -15,7 +15,7 @@ use crate::agents::{
 };
 use crate::bridges::oidc::GOOGLE_IDP_ORIGIN;
 use crate::crypto::SigningAlgorithm;
-use crate::utils::agent::Agent;
+use crate::utils::agent::spawn_agent;
 use crate::webfinger::{Link, ParseLinkError, Relation};
 use err_derive::Error;
 use ring::rand::{SecureRandom, SystemRandom};
@@ -213,12 +213,12 @@ impl ConfigBuilder {
         .unwrap();
 
         // Child structs
-        let fetcher = FetchAgent::new().start();
+        let fetcher = spawn_agent(FetchAgent::new()).await;
         let store: Arc<dyn StoreSender> =
             match (self.redis_url, self.sqlite_db, self.memory_storage) {
                 #[cfg(feature = "redis")]
                 (Some(redis_url), None, false) => {
-                    let addr = agents::RedisStore::new(
+                    let store = agents::RedisStore::new(
                         redis_url,
                         self.session_ttl,
                         self.cache_ttl,
@@ -226,9 +226,8 @@ impl ConfigBuilder {
                         fetcher,
                     )
                     .await
-                    .expect("unable to instantiate new Redis store")
-                    .start();
-                    Arc::new(addr)
+                    .expect("unable to instantiate new Redis store");
+                    Arc::new(spawn_agent(store).await)
                 }
                 #[cfg(not(feature = "redis"))]
                 (Some(_), None, false) => {
@@ -237,7 +236,7 @@ impl ConfigBuilder {
 
                 #[cfg(feature = "rusqlite")]
                 (None, Some(sqlite_db), false) => {
-                    let addr = agents::RusqliteStore::new(
+                    let store = agents::RusqliteStore::new(
                         sqlite_db,
                         self.session_ttl,
                         self.cache_ttl,
@@ -245,9 +244,8 @@ impl ConfigBuilder {
                         fetcher,
                     )
                     .await
-                    .expect("unable to instantiate new SQLite store")
-                    .start();
-                    Arc::new(addr)
+                    .expect("unable to instantiate new SQLite store");
+                    Arc::new(spawn_agent(store).await)
                 }
                 #[cfg(not(feature = "rusqlite"))]
                 (None, Some(_), false) => {
@@ -255,14 +253,13 @@ impl ConfigBuilder {
                 }
 
                 (None, None, true) => {
-                    let addr = agents::MemoryStore::new(
+                    let store = agents::MemoryStore::new(
                         self.session_ttl,
                         self.cache_ttl,
                         self.limit_per_email,
                         fetcher,
-                    )
-                    .start();
-                    Arc::new(addr)
+                    );
+                    Arc::new(spawn_agent(store).await)
                 }
 
                 (None, None, false) => {
@@ -275,9 +272,8 @@ impl ConfigBuilder {
         let key_manager: Box<dyn KeyManagerSender> =
             if !self.keyfiles.is_empty() || self.keytext.is_some() {
                 let key_manager =
-                    ManualKeys::new(self.keyfiles, self.keytext, &self.signing_algs, rng.clone())?
-                        .start();
-                Box::new(key_manager)
+                    ManualKeys::new(self.keyfiles, self.keytext, &self.signing_algs, rng.clone())?;
+                Box::new(spawn_agent(key_manager).await)
             } else {
                 if self.signing_algs.contains(&SigningAlgorithm::Rs256)
                     && self.generate_rsa_command.is_empty()
@@ -290,12 +286,8 @@ impl ConfigBuilder {
                     &self.signing_algs,
                     self.generate_rsa_command,
                     rng.clone(),
-                )
-                .start();
-                key_manager
-                    .send(crate::agents::key_manager::rotating::Init)
-                    .await;
-                Box::new(key_manager)
+                );
+                Box::new(spawn_agent(key_manager).await)
             };
 
         // Configure default domain overrides for hosted Google

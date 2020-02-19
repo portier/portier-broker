@@ -15,13 +15,6 @@ use std::io::Cursor;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-/// Message used to initialize the key manager.
-// TODO: Maybe we can change something about agent structure to get rid of this.
-pub struct Init;
-impl Message for Init {
-    type Reply = ();
-}
-
 /// Message used to do post-init checks.
 pub struct Check;
 impl Message for Check {
@@ -192,10 +185,8 @@ impl RotatingKeys {
     }
 }
 
-impl Agent for RotatingKeys {}
-
-impl Handler<Init> for RotatingKeys {
-    fn handle(&mut self, _message: Init, cx: Context<Self, Init>) {
+impl Agent for RotatingKeys {
+    fn started(&mut self, cx: Context<Self, AgentStarted>) {
         // Initialize timer task.
         let store = self.store.clone();
         self.delays = Some(DelayQueueTask::spawn(move |signing_alg| {

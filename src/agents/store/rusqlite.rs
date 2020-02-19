@@ -177,9 +177,9 @@ impl RusqliteStore {
 }
 
 impl Agent for RusqliteStore {
-    fn started(addr: &Addr<Self>) {
+    fn started(&mut self, cx: Context<Self, AgentStarted>) {
         // Start the garbage collection loop.
-        let addr = addr.clone();
+        let addr = cx.addr().clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(60));
             loop {
@@ -187,6 +187,7 @@ impl Agent for RusqliteStore {
                 addr.send(Gc).await;
             }
         });
+        cx.reply(());
     }
 }
 

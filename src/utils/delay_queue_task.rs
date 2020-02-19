@@ -114,9 +114,8 @@ impl<K: Clone + Eq + Hash + Send + 'static> DelayQueueTask<K> {
     /// Insert or replace a timer.
     pub async fn insert(&mut self, key: K, deadline: impl IntoDeadline) {
         let deadline = deadline.into_deadline();
-        // This can never fail, because the task only exits when all senders are dropped.
         if self.tx.send((key, deadline)).await.is_err() {
-            unreachable!();
+            panic!("Tried to send to DelayQueueTask that has panicked");
         }
     }
 }
