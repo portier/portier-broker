@@ -54,6 +54,14 @@ struct Args {
 async fn main() {
     env_logger::init();
 
+    // We spawn a bunch of background tasks on the Tokio executor. If these panic, we want to exit
+    // instead of continuing on without the task.
+    let next_panic_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        next_panic_hook(info);
+        std::process::exit(1);
+    }));
+
     let args: Args = docopt::Docopt::new(USAGE)
         .map(|docopt| docopt.version(Some(VERSION.to_owned())))
         .and_then(|docopt| docopt.deserialize())
