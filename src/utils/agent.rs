@@ -1,7 +1,7 @@
 //! Simple implementation of the agent pattern.
 //!
 //! This is really a poor man's implementation that doesn't even use a real message queue, but
-//! simply uses a `Mutex` to emulate message processing. Still, this works will for our purposes,
+//! simply uses a `Mutex` to emulate message processing. Still, this works well for our purposes,
 //! and allows us to better model the various processes in Portier.
 //!
 //! The way this is used is to have a type implement `Agent`, then construct it and call
@@ -26,8 +26,8 @@ pub trait Message: Send + 'static {
 
 /// Context passed to handlers, used to send a reply.
 ///
-/// The agent must call one of `send` or `later` to consume the sender, and may not otherwise drop
-/// the sender without sending a reply.
+/// The agent must call one of the reply methods, which consumes the context. The context may not
+/// otherwise be dropped.
 pub struct Context<A, M: Message> {
     tx: oneshot::Sender<M::Reply>,
     addr: Addr<A>,
