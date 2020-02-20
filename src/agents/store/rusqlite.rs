@@ -38,7 +38,7 @@ impl Message for SaveKeys {
     type Reply = Result<(), SqlError>;
 }
 
-/// Store implementation using memory.
+/// Store implementation using SQLite.
 pub struct RusqliteStore {
     /// TTL of session keys
     expire_sessions: Duration,
@@ -92,17 +92,17 @@ impl RusqliteStore {
         if schema_version == 0 {
             // Note: can't use parameter binding in pragma.
             conn.execute(&format!("PRAGMA application_id = {}", APP_ID), NO_PARAMS)?;
-            return Ok(());
-        }
-        let app_id: u32 =
-            conn.query_row("SELECT * FROM pragma_application_id()", NO_PARAMS, |row| {
-                row.get(0)
-            })?;
-        if app_id != APP_ID {
-            panic!(
-                "The SQLite database has an invalid application ID: {}",
-                app_id
-            );
+        } else {
+            let app_id: u32 =
+                conn.query_row("SELECT * FROM pragma_application_id()", NO_PARAMS, |row| {
+                    row.get(0)
+                })?;
+            if app_id != APP_ID {
+                panic!(
+                    "The SQLite database has an invalid application ID: {}",
+                    app_id
+                );
+            }
         }
         Ok(())
     }
