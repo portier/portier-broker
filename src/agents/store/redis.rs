@@ -151,7 +151,23 @@ impl RedisStore {
     }
 }
 
-impl Agent for RedisStore {}
+impl Agent for RedisStore {
+    fn started(&mut self, cx: Context<Self, AgentStarted>) {
+        // Ping Redis at an interval.
+        let mut client = self.client.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(20));
+            loop {
+                interval.tick().await;
+                let _: String = ::redis::cmd("PING")
+                    .query_async(&mut client)
+                    .await
+                    .expect("Redis ping failed");
+            }
+        });
+        cx.reply(());
+    }
+}
 
 impl Handler<SaveSession> for RedisStore {
     fn handle(&mut self, message: SaveSession, cx: Context<Self, SaveSession>) {
