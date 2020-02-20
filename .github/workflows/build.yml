@@ -8,10 +8,6 @@ jobs:
   checked-build:
     runs-on: ubuntu-latest
     services:
-      redis:
-        image: redis:latest
-        ports:
-          - 6379:6379
       mailhog:
         image: mailhog/mailhog:latest
         ports:
