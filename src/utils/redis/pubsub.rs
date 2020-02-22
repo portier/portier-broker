@@ -7,9 +7,12 @@ use std::net::ToSocketAddrs;
 use std::pin::Pin;
 use std::task::Poll;
 use tokio::io::{self, AsyncWriteExt};
-use tokio::net::{TcpStream, UnixStream};
+use tokio::net::TcpStream;
 use tokio::stream::Stream;
 use tokio::sync::{broadcast, mpsc, oneshot};
+
+#[cfg(unix)]
+use tokio::net::UnixStream;
 
 /// Read half of a Redis pubsub connection.
 struct ReadHalf(io::BufReader<Box<dyn io::AsyncRead + Unpin + Send>>);
