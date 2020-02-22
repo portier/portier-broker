@@ -181,7 +181,8 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
     }
 
     // Create the session with common data, but do not yet save it.
-    ctx.start_session(&client_id, &login_hint, &email_addr, &nonce, signing_alg);
+    ctx.start_session(&client_id, &login_hint, &email_addr, &nonce, signing_alg)
+        .await;
 
     // Discover the authentication endpoints based on the email domain.
     let discovery_future = async {
@@ -231,7 +232,7 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
         Either::Right((Err(e @ BrokerError::Provider(_)), _))
         | Either::Right((Err(e @ BrokerError::ProviderCancelled), _)) => {
             // Provider errors cause fallback to email loop auth.
-            e.log(None);
+            e.log(None).await;
         }
         Either::Right((Err(e), _)) => {
             // Other errors during discovery are bubbled.

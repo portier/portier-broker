@@ -2,12 +2,10 @@ use crate::agents::SignJws;
 use crate::bridges::oidc::ProviderKey;
 use crate::config::Config;
 use crate::email_address::EmailAddress;
-use crate::utils::base64url;
-use crate::utils::keys::SignError;
+use crate::utils::{base64url, keys::SignError, SecureRandom};
 use ring::{
     digest,
     error::Unspecified,
-    rand::SecureRandom,
     signature::{self, UnparsedPublicKey},
 };
 use serde_json as json;
@@ -88,12 +86,8 @@ impl SupportedPublicKey {
 /// Put the email address, the client ID (RP origin) and some randomness into
 /// a SHA256 hash, and encode it with URL-safe bas64 encoding. This is used
 /// as the key in Redis, as well as the state for OAuth authentication.
-pub fn session_id(email: &EmailAddress, client_id: &str, rng: &dyn SecureRandom) -> String {
-    // TODO: Using the rng is blocking.
-    let mut rand_bytes = [0u8; 16];
-    rng.fill(&mut rand_bytes)
-        .expect("secure random number generator failed");
-
+pub async fn session_id(email: &EmailAddress, client_id: &str, rng: &SecureRandom) -> String {
+    let rand_bytes = rng.generate_async(16).await;
     let mut ctx = digest::Context::new(&digest::SHA256);
     ctx.update(email.as_str().as_bytes());
     ctx.update(client_id.as_bytes());
@@ -102,25 +96,16 @@ pub fn session_id(email: &EmailAddress, client_id: &str, rng: &dyn SecureRandom)
 }
 
 /// Helper function to create a secure nonce.
-pub fn nonce(rng: &dyn SecureRandom) -> String {
-    // TODO: Using the rng is blocking.
-    let mut rand_bytes = [0u8; 16];
-    rng.fill(&mut rand_bytes)
-        .expect("secure random number generator failed");
-
+pub async fn nonce(rng: &SecureRandom) -> String {
+    let rand_bytes = rng.generate_async(16).await;
     base64url::encode(&rand_bytes)
 }
 
 /// Helper function to create a random string consisting of
 /// characters from the z-base-32 set.
-pub fn random_zbase32(len: usize, rng: &dyn SecureRandom) -> String {
+pub async fn random_zbase32(len: usize, rng: &SecureRandom) -> String {
     const CHARSET: &[u8] = b"13456789abcdefghijkmnopqrstuwxyz";
-
-    // TODO: Using the rng is blocking.
-    let mut rand_bytes = vec![0u8; len];
-    rng.fill(&mut rand_bytes)
-        .expect("secure random number generator failed");
-
+    let rand_bytes = rng.generate_async(len).await;
     String::from_utf8(
         rand_bytes
             .into_iter()

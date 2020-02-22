@@ -1,13 +1,15 @@
 use crate::agents::*;
 use crate::config::LimitConfig;
 use crate::crypto::SigningAlgorithm;
-use crate::utils::agent::*;
-use crate::utils::redis::{locking, pubsub};
+use crate::utils::{
+    agent::*,
+    redis::{locking, pubsub},
+    SecureRandom,
+};
 use ::redis::{
     aio::MultiplexedConnection as RedisConn, pipe, AsyncCommands, Client as RedisClient,
     IntoConnectionInfo, RedisResult, Script,
 };
-use ring::rand::SecureRandom;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -38,7 +40,7 @@ impl Message for UpdateKeysLocked {
 /// Store implementation using Redis.
 pub struct RedisStore {
     /// A random unique ID for ourselves.
-    id: [u8; 16],
+    id: Arc<Vec<u8>>,
     /// The connection.
     conn: RedisConn,
     /// Pubsub client.
@@ -66,18 +68,14 @@ impl RedisStore {
         expire_cache: Duration,
         limit_per_email_config: LimitConfig,
         fetcher: Addr<FetchAgent>,
-        rng: Arc<dyn SecureRandom + Send + Sync>,
+        rng: SecureRandom,
     ) -> RedisResult<Self> {
-        // TODO: Using the rng is blocking.
-        let mut id = [0u8; 16];
-        rng.fill(&mut id)
-            .expect("secure random number generator failed");
-
         if url.starts_with("http://") {
             url = url.replace("http://", "redis://");
         } else if !url.starts_with("redis://") {
             url = format!("redis://{}", &url);
         }
+        let id = Arc::new(rng.generate_async(16).await);
         let info = url.as_str().into_connection_info()?;
         let pubsub = pubsub::connect(&info).await?;
         let conn = RedisClient::open(info)?
@@ -217,7 +215,7 @@ impl Handler<IncrAndTestLimit> for RedisStore {
 impl Handler<EnableRotatingKeys> for RedisStore {
     fn handle(&mut self, message: EnableRotatingKeys, cx: Context<Self, EnableRotatingKeys>) {
         let me = cx.addr().clone();
-        let my_id = self.id;
+        let my_id = self.id.clone();
         let mut pubsub = self.pubsub.clone();
         self.key_manager = Some(message.key_manager.clone());
         cx.reply_later(async move {
@@ -227,10 +225,11 @@ impl Handler<EnableRotatingKeys> for RedisStore {
                 let chan = format!("keys-updated:{}", signing_alg).into_bytes();
                 let mut sub = pubsub.subscribe(chan).await;
                 let me2 = me.clone();
+                let my_id2 = my_id.clone();
                 tokio::spawn(async move {
                     loop {
                         let from_id = sub.recv().await.expect("Redis keys subscription failed");
-                        if from_id != my_id {
+                        if from_id != *my_id2 {
                             me2.send(UpdateKeysLocked(signing_alg));
                         }
                     }
@@ -345,7 +344,7 @@ impl Handler<SaveKeys> for RedisStore {
             } else {
                 pipe.del(&previous_key);
             }
-            pipe.publish(format!("keys-updated:{}", signing_alg), &self.id);
+            pipe.publish(format!("keys-updated:{}", signing_alg), &self.id[..]);
             cx.reply_later(async move { pipe.query_async(&mut conn).await });
         } else {
             unreachable!();

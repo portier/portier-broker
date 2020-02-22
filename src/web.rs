@@ -104,7 +104,7 @@ impl Context {
     }
 
     /// Start a session by filling out the common part.
-    pub fn start_session(
+    pub async fn start_session(
         &mut self,
         client_id: &str,
         email: &str,
@@ -118,7 +118,7 @@ impl Context {
             .return_params
             .as_ref()
             .expect("start_session called without return parameters");
-        self.session_id = crypto::session_id(email_addr, client_id, &*self.app.rng);
+        self.session_id = crypto::session_id(email_addr, client_id, &self.app.rng).await;
         self.session_data = Some(SessionData {
             return_params: return_params.clone(),
             email: email.to_owned(),
@@ -241,7 +241,10 @@ impl Service {
         let result = router(&mut ctx).await;
 
         // Translate broker errors to responses.
-        let mut response = result.unwrap_or_else(|err| handle_error(&ctx, err));
+        let mut response = match result {
+            Ok(res) => res,
+            Err(err) => handle_error(&ctx, err).await,
+        };
 
         // Set common response headers.
         set_headers(&mut response);
@@ -286,8 +289,8 @@ impl HyperService<Request> for Service {
 ///
 /// The large match-statement below handles all these scenario's properly, and
 /// sets proper response codes for each category.
-fn handle_error(ctx: &Context, err: BrokerError) -> Response {
-    let reference = err.log(Some(&*ctx.app.rng));
+async fn handle_error(ctx: &Context, err: BrokerError) -> Response {
+    let reference = err.log(Some(&ctx.app.rng)).await;
 
     // Check if we can redirect to the RP. We must have return parameters, and the RP must not have
     // opted out from receiving errors in the redirect response.

@@ -1,7 +1,7 @@
 use crate::crypto::random_zbase32;
+use crate::utils::SecureRandom;
 use http::StatusCode;
 use log::{debug, error, info};
-use ring::rand::SecureRandom;
 use std::error::Error;
 use std::fmt;
 
@@ -27,7 +27,7 @@ pub enum BrokerError {
 impl BrokerError {
     /// Log this error at the appropriate log level.
     /// If `rng` is set, internal errors return a reference number for the error.
-    pub fn log(&self, rng: Option<&dyn SecureRandom>) -> Option<String> {
+    pub async fn log(&self, rng: Option<&SecureRandom>) -> Option<String> {
         match *self {
             // User errors only at debug level.
             ref err @ BrokerError::Input(_)
@@ -47,7 +47,7 @@ impl BrokerError {
             // Internal errors should ring alarm bells.
             ref err @ BrokerError::Internal(_) => {
                 if let Some(rng) = rng {
-                    let reference = random_zbase32(6, rng);
+                    let reference = random_zbase32(6, rng).await;
                     error!("[REF:{}] {}", reference, err);
                     Some(reference)
                 } else {

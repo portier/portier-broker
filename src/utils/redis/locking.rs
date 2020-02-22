@@ -1,7 +1,6 @@
-use crate::utils::redis::pubsub::Subscriber;
+use crate::utils::{redis::pubsub::Subscriber, SecureRandom};
 use futures_util::future::poll_fn;
 use redis::{aio::MultiplexedConnection, RedisResult, Script, Value};
-use ring::rand::SecureRandom;
 use std::sync::Arc;
 use std::task::Poll;
 use tokio::stream::Stream;
@@ -14,7 +13,7 @@ use tokio::time::{interval, Duration};
 /// This will try to send a
 pub struct LockGuard {
     key: Vec<u8>,
-    request: [u8; 16],
+    request: Vec<u8>,
     conn: MultiplexedConnection,
     unlock_script: Arc<Script>,
 }
@@ -22,7 +21,7 @@ pub struct LockGuard {
 impl Drop for LockGuard {
     fn drop(&mut self) {
         let key = self.key.clone();
-        let request = self.request;
+        let request = self.request.clone();
         let mut conn = self.conn.clone();
         let unlock_script = self.unlock_script.clone();
         tokio::spawn(async move {
@@ -43,7 +42,7 @@ impl Drop for LockGuard {
 pub struct LockClient {
     conn: MultiplexedConnection,
     pubsub: Subscriber,
-    rng: Arc<dyn SecureRandom + Send + Sync>,
+    rng: SecureRandom,
     unlock_script: Arc<Script>,
 }
 
@@ -52,11 +51,7 @@ impl LockClient {
     ///
     /// This takes a Redis connection and a Redis pubsub connection, which must both be connected
     /// to the same server.
-    pub fn new(
-        conn: MultiplexedConnection,
-        pubsub: Subscriber,
-        rng: Arc<dyn SecureRandom + Send + Sync>,
-    ) -> Self {
+    pub fn new(conn: MultiplexedConnection, pubsub: Subscriber, rng: SecureRandom) -> Self {
         let unlock_script = Arc::new(Script::new(
             r"
             if redis.call('GET', KEYS[1]) == ARGV[1] then
@@ -83,11 +78,7 @@ impl LockClient {
     /// Note that the given key *is* the lock, and the key may not otherwise be written to.
     /// (Unlike, say, file locking, where the lock is conceptually metadata on the file.)
     pub async fn lock(&mut self, key: &[u8]) -> LockGuard {
-        // TODO: Using the rng is blocking.
-        let mut request = [0u8; 16];
-        self.rng
-            .fill(&mut request)
-            .expect("secure random number generator failed");
+        let request = self.rng.generate_async(16).await;
         let mut sub = self.pubsub.subscribe(key.to_vec()).await;
         let retry = interval(Duration::from_secs(2));
         tokio::pin!(retry);
@@ -107,7 +98,7 @@ impl LockClient {
     }
 
     /// Try to acquire a lock without waiting.
-    async fn try_lock(&mut self, key: &[u8], request: &[u8; 16]) -> bool {
+    async fn try_lock(&mut self, key: &[u8], request: &[u8]) -> bool {
         let value = redis::cmd("SET")
             .arg(key)
             .arg(request)
@@ -125,7 +116,7 @@ impl LockClient {
     }
 
     /// Create a lock guard, once we've acquired the lock.
-    fn make_guard(&self, key: &[u8], request: [u8; 16]) -> LockGuard {
+    fn make_guard(&self, key: &[u8], request: Vec<u8>) -> LockGuard {
         LockGuard {
             key: key.to_vec(),
             request,

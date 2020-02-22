@@ -15,10 +15,9 @@ use crate::agents::{
 };
 use crate::bridges::oidc::GOOGLE_IDP_ORIGIN;
 use crate::crypto::SigningAlgorithm;
-use crate::utils::agent::spawn_agent;
+use crate::utils::{agent::spawn_agent, SecureRandom};
 use crate::webfinger::{Link, ParseLinkError, Relation};
 use err_derive::Error;
-use ring::rand::{SecureRandom, SystemRandom};
 use std::{
     collections::HashMap, env::var as env_var, io::Error as IoError, path::PathBuf, sync::Arc,
     time::Duration,
@@ -69,7 +68,7 @@ pub struct Config {
     pub res_dir: PathBuf,
     pub templates: Templates,
     pub i18n: I18n,
-    pub rng: Arc<dyn SecureRandom + Send + Sync>,
+    pub rng: SecureRandom,
 }
 
 pub struct ConfigBuilder {
@@ -200,19 +199,8 @@ impl ConfigBuilder {
             );
         }
 
-        // Create the secure random number generate.
-        // Per SystemRandom docs, call `fill` once here to prepare the generator.
-        let rng: Arc<dyn SecureRandom + Send + Sync> = tokio::task::spawn_blocking(|| {
-            let rng = SystemRandom::new();
-            let mut dummy = [0u8; 16];
-            rng.fill(&mut dummy)
-                .expect("secure random number generator failed to initialize");
-            Arc::new(rng)
-        })
-        .await
-        .unwrap();
-
         // Child structs
+        let rng = SecureRandom::new().await;
         let fetcher = spawn_agent(FetchAgent::new()).await;
         let store: Arc<dyn StoreSender> =
             match (self.redis_url, self.sqlite_db, self.memory_storage) {

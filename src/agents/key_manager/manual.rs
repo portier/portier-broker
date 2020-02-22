@@ -1,17 +1,16 @@
 use crate::agents::*;
 use crate::crypto::SigningAlgorithm;
-use crate::utils::agent::*;
-use crate::utils::keys::{NamedKeyPair, SignError};
-use crate::utils::pem::{self, ParsedKeyPair};
+use crate::utils::{
+    agent::*,
+    keys::{NamedKeyPair, SignError},
+    pem::{self, ParsedKeyPair},
+    SecureRandom,
+};
 use err_derive::Error;
 use log::{info, warn};
-use ring::{
-    rand::SecureRandom,
-    signature::{Ed25519KeyPair, RsaKeyPair},
-};
+use ring::signature::{Ed25519KeyPair, RsaKeyPair};
 use std::fs::File;
 use std::io::BufReader;
-use std::sync::Arc;
 
 #[derive(Debug, Error)]
 pub enum ManualKeysError {
@@ -27,7 +26,7 @@ pub enum ManualKeysError {
 pub struct ManualKeys {
     ed25519_keys: Vec<NamedKeyPair<Ed25519KeyPair>>,
     rsa_keys: Vec<NamedKeyPair<RsaKeyPair>>,
-    rng: Arc<dyn SecureRandom + Send + Sync>,
+    rng: SecureRandom,
 }
 
 impl ManualKeys {
@@ -35,7 +34,7 @@ impl ManualKeys {
         keyfiles: Vec<String>,
         keytext: Option<String>,
         signing_algs: &[SigningAlgorithm],
-        rng: Arc<dyn SecureRandom + Send + Sync>,
+        rng: SecureRandom,
     ) -> Result<Self, ManualKeysError> {
         info!(
             "Using manual key management with algorithms: {}",
@@ -130,11 +129,11 @@ impl Handler<SignJws> for ManualKeys {
             SigningAlgorithm::EdDsa => self
                 .ed25519_keys
                 .last()
-                .map(|key| key.sign_jws(&message.payload, &*self.rng)),
+                .map(|key| key.sign_jws(&message.payload, &self.rng)),
             SigningAlgorithm::Rs256 => self
                 .rsa_keys
                 .last()
-                .map(|key| key.sign_jws(&message.payload, &*self.rng)),
+                .map(|key| key.sign_jws(&message.payload, &self.rng)),
         };
         cx.reply(
             maybe_jws.unwrap_or_else(|| Err(SignError::UnsupportedAlgorithm(message.signing_alg))),

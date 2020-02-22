@@ -3,12 +3,9 @@ use crate::crypto::SigningAlgorithm;
 use crate::utils::{
     agent::*,
     keys::{GeneratedKeyPair, KeyPairExt, NamedKeyPair, SignError},
-    pem, DelayQueueTask,
+    pem, DelayQueueTask, SecureRandom,
 };
-use ring::{
-    rand::SecureRandom,
-    signature::{Ed25519KeyPair, RsaKeyPair},
-};
+use ring::signature::{Ed25519KeyPair, RsaKeyPair};
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::io::Cursor;
@@ -145,7 +142,7 @@ pub struct RotatingKeys {
     keys_ttl: Duration,
     signing_algs: HashSet<SigningAlgorithm>,
     generate_rsa_command: Vec<String>,
-    rng: Arc<dyn SecureRandom + Send + Sync>,
+    rng: SecureRandom,
     ed25519_keys: Option<ActiveKeySet<Ed25519KeyPair>>,
     rsa_keys: Option<ActiveKeySet<RsaKeyPair>>,
     delays: Option<DelayQueueTask<SigningAlgorithm>>,
@@ -157,7 +154,7 @@ impl RotatingKeys {
         keys_ttl: Duration,
         signing_algs: &[SigningAlgorithm],
         generate_rsa_command: Vec<String>,
-        rng: Arc<dyn SecureRandom + Send + Sync>,
+        rng: SecureRandom,
     ) -> Self {
         log::info!(
             "Using rotating keys with a {}s interval and algorithms: {}",
@@ -341,11 +338,11 @@ impl Handler<SignJws> for RotatingKeys {
             EdDsa => self
                 .ed25519_keys
                 .as_ref()
-                .map(|set| set.current.sign_jws(&message.payload, &*self.rng)),
+                .map(|set| set.current.sign_jws(&message.payload, &self.rng)),
             Rs256 => self
                 .rsa_keys
                 .as_ref()
-                .map(|set| set.current.sign_jws(&message.payload, &*self.rng)),
+                .map(|set| set.current.sign_jws(&message.payload, &self.rng)),
         };
         cx.reply(
             maybe_jws.unwrap_or_else(|| Err(SignError::UnsupportedAlgorithm(message.signing_alg))),

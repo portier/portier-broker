@@ -2,18 +2,17 @@ use crate::crypto::SigningAlgorithm;
 use crate::utils::{
     base64url,
     pem::{self, ParsedKeyPair},
+    SecureRandom,
 };
 use err_derive::Error;
 use ring::{
     digest,
     io::Positive,
-    rand::SecureRandom,
     signature::{self, Ed25519KeyPair, KeyPair, RsaKeyPair},
 };
 use serde_json::{json, Value as JsonValue};
 use std::ffi::OsString;
 use std::process::{Command, Stdio};
-use std::sync::Arc;
 
 #[derive(Debug, Error)]
 pub enum SignError {
@@ -37,11 +36,7 @@ pub struct NamedKeyPair<T: KeyPairExt> {
 
 impl<T: KeyPairExt> NamedKeyPair<T> {
     /// Create a JSON Web Signature (JWS) for the given JSON structure.
-    pub fn sign_jws(
-        &self,
-        payload: &JsonValue,
-        rng: &dyn SecureRandom,
-    ) -> Result<String, SignError> {
+    pub fn sign_jws(&self, payload: &JsonValue, rng: &SecureRandom) -> Result<String, SignError> {
         self.key_pair.sign_jws(&self.kid, payload, rng)
     }
 
@@ -74,7 +69,7 @@ pub trait KeyPairExt {
         &self,
         kid: &str,
         payload: &JsonValue,
-        rng: &dyn SecureRandom,
+        rng: &SecureRandom,
     ) -> Result<String, SignError>;
 
     /// Return JSON represenation of the public key for use in JWK key sets.
@@ -97,7 +92,7 @@ impl KeyPairExt for Ed25519KeyPair {
         &self,
         kid: &str,
         payload: &JsonValue,
-        _rng: &dyn SecureRandom,
+        _rng: &SecureRandom,
     ) -> Result<String, SignError> {
         let header = json!({ "kid": kid, "alg": "EdDSA" }).to_string();
         let mut data = String::new();
@@ -143,7 +138,7 @@ impl KeyPairExt for RsaKeyPair {
         &self,
         kid: &str,
         payload: &JsonValue,
-        rng: &dyn SecureRandom,
+        rng: &SecureRandom,
     ) -> Result<String, SignError> {
         let header = json!({ "kid": kid, "alg": "RS256" }).to_string();
         let mut data = String::new();
@@ -151,7 +146,12 @@ impl KeyPairExt for RsaKeyPair {
         data.push('.');
         data.push_str(&base64url::encode(&payload.to_string()));
         let mut sig = vec![0; self.public_modulus_len()];
-        self.sign(&signature::RSA_PKCS1_SHA256, rng, data.as_bytes(), &mut sig)?;
+        self.sign(
+            &signature::RSA_PKCS1_SHA256,
+            &rng.generator,
+            data.as_bytes(),
+            &mut sig,
+        )?;
         data.push('.');
         data.push_str(&base64url::encode(&sig));
         Ok(data)
@@ -190,10 +190,11 @@ pub trait GeneratedKeyPair: KeyPairExt + Sized {
 }
 
 impl GeneratedKeyPair for Ed25519KeyPair {
-    type Config = Arc<dyn SecureRandom>;
+    type Config = SecureRandom;
 
     fn generate(config: Self::Config) -> String {
-        let doc = Self::generate_pkcs8(&*config).expect("could not generate Ed25519 key pair");
+        let doc =
+            Self::generate_pkcs8(&config.generator).expect("could not generate Ed25519 key pair");
         pem::from_der(doc.as_ref())
     }
 

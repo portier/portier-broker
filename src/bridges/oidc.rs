@@ -84,7 +84,7 @@ pub struct ProviderKey {
 /// the Google provider, for which we have a preregistered `client_id`.
 pub async fn auth(ctx: &mut Context, email_addr: &EmailAddress, link: &Link) -> HandlerResult {
     // Generate a nonce for the provider.
-    let provider_nonce = crypto::nonce(&*ctx.app.rng);
+    let provider_nonce = crypto::nonce(&ctx.app.rng).await;
 
     // Determine the parameters to use, based on the webfinger link.
     let provider_origin = validation::parse_oidc_href(&link.href).ok_or_else(|| {
