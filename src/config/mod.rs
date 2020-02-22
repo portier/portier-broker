@@ -224,6 +224,7 @@ impl ConfigBuilder {
                         self.cache_ttl,
                         self.limit_per_email,
                         fetcher,
+                        rng.clone(),
                     )
                     .await
                     .expect("unable to instantiate new Redis store");

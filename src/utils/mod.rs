@@ -4,6 +4,8 @@ mod delay_queue_task;
 pub mod http;
 pub mod keys;
 pub mod pem;
+#[cfg(feature = "redis")]
+pub mod redis;
 mod time;
 
 use std::{error::Error, future::Future, pin::Pin};

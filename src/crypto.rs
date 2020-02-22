@@ -89,6 +89,7 @@ impl SupportedPublicKey {
 /// a SHA256 hash, and encode it with URL-safe bas64 encoding. This is used
 /// as the key in Redis, as well as the state for OAuth authentication.
 pub fn session_id(email: &EmailAddress, client_id: &str, rng: &dyn SecureRandom) -> String {
+    // TODO: Using the rng is blocking.
     let mut rand_bytes = [0u8; 16];
     rng.fill(&mut rand_bytes)
         .expect("secure random number generator failed");
@@ -102,6 +103,7 @@ pub fn session_id(email: &EmailAddress, client_id: &str, rng: &dyn SecureRandom)
 
 /// Helper function to create a secure nonce.
 pub fn nonce(rng: &dyn SecureRandom) -> String {
+    // TODO: Using the rng is blocking.
     let mut rand_bytes = [0u8; 16];
     rng.fill(&mut rand_bytes)
         .expect("secure random number generator failed");
@@ -114,6 +116,7 @@ pub fn nonce(rng: &dyn SecureRandom) -> String {
 pub fn random_zbase32(len: usize, rng: &dyn SecureRandom) -> String {
     const CHARSET: &[u8] = b"13456789abcdefghijkmnopqrstuwxyz";
 
+    // TODO: Using the rng is blocking.
     let mut rand_bytes = vec![0u8; len];
     rng.fill(&mut rand_bytes)
         .expect("secure random number generator failed");
