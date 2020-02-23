@@ -8,6 +8,10 @@ jobs:
   checked-build:
     runs-on: ubuntu-latest
     services:
+      redis:
+        image: redis:latest
+        ports:
+          - 6379:6379
       mailhog:
         image: mailhog/mailhog:latest
         ports:
@@ -55,8 +59,17 @@ jobs:
     - name: E2E test deps
       run: cd tests/e2e/ && yarn --frozen-lockfile
 
+    - name: E2E test Firefox
+      run: cd tests/e2e/ && SELENIUM_BROWSER=firefox ./main.js
+
     - name: E2E test Chrome
       run: cd tests/e2e/ && SELENIUM_BROWSER=chrome ./main.js
+
+    - name: E2E test Redis
+      run: cd tests/e2e/ && TEST_REDIS=1 TEST_ROTATING_KEYS=1 ./main.js
+
+    - name: E2E test SQLite
+      run: cd tests/e2e/ && TEST_SQLITE=1 TEST_ROTATING_KEYS=1 ./main.js
 
   build:
     strategy:
