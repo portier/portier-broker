@@ -67,7 +67,7 @@ impl RusqliteStore {
             conn.busy_timeout(Duration::from_millis(500))?;
             Self::verify_app_id(&conn)?;
             Self::verify_schema(&conn)?;
-            log::warn!("Storing sessions in SQLite at: {}", sqlite_db);
+            log::warn!("Storing sessions and keys in SQLite at: {}", sqlite_db);
             log::warn!("Please always double check this directory has secure permissions!");
             log::warn!("(This warning can't be fixed; it's a friendly reminder.)");
             Ok(RusqliteStore {

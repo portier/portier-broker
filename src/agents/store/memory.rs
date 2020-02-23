@@ -77,8 +77,8 @@ impl MemoryStore {
         limit_per_email_config: LimitConfig,
         fetcher: Addr<FetchAgent>,
     ) -> Self {
-        log::warn!("Storing sessions in memory.");
-        log::warn!("Note that sessions will be lost on restart!");
+        log::warn!("Storing sessions and keys in memory.");
+        log::warn!("Note that these will be lost on restart!");
 
         MemoryStore {
             expire_sessions,

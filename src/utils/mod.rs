@@ -3,6 +3,7 @@ pub mod base64url;
 mod delay_queue_task;
 pub mod http;
 pub mod keys;
+pub mod logger;
 pub mod pem;
 #[cfg(feature = "redis")]
 pub mod redis;

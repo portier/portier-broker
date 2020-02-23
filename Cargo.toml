@@ -22,7 +22,6 @@ accept-language = "2.0.0"
 base64 = "0.11.0"
 bytes = "0.5.4"
 docopt = "1.1.0"
-env_logger = "0.7.1"
 envy = "0.4.1"
 err-derive = "0.2.2"
 futures-util = "0.3.1"
@@ -36,7 +35,6 @@ idna = "0.2.0"
 lettre = "0.9.2"
 lettre_email = "0.9.2"
 listenfd = "0.3.3"
-log = "0.4.8"
 matches = "0.1.8"
 mustache = "0.9.0"
 native-tls = "0.2.3"
@@ -46,6 +44,10 @@ serde = "1.0.104"
 serde_derive = "1.0.104"
 serde_json = "1.0.45"
 toml = "0.5.6"
+
+[dependencies.log]
+version = "0.4.8"
+features = ["std", "release_max_level_info"]
 
 [dependencies.redis]
 optional = true

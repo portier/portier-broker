@@ -52,7 +52,7 @@ struct Args {
 /// The `main()` method. Will loop forever to serve HTTP requests.
 #[tokio::main]
 async fn main() {
-    env_logger::init();
+    crate::utils::logger::init();
 
     // We spawn a bunch of background tasks on the Tokio executor. If these panic, we want to exit
     // instead of continuing on without the task.

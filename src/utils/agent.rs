@@ -137,7 +137,7 @@ pub trait Agent: Send + Sized + 'static {
 /// This function starts the agent message loop, and waits for the `started` method to complete.
 /// The return value is the agent address.
 pub async fn spawn_agent<A: Agent>(agent: A) -> Addr<A> {
-    log::debug!("Starting agent {:?}", type_name::<A>());
+    log::trace!("Starting agent {:?}", type_name::<A>());
     let (addr, rx) = Addr::new();
     let (cx, reply_fut) = Context::new(&addr);
     let mut tx = addr.tx.clone();
@@ -151,7 +151,7 @@ pub async fn spawn_agent<A: Agent>(agent: A) -> Addr<A> {
     });
     agent.spawn_loop(rx);
     reply_fut.await;
-    log::debug!("Started agent {:?}", type_name::<A>());
+    log::trace!("Started agent {:?}", type_name::<A>());
     addr
 }
 
@@ -189,7 +189,7 @@ impl<A> Addr<A> {
         M: Message,
         A: Handler<M> + Send + 'static,
     {
-        log::debug!(
+        log::trace!(
             "Sending message {:?} to agent {:?}",
             type_name::<M>(),
             type_name::<A>()

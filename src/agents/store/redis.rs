@@ -83,7 +83,7 @@ impl RedisStore {
             .await?;
         let locking = locking::LockClient::new(conn.clone(), pubsub.clone(), rng);
 
-        log::warn!("Storing sessions in Redis at {}", url);
+        log::warn!("Storing sessions and keys in Redis at {}", url);
         log::warn!("Please always double check this Redis and the connection to it are secure!");
         log::warn!("(This warning can't be fixed; it's a friendly reminder.)");
 
