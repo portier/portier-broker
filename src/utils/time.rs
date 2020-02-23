@@ -1,9 +1,13 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+/// Get a duration since Unix epoch.
+pub fn unix_duration() -> Duration {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("current system time is before Unix epoch")
+}
 
 /// Get a Unix timestamp for the current time.
 pub fn unix_timestamp() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("current system time is before unix epoch")
-        .as_secs()
+    unix_duration().as_secs()
 }

@@ -1,5 +1,9 @@
 //! Simple implementation of the agent pattern.
 //!
+//! This allows us to better model the processes in Portier that run on a separate track from the
+//! HTTP server. Specifically, this is built to reuse the Tokio threads, while also making it easy
+//! to create abstractions that can be implemented with either synchronous or asynchronous code.
+//!
 //! The way this is used is to have a type implement `Agent`, then construct it and call
 //! `spawn_agent` with it, which will return an `Addr`. The `Addr` can be cheaply cloned and used
 //! to send messages to the agent. It's also possible to abstract over a message type by casting it

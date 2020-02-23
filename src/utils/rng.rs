@@ -25,6 +25,8 @@ impl SecureRandom {
 
     pub async fn generate_async(&self, bytes: usize) -> Vec<u8> {
         let clone = self.clone();
-        spawn_blocking(move || clone.generate(bytes)).await.unwrap()
+        spawn_blocking(move || clone.generate(bytes))
+            .await
+            .expect("secure random number generator panicked")
     }
 }

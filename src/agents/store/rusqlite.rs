@@ -255,6 +255,7 @@ impl Handler<DeleteSession> for RusqliteStore {
 
 impl Handler<FetchUrlCached> for RusqliteStore {
     fn handle(&mut self, message: FetchUrlCached, cx: Context<Self, FetchUrlCached>) {
+        // TODO: Add locking to coordinate multiple fetches for the same resource.
         let now = unix_timestamp() as i64;
         let data: Result<Option<String>, SqlError> = self
             .conn

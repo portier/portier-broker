@@ -347,7 +347,7 @@ impl Handler<SaveKeys> for RedisStore {
             pipe.publish(format!("keys-updated:{}", signing_alg), &self.id[..]);
             cx.reply_later(async move { pipe.query_async(&mut conn).await });
         } else {
-            unreachable!();
+            panic!("Incomplete key pair in SaveKeys message");
         }
     }
 }

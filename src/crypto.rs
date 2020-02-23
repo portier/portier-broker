@@ -2,7 +2,7 @@ use crate::agents::SignJws;
 use crate::bridges::oidc::ProviderKey;
 use crate::config::Config;
 use crate::email_address::EmailAddress;
-use crate::utils::{base64url, keys::SignError, SecureRandom};
+use crate::utils::{base64url, keys::SignError, unix_duration, SecureRandom};
 use ring::{
     digest,
     error::Unspecified,
@@ -12,7 +12,6 @@ use serde_json as json;
 use serde_json::json;
 use std::fmt;
 use std::iter::Iterator;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 type RsaPublicKey = signature::RsaPublicKeyComponents<Vec<u8>>;
 
@@ -197,7 +196,7 @@ pub async fn create_jwt(
     nonce: &str,
     signing_alg: SigningAlgorithm,
 ) -> Result<String, SignError> {
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+    let now = unix_duration();
     app.key_manager
         .send(SignJws {
             payload: json!({
