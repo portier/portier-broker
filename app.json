@@ -7,12 +7,8 @@
   "success_url": "https://github.com/portier/portier.github.io/blob/master/Self-Hosting.md",
   "env": {
     "BROKER_PUBLIC_URL": {
-      "description": "The broker server's public-facing URL. This will be the Issuer for JSON Web Tokens and Relying Parties will use the same value for their Broker URL. To ensure consistency, trailing slashes should be avoided. It is suggested that you choose an app name (up above) and then use it to fill out this config var. Alternatively, if you enable the Dyno Metadata labs addon using the Heroku CLI then you can leave this value blank and the public-facing URL will be automatically set, thus allowing you to let Heroku choose the app's name.",
+      "description": "The broker server's public-facing URL. It's important to set this correctly, or JSON Web Tokens will fail to validate. Relying Parties will use the same value for their Broker URL. To ensure consistency, trailing slashes should be avoided. It is suggested that you choose an app name (up above) and then use it to fill out this config var. Alternatively, if you enable the Dyno Metadata labs addon using the Heroku CLI then you can leave this value blank and the public-facing URL will be automatically set, thus allowing you to let Heroku choose the app's name.",
       "value": "https://[app-name].herokuapp.com"
-    },
-    "BROKER_KEYTEXT": {
-      "description": "The text of an encryption key in PEM format. You can create an encryption key by running `openssl genrsa 4096 > private.pem` and then provide the key to this broker by copying the file's contents here.",
-      "value": ""
     },
     "BROKER_FROM_ADDRESS": {
       "description": "The 'From' address used by Portier to send emails. Unlike the BROKER_PUBLIC_URL, this config value will not auto-populate even if the Dyno Metadata labs addon is enabled. It will be easiest if you choose an app name (up above) and then use it here instead of letting Heroku pick a name for the app.",
