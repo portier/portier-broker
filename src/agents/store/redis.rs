@@ -11,7 +11,7 @@ use ::redis::{
     IntoConnectionInfo, RedisResult, Script,
 };
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 /// Internal message used to lock a key set.
 struct LockKeys(SigningAlgorithm);
@@ -274,81 +274,28 @@ impl Handler<FetchKeys> for RedisStore {
     fn handle(&mut self, message: FetchKeys, cx: Context<Self, FetchKeys>) {
         let mut conn = self.conn.clone();
         let signing_alg = message.0;
-        let current_key = format!("keys:{}:current", signing_alg);
-        let next_key = format!("keys:{}:next", signing_alg);
-        let previous_key = format!("keys:{}:previous", signing_alg);
-        let mut pipe = pipe();
-        pipe.atomic()
-            .get(&current_key)
-            .ttl(&current_key)
-            .get(&next_key)
-            .ttl(&next_key)
-            .get(&previous_key);
+        let db_key = format!("keys:{}", signing_alg);
         cx.reply_later(async move {
-            let (current, current_ttl, next, next_ttl, previous): (
-                Option<String>,
-                i64,
-                Option<String>,
-                i64,
-                Option<String>,
-            ) = pipe.query_async(&mut conn).await?;
-            let now = SystemTime::now();
-            let parse_ttl = move |ttl: i64| -> SystemTime {
-                if ttl <= 0 {
-                    now
-                } else {
-                    now + Duration::from_secs(ttl as u64)
-                }
-            };
-            Ok(KeySet {
-                signing_alg,
-                current: current.map(|value| Expiring {
-                    value,
-                    expires: parse_ttl(current_ttl),
-                }),
-                next: next.map(|value| Expiring {
-                    value,
-                    expires: parse_ttl(next_ttl),
-                }),
-                previous,
-            })
+            let key_set: Option<String> = conn.get(db_key).await?;
+            let key_set = key_set
+                .map(|data| serde_json::from_str(&data).expect("Invalid key set JSON in Redis"))
+                .unwrap_or_else(|| KeySet::empty(signing_alg));
+            Ok(key_set)
         })
     }
 }
 
 impl Handler<SaveKeys> for RedisStore {
     fn handle(&mut self, message: SaveKeys, cx: Context<Self, SaveKeys>) {
-        if let KeySet {
-            signing_alg,
-            current: Some(ref current),
-            next: Some(ref next),
-            ref previous,
-            ..
-        } = message.0
-        {
-            let mut conn = self.conn.clone();
-            let current_key = format!("keys:{}:current", signing_alg);
-            let next_key = format!("keys:{}:next", signing_alg);
-            let previous_key = format!("keys:{}:previous", signing_alg);
-            let mut pipe = pipe();
-            fn to_unix(time: SystemTime) -> usize {
-                time.duration_since(UNIX_EPOCH).unwrap().as_secs() as usize
-            }
-            pipe.atomic()
-                .set(&current_key, &current.value)
-                .expire_at(&current_key, to_unix(current.expires))
-                .set(&next_key, &next.value)
-                .expire_at(&next_key, to_unix(next.expires));
-            if let Some(ref previous) = previous {
-                pipe.set(&previous_key, previous);
-            } else {
-                pipe.del(&previous_key);
-            }
-            pipe.publish(format!("keys-updated:{}", signing_alg), &self.id[..]);
-            cx.reply_later(async move { pipe.query_async(&mut conn).await });
-        } else {
-            panic!("Incomplete key pair in SaveKeys message");
-        }
+        let mut conn = self.conn.clone();
+        let signing_alg = message.0.signing_alg;
+        let db_key = format!("keys:{}", signing_alg);
+        let data = serde_json::to_string(&message.0).expect("Could not encode key set as JSON");
+        let mut pipe = pipe();
+        pipe.atomic()
+            .set(db_key, data)
+            .publish(format!("keys-updated:{}", signing_alg), &self.id[..]);
+        cx.reply_later(async move { pipe.query_async(&mut conn).await });
     }
 }
 
