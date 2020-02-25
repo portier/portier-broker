@@ -1,0 +1,18 @@
+# Socket unit for the Portier Broker
+#
+# If this socket is started before the service, the broker will ignore any
+# `listen_*` settings in `config.toml` and use the provided socket instead.
+
+[Socket]
+
+# Bind to IPv4 on the loopback interface.
+#
+# Note that the broker currently only supports HTTP (not HTTPS). Using a front
+# proxy to provide HTTPS is recommended.
+#
+# Note also that the broker currently does not support listening on Unix
+# sockets, not even through socket activation.
+ListenStream=127.0.0.1:3333
+
+[Install]
+WantedBy=sockets.target

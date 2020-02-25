@@ -1,0 +1,70 @@
+# Service unit for the Portier Broker
+#
+# This unit should provide a fairly strict sandbox for the broker.
+#
+# Notably, this unit does not use chroot. It's certainly possible to use
+# chroot, but the exact settings to make this work depend on the distribution.
+
+[Unit]
+Description=Portier Broker
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+
+# Assumes a simple setup where binaries are unpacked to `/opt/portier-broker`.
+# The config file argument can be removed if you intend to use only environment
+# variables to provide configuration.
+ExecStart=/opt/portier-broker/portier-broker ./config.toml
+WorkingDirectory=/opt/portier-broker
+
+# Service restart policy.
+Restart=always
+RestartSec=10
+
+# The broker logs to stderr. Have systemd capture all output.
+StandardOutput=journal
+StandardError=journal
+
+# Have systemd create a dynamic user for the service. If this option is not yet
+# available in your systemd version, you should manually create a service user
+# instead and set `User=`. (How this is done depends on your distribution.)
+DynamicUser=yes
+
+# Let systemd manage a state directory, and store our SQLite database inside.
+# With these settings, you don't have to configure storage in `config.toml`.
+#
+# If you intend to use Redis instead, remove these settings. If you want to
+# connect to Redis using Unix sockets, also adjust `RestrictAddressFamilies=`.
+StateDirectory=portier-broker
+Environment=BROKER_SQLITE_DB=/var/lib/portier-broker/db.sqlite3
+
+# The following are all additional restrictions to improve security.
+#
+# If any of these options are not yet available in your systemd version, you
+# may simply comment them.
+#
+# This list of options is based on the portablectl strict profile:
+# https://github.com/systemd/systemd/blob/master/src/portable/profile/strict/service.conf
+TemporaryFileSystem=/run
+RemoveIPC=yes
+CapabilityBoundingSet=
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateUsers=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+LockPersonality=yes
+NoNewPrivileges=yes
+MemoryDenyWriteExecute=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+SystemCallArchitectures=native
+TasksMax=4
