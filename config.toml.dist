@@ -1,9 +1,12 @@
 ################################################################
 # Portier Broker configuration template
 #
-# All settings in this file are listed with their defaults. If a setting is
-# commented, that means it's unset by default, and any value listed is an
-# example only.
+# All example settings in this file are listed with their defaults. If the
+# default value of a setting is fine, you can leave it out of your
+# configuration.
+#
+# If an example setting is commented, that means it's unset by default, and any
+# value listed is an example only.
 #
 # Alternatively, the broker can be configured using the environment. Each
 # setting here has a matching `BROKER_*` environment variable. For example,
@@ -27,6 +30,8 @@
 # Also note that the broker currently only talks plain HTTP, and not HTTPS.
 # Using HTTPS is strongly recommended, but you'll need to add a reverse proxy
 # in front of the broker to do this. (Apache or Nginx can do this for you.)
+#
+# If using the Docker image, you can leave these settings out of your config.
 
 listen_ip = "127.0.0.1"
 listen_port = 3333

@@ -1,37 +1,50 @@
-FROM clux/muslrust:stable as builder
+# This Dockerfile creates an image with a release build of the broker.
+#
+# To run a container:
+#
+#   docker run -v /srv/portier-broker:/data:ro portier/broker /data/config.toml
+#
 
-# Build the broker
-COPY . /src
+# Create a release build.
+FROM rust:1-buster as build
+WORKDIR /src
+COPY . .
+RUN cargo build --release
+
+# Prepare a 'package' directory with the exact files we want.
 RUN set -x \
- && cd /src \
- && cargo build --release
+  && mkdir package \
+  && cp -R \
+    lang \
+    res \
+    tmpl \
+    target/release/portier-broker \
+    package/ \
+  && rm lang/*.po
 
-# Create a certificate bundle
+# Prepare a final image from a plain Debian base.
+FROM debian:buster
+
+# Add a user and group first to make sure their IDs get assigned consistently,
+# regardless of whatever dependencies get added.
 RUN set -x \
- && mkdir /certs \
- && cp -L /usr/share/ca-certificates/mozilla/*.crt /certs \
- && c_rehash /certs \
- && cat /certs/*.crt > /certs/ca-certificates.crt
+  && groupadd -r -g 999 portier-broker \
+  && useradd -r -g portier-broker -u 999 portier-broker
 
-# Create the root for the minimal image
+# Install run-time dependencies.
 RUN set -x \
- && mkdir -p /out/lang \
- && cp -r \
-      /src/target/*/release/portier-broker \
-      /src/res \
-      /src/tmpl \
-      /certs \
-      /out \
- && cp /src/lang/*.mo /out/lang/
+  && apt-get update \
+  && apt-get install -y --no-install-recommends \
+    openssl \
+    ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 
-# Create the minimal image
-FROM scratch
-COPY --from=builder /out /
+# Copy in the 'package' directory from the build image.
+COPY --from=build /src/package /opt/portier-broker
+WORKDIR /opt/portier-broker
 
-# Set image settings
-USER 65534:65534
-ENV SSL_CERT_FILE=/certs/ca-certificates.crt \
-    SSL_CERT_DIR=/certs \
-    BROKER_IP=::
-ENTRYPOINT ["/portier-broker"]
+# Set image settings.
+ENTRYPOINT ["/opt/portier-broker/portier-broker"]
+USER portier-broker
+ENV BROKER_LISTEN_IP=::
 EXPOSE 3333
