@@ -1,12 +1,12 @@
 ################################################################
 # Portier Broker configuration template
 #
-# All example settings in this file are listed with their defaults. If the
-# default value of a setting is fine, you can leave it out of your
+# All settings in this template are listed with their defaults. If the default
+# value of a setting is fine, you can leave the setting out of your
 # configuration.
 #
-# If an example setting is commented, that means it's unset by default, and any
-# value listed is an example only.
+# If a setting in this template is commented, that means it is unset by
+# default, and any value listed is an example only.
 #
 # Alternatively, the broker can be configured using the environment. Each
 # setting here has a matching `BROKER_*` environment variable. For example,
@@ -20,7 +20,7 @@
 ################################################################
 # Basic settings
 
-# The IP address and port to bind to the HTTP server to. Note that `listen_ip`
+# The IP address and port to bind the HTTP server to. Note that `listen_ip`
 # accepts IPv4 and IPv6, but currently not hostnames.
 # 
 # Alternatively, you may use systemd socket activation to pass in a listening
@@ -106,13 +106,13 @@ limit_per_email = "5/min"
 # JSON Web Tokens. If for some reason you wish to provide keys manually, you
 # can do so with these settings.
 #
-# Only PEM format files are accepted, but the `keytext` and each file may
-# contain multiple PEM blocks. The broker will list all public keys in API
-# responses, but will only use the last key for signing.
+# Only PEM format files are accepted, but the `keytext` and each file in
+# keyfiles may contain multiple PEM blocks. The broker will list all public
+# keys in API responses, but will only use the last key for signing.
 
 keyfiles = []
 #keytext = """
-#-----BEGIN RSA PRIVATE KEY-----
+#-----BEGIN PRIVATE KEY-----
 #[...]
 #"""
 

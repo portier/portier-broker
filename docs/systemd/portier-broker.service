@@ -42,7 +42,7 @@ Environment=BROKER_SQLITE_DB=/var/lib/portier-broker/db.sqlite3
 
 # The following are all additional restrictions to improve security.
 #
-# If any of these options are not yet available in your systemd version, you
+# If some of these options are not yet available in your systemd version, you
 # may simply comment them.
 #
 # This list of options is based on the portablectl strict profile:
@@ -67,4 +67,3 @@ RestrictNamespaces=yes
 SystemCallFilter=@system-service
 SystemCallErrorNumber=EPERM
 SystemCallArchitectures=native
-TasksMax=4

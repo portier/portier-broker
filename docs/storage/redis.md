@@ -1,7 +1,7 @@
 # Portier Broker Redis storage
 
 A [Redis] server can be used for storing all broker state. This is especially
-useful for two scenario's:
+useful if any of the following apply:
 
 - The filesystem is not reliable. This can be the case when the machine the
   broker runs on is provisioned, and can be recreated at any time. Cloud
