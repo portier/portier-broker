@@ -5,7 +5,10 @@ on:
     types: [created]
 
 env:
-  package_resources: lang res tmpl
+  package_resources: >-
+    README.md LICENSE-APACHE LICENSE-MIT
+    docs lang res tmpl
+    config.toml.dist
 
 jobs:
   release:
