@@ -106,9 +106,9 @@ limit_per_email = "5/min"
 # JSON Web Tokens. If for some reason you wish to provide keys manually, you
 # can do so with these settings.
 #
-# Only PEM format files are accepted, but the `keytext` and each file in
-# keyfiles may contain multiple PEM blocks. The broker will list all public
-# keys in API responses, but will only use the last key for signing.
+# Only PEM format is accepted, but the `keytext` and each file in `keyfiles`
+# may contain multiple PEM blocks. The broker will list all public keys in API
+# responses, but will only use the last key for signing.
 
 keyfiles = []
 #keytext = """
