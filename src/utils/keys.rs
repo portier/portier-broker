@@ -123,7 +123,6 @@ impl KeyPairExt for RsaKeyPair {
         let public = self.public_key();
         let (n, e) = (public.modulus(), public.exponent());
         let mut ctx = digest::Context::new(&digest::SHA256);
-        ctx.update(b"rsa.");
         ctx.update(e.big_endian_without_leading_zero());
         ctx.update(b".");
         ctx.update(n.big_endian_without_leading_zero());
