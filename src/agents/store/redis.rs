@@ -152,9 +152,12 @@ impl Handler<GetSession> for RedisStore {
         let mut conn = self.conn.clone();
         cx.reply_later(async move {
             let key = Self::format_session_key(&message.session_id);
-            let data: String = conn.get(&key).await?;
-            let data = serde_json::from_str(&data)?;
-            Ok(data)
+            let data: Option<String> = conn.get(&key).await?;
+            if let Some(data) = data {
+                Ok(Some(serde_json::from_str(&data)?))
+            } else {
+                Ok(None)
+            }
         });
     }
 }
