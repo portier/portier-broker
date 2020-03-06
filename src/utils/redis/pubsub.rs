@@ -100,6 +100,9 @@ async fn conn_loop(mut rx: ReadHalf, mut tx: WriteHalf, mut cmd: mpsc::Receiver<
         .await
         {
             LoopEvent::Cmd(Cmd { chan, reply }) => match subs.entry(chan.clone()) {
+                // If already subscribed, reply with a broadcast channel immediately. Otherwise,
+                // add the reply channel to `pending`, and send the Redis subscribe command if
+                // necessary.
                 Entry::Occupied(mut entry) => {
                     let sub = entry.get_mut();
                     if let Some(ref mut pending) = sub.pending {

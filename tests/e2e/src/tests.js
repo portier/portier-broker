@@ -49,6 +49,13 @@ test("successful flow following the email link", async driver => {
   const textElement = await driver.findElement(By.tagName("p"));
   const text = await textElement.getText();
   assert.equal(text, "Verified email address john.doe@example.com!");
+
+  // Ensure the link no longer works.
+  await driver.get(url);
+
+  const introElement = await driver.findElement(By.className("head"));
+  const intro = await introElement.getText();
+  assert.equal(intro, "The session has expired.");
 });
 
 module.exports = async driver => {
