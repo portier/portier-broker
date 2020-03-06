@@ -122,6 +122,8 @@ impl Agent for RedisStore {
         let mut conn = self.conn.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(20));
+            // Ignore the first (immediate) tick.
+            interval.tick().await;
             loop {
                 interval.tick().await;
                 let _: String = ::redis::cmd("PING")

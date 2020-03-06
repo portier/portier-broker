@@ -70,15 +70,20 @@ enum LoopEvent {
 
 /// The Redis pubsub connection loop.
 async fn conn_loop(mut rx: ReadHalf, mut tx: WriteHalf, mut cmd: mpsc::Receiver<Cmd>) {
+    // Ping or cleanup subscriptions at an interval.
     let interval = tokio::time::interval(tokio::time::Duration::from_secs(20));
     tokio::pin!(interval);
+    // Ignore the first (immediate) tick.
+    interval.as_mut().tick().await;
 
+    // Current read operation.
     // TODO: The redis crate has a ValueCodec, but doesn't expose it. This is a workaround.
     let mut read_fut: Pin<Box<dyn Future<Output = _> + Send>> = Box::pin(async move {
         let res = rx.read().await;
         (res, rx)
     });
 
+    // Map of active subscriptions by channel name.
     let mut subs: HashMap<Vec<u8>, Sub> = HashMap::new();
 
     loop {
@@ -131,7 +136,7 @@ async fn conn_loop(mut rx: ReadHalf, mut tx: WriteHalf, mut cmd: mpsc::Receiver<
                 let to_unsub: Vec<Vec<u8>> = subs
                     .iter()
                     .filter_map(|(chan, sub)| {
-                        if sub.tx.receiver_count() == 0 {
+                        if sub.pending.is_none() && sub.tx.receiver_count() == 0 {
                             Some(chan.clone())
                         } else {
                             None

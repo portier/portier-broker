@@ -100,6 +100,7 @@ impl Agent for MemoryStore {
         let addr = cx.addr().clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(60));
+            // Ignore the first (immediate) tick, because we'll always be empty.
             interval.tick().await;
             loop {
                 interval.tick().await;
