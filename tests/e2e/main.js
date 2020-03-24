@@ -15,7 +15,7 @@ const main = async () => {
     broker = runBroker();
     relyingParty = runRelyingParty();
     driver = await createDriver();
-    await runTests(driver);
+    await runTests({ broker, relyingParty, driver });
   } finally {
     if (driver) {
       await driver.quit().catch(err => {

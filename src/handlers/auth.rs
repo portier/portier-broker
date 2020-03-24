@@ -10,6 +10,7 @@ use futures_util::future::{self, Either};
 use http::Method;
 use log::info;
 use serde_json::{from_value, json, Value};
+use std::collections::HashSet;
 use std::time::Duration;
 
 /// Request handler to return the OpenID Discovery document.
@@ -108,6 +109,15 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
     if try_get_input_param!(params, "response_type") != "id_token" {
         return Err(BrokerError::Input(
             "unsupported response_type, only id_token is supported".to_owned(),
+        ));
+    }
+
+    let scope = try_get_input_param!(params, "scope");
+    let mut scope_set: HashSet<&str> = scope.split(' ').collect();
+    scope_set.remove("email");
+    if !scope_set.remove("openid") || !scope_set.is_empty() {
+        return Err(BrokerError::Input(
+            "unsupported scope, must contain 'openid' and optionally 'email'".to_owned(),
         ));
     }
 
