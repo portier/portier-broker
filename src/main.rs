@@ -27,7 +27,7 @@ use hyper::{server::Server, service::make_service_fn};
 use log::info;
 use serde_derive::Deserialize;
 use std::{
-    io::Cursor,
+    io::{Cursor, Read},
     net::SocketAddr,
     path::{Path, PathBuf},
     time::SystemTime,
@@ -136,9 +136,17 @@ async fn start_server(builder: ConfigBuilder) {
 }
 
 async fn import_key(builder: ConfigBuilder, file: &Path) {
-    let contents = match std::fs::read(file) {
-        Ok(contents) => contents,
-        Err(err) => panic!("Could not open key file '{}': {}", file.display(), err),
+    let contents = if file == Path::new("-") {
+        let mut buf = Vec::new();
+        if let Err(err) = std::io::stdin().read_to_end(&mut buf) {
+            panic!("Could not read key from stdin: {}", err)
+        }
+        buf
+    } else {
+        match std::fs::read(file) {
+            Ok(contents) => contents,
+            Err(err) => panic!("Could not open key file '{}': {}", file.display(), err),
+        }
     };
 
     let contents = match String::from_utf8(contents) {
