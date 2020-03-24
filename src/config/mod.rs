@@ -15,11 +15,18 @@ use crate::agents::{
 };
 use crate::bridges::oidc::GOOGLE_IDP_ORIGIN;
 use crate::crypto::SigningAlgorithm;
-use crate::utils::{agent::spawn_agent, SecureRandom};
+use crate::utils::{
+    agent::{spawn_agent, Addr},
+    SecureRandom,
+};
 use crate::webfinger::{Link, ParseLinkError, Relation};
 use err_derive::Error;
 use std::{
-    collections::HashMap, env::var as env_var, io::Error as IoError, path::PathBuf, sync::Arc,
+    collections::HashMap,
+    env::var as env_var,
+    io::Error as IoError,
+    path::{Path, PathBuf},
+    sync::Arc,
     time::Duration,
 };
 
@@ -71,6 +78,98 @@ pub struct Config {
     pub rng: SecureRandom,
 }
 
+/// Parameters for `StoreConfig::spawn_store`.
+struct StoreParams {
+    session_ttl: Duration,
+    cache_ttl: Duration,
+    limit_per_email: LimitConfig,
+    fetcher: Addr<FetchAgent>,
+    #[allow(dead_code)]
+    rng: SecureRandom,
+}
+
+/// Store configuration is first translated into this intermediate enum.
+enum StoreConfig {
+    #[cfg(feature = "redis")]
+    Redis(String),
+    #[cfg(feature = "rusqlite")]
+    Rusqlite(PathBuf),
+    Memory,
+}
+
+impl StoreConfig {
+    fn from_options(
+        redis_url: Option<String>,
+        sqlite_db: Option<PathBuf>,
+        memory_storage: bool,
+    ) -> Result<Self, ConfigError> {
+        match (redis_url, sqlite_db, memory_storage) {
+            #[cfg(feature = "redis")]
+            (Some(redis_url), None, false) => Ok(StoreConfig::Redis(redis_url)),
+            #[cfg(not(feature = "redis"))]
+            (Some(_), None, false) => {
+                Err("Redis storage requested, but this build does not support it.".into())
+            }
+
+            #[cfg(feature = "rusqlite")]
+            (None, Some(sqlite_db), false) => Ok(StoreConfig::Rusqlite(sqlite_db)),
+            #[cfg(not(feature = "rusqlite"))]
+            (None, Some(_), false) => {
+                Err("SQLite storage requested, but this build does not support it.".into())
+            }
+
+            (None, None, true) => Ok(StoreConfig::Memory),
+
+            (None, None, false) => {
+                Err("Must specify one of redis_url, sqlite_db or memory_storage".into())
+            }
+
+            _ => Err("Can only specify one of redis_url, sqlite_db or memory_storage".into()),
+        }
+    }
+
+    async fn spawn_store(self, params: StoreParams) -> Arc<dyn StoreSender> {
+        match self {
+            #[cfg(feature = "redis")]
+            StoreConfig::Redis(redis_url) => {
+                let store = agents::RedisStore::new(
+                    redis_url,
+                    params.session_ttl,
+                    params.cache_ttl,
+                    params.limit_per_email,
+                    params.fetcher,
+                    params.rng,
+                )
+                .await
+                .expect("unable to initialize Redis store");
+                Arc::new(spawn_agent(store).await)
+            }
+            #[cfg(feature = "rusqlite")]
+            StoreConfig::Rusqlite(sqlite_db) => {
+                let store = agents::RusqliteStore::new(
+                    sqlite_db,
+                    params.session_ttl,
+                    params.cache_ttl,
+                    params.limit_per_email,
+                    params.fetcher,
+                )
+                .await
+                .expect("unable to initialize SQLite store");
+                Arc::new(spawn_agent(store).await)
+            }
+            StoreConfig::Memory => {
+                let store = agents::MemoryStore::new(
+                    params.session_ttl,
+                    params.cache_ttl,
+                    params.limit_per_email,
+                    params.fetcher,
+                );
+                Arc::new(spawn_agent(store).await)
+            }
+        }
+    }
+}
+
 pub struct ConfigBuilder {
     pub listen_ip: String,
     pub listen_port: u16,
@@ -85,13 +184,13 @@ pub struct ConfigBuilder {
     pub session_ttl: Duration,
     pub cache_ttl: Duration,
 
-    pub keyfiles: Vec<String>,
+    pub keyfiles: Vec<PathBuf>,
     pub keytext: Option<String>,
     pub signing_algs: Vec<SigningAlgorithm>,
     pub generate_rsa_command: Vec<String>,
 
     pub redis_url: Option<String>,
-    pub sqlite_db: Option<String>,
+    pub sqlite_db: Option<PathBuf>,
     pub memory_storage: bool,
 
     pub from_name: String,
@@ -147,7 +246,7 @@ impl ConfigBuilder {
         }
     }
 
-    pub fn update_from_file(&mut self, path: &str) -> &mut ConfigBuilder {
+    pub fn update_from_file(&mut self, path: &Path) -> &mut ConfigBuilder {
         TomlConfig::parse_and_apply(path, self);
         self
     }
@@ -193,6 +292,8 @@ impl ConfigBuilder {
 
     pub async fn done(self) -> Result<Config, ConfigError> {
         // Additional validations
+        let store_config =
+            StoreConfig::from_options(self.redis_url, self.sqlite_db, self.memory_storage)?;
         if self.smtp_username.is_none() != self.smtp_password.is_none() {
             return Err(
                 "only one of smtp username and password specified; provide both or neither".into(),
@@ -201,63 +302,15 @@ impl ConfigBuilder {
 
         // Child structs
         let rng = SecureRandom::new().await;
-        let fetcher = spawn_agent(FetchAgent::new()).await;
-        let store: Arc<dyn StoreSender> =
-            match (self.redis_url, self.sqlite_db, self.memory_storage) {
-                #[cfg(feature = "redis")]
-                (Some(redis_url), None, false) => {
-                    let store = agents::RedisStore::new(
-                        redis_url,
-                        self.session_ttl,
-                        self.cache_ttl,
-                        self.limit_per_email,
-                        fetcher,
-                        rng.clone(),
-                    )
-                    .await
-                    .expect("unable to instantiate new Redis store");
-                    Arc::new(spawn_agent(store).await)
-                }
-                #[cfg(not(feature = "redis"))]
-                (Some(_), None, false) => {
-                    panic!("Redis storage requested, but this build does not support it.")
-                }
-
-                #[cfg(feature = "rusqlite")]
-                (None, Some(sqlite_db), false) => {
-                    let store = agents::RusqliteStore::new(
-                        sqlite_db,
-                        self.session_ttl,
-                        self.cache_ttl,
-                        self.limit_per_email,
-                        fetcher,
-                    )
-                    .await
-                    .expect("unable to instantiate new SQLite store");
-                    Arc::new(spawn_agent(store).await)
-                }
-                #[cfg(not(feature = "rusqlite"))]
-                (None, Some(_), false) => {
-                    panic!("SQLite storage requested, but this build does not support it.")
-                }
-
-                (None, None, true) => {
-                    let store = agents::MemoryStore::new(
-                        self.session_ttl,
-                        self.cache_ttl,
-                        self.limit_per_email,
-                        fetcher,
-                    );
-                    Arc::new(spawn_agent(store).await)
-                }
-
-                (None, None, false) => {
-                    panic!("Must specify one of redis_url, sqlite_db or memory_storage")
-                }
-
-                _ => panic!("Can only specify one of redis_url, sqlite_db or memory_storage"),
-            };
-
+        let store = store_config
+            .spawn_store(StoreParams {
+                session_ttl: self.session_ttl,
+                cache_ttl: self.cache_ttl,
+                limit_per_email: self.limit_per_email,
+                fetcher: spawn_agent(FetchAgent::new()).await,
+                rng: rng.clone(),
+            })
+            .await;
         let key_manager: Box<dyn KeyManagerSender> =
             if !self.keyfiles.is_empty() || self.keytext.is_some() {
                 let key_manager =
@@ -333,5 +386,20 @@ impl ConfigBuilder {
             i18n,
             rng,
         })
+    }
+
+    pub async fn into_store(self) -> Result<Arc<dyn StoreSender>, ConfigError> {
+        let store_config =
+            StoreConfig::from_options(self.redis_url, self.sqlite_db, self.memory_storage)?;
+        let store = store_config
+            .spawn_store(StoreParams {
+                session_ttl: self.session_ttl,
+                cache_ttl: self.cache_ttl,
+                limit_per_email: self.limit_per_email,
+                fetcher: spawn_agent(FetchAgent::new()).await,
+                rng: SecureRandom::new().await,
+            })
+            .await;
+        Ok(store)
     }
 }

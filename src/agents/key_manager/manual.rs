@@ -11,6 +11,7 @@ use log::{info, warn};
 use ring::signature::{Ed25519KeyPair, RsaKeyPair};
 use std::fs::File;
 use std::io::BufReader;
+use std::path::PathBuf;
 
 #[derive(Debug, Error)]
 pub enum ManualKeysError {
@@ -31,7 +32,7 @@ pub struct ManualKeys {
 
 impl ManualKeys {
     pub fn new(
-        keyfiles: Vec<String>,
+        keyfiles: Vec<PathBuf>,
         keytext: Option<String>,
         signing_algs: &[SigningAlgorithm],
         rng: SecureRandom,
@@ -45,7 +46,11 @@ impl ManualKeys {
             let file = match File::open(keyfile) {
                 Ok(file) => file,
                 Err(err) => {
-                    warn!("Ignoring keyfile '{}', could not open: {}", keyfile, err);
+                    warn!(
+                        "Ignoring keyfile '{}', could not open: {}",
+                        keyfile.display(),
+                        err
+                    );
                     continue;
                 }
             };
@@ -53,13 +58,20 @@ impl ManualKeys {
             let key_pairs = match pem::parse_key_pairs(BufReader::new(file)) {
                 Ok(key_pairs) => key_pairs,
                 Err(err) => {
-                    warn!("Ignoring keyfile '{}', could not parse: {}", keyfile, err);
+                    warn!(
+                        "Ignoring keyfile '{}', could not parse: {}",
+                        keyfile.display(),
+                        err
+                    );
                     continue;
                 }
             };
 
             if key_pairs.is_empty() {
-                warn!("Ignoring keyfile '{}', no PEM data found", keyfile);
+                warn!(
+                    "Ignoring keyfile '{}', no PEM data found",
+                    keyfile.display()
+                );
                 continue;
             }
 
@@ -73,7 +85,7 @@ impl ManualKeys {
                     "Ignoring {} (of {}) key(s) in '{}' for disabled signing algorithms",
                     orig_len - key_pairs.len(),
                     orig_len,
-                    keyfile
+                    keyfile.display()
                 );
             }
 

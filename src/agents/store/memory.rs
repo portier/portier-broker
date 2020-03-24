@@ -249,4 +249,10 @@ impl Handler<RotateKeysLocked> for MemoryStore {
     }
 }
 
+impl Handler<ImportKeySet> for MemoryStore {
+    fn handle(&mut self, _message: ImportKeySet, _cx: Context<Self, ImportKeySet>) {
+        panic!("Importing keys into a memory store has no effect");
+    }
+}
+
 impl StoreSender for Addr<MemoryStore> {}

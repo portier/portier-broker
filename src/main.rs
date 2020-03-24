@@ -14,14 +14,24 @@ mod validation;
 mod web;
 mod webfinger;
 
+use crate::agents::{Expiring, ImportKeySet, KeySet};
 use crate::config::{ConfigBuilder, ConfigRc};
-use crate::utils::BoxError;
+use crate::crypto::SigningAlgorithm;
+use crate::utils::{
+    pem::{self, ParsedKeyPair},
+    BoxError,
+};
 use crate::web::Service;
 use futures_util::future;
 use hyper::{server::Server, service::make_service_fn};
 use log::info;
 use serde_derive::Deserialize;
-use std::net::SocketAddr;
+use std::{
+    io::Cursor,
+    net::SocketAddr,
+    path::{Path, PathBuf},
+    time::SystemTime,
+};
 
 /// Defines the program's version, as set by Cargo at compile time.
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -34,19 +44,22 @@ Portier Broker
 
 Usage:
   portier-broker [CONFIG]
+  portier-broker [CONFIG] [--import-key FILE]
   portier-broker --version
   portier-broker --help
 
 Options:
-  --version       Print version information and exit
-  --help          Print this help message and exit
+  --version          Print version information and exit
+  --help             Print this help message and exit
+  --import-key FILE  Import a PEM private key, for migrating to rotating keys
 "#;
 
 /// Holds parsed command line parameters.
 #[derive(Deserialize)]
 #[allow(non_snake_case)]
 struct Args {
-    arg_CONFIG: Option<String>,
+    arg_CONFIG: Option<PathBuf>,
+    flag_import_key: Option<PathBuf>,
 }
 
 /// The `main()` method. Will loop forever to serve HTTP requests.
@@ -73,6 +86,15 @@ async fn main() {
     }
     builder.update_from_common_env();
     builder.update_from_broker_env();
+
+    if let Some(ref path) = args.flag_import_key {
+        import_key(builder, path).await;
+    } else {
+        start_server(builder).await;
+    }
+}
+
+async fn start_server(builder: ConfigBuilder) {
     let app = ConfigRc::new(
         builder
             .done()
@@ -111,4 +133,56 @@ async fn main() {
         future::ok::<_, BoxError>(Service::new(app, stream))
     });
     builder.serve(make_service).await.expect("Server error");
+}
+
+async fn import_key(builder: ConfigBuilder, file: &Path) {
+    let contents = match std::fs::read(file) {
+        Ok(contents) => contents,
+        Err(err) => panic!("Could not open key file '{}': {}", file.display(), err),
+    };
+
+    let contents = match String::from_utf8(contents) {
+        Ok(contents) => contents,
+        Err(err) => panic!("Key file '{}' is not valid UTF-8: {}", file.display(), err),
+    };
+
+    let key = match pem::parse_key_pairs(Cursor::new(contents.as_bytes())) {
+        Ok(keys) if keys.len() == 1 => keys.into_iter().next().unwrap(),
+        Ok(_) => panic!(
+            "Expected exactly one PEM block in key file '{}'",
+            file.display()
+        ),
+        Err(err) => panic!(
+            "Could not parse PEM in key file '{}': {}",
+            file.display(),
+            err
+        ),
+    };
+
+    let keys_ttl = builder.keys_ttl;
+    let store = builder
+        .into_store()
+        .await
+        .unwrap_or_else(|err| panic!(format!("failed to build configuration: {}", err)));
+
+    let signing_alg = match key {
+        ParsedKeyPair::Ed25519(_) => SigningAlgorithm::EdDsa,
+        ParsedKeyPair::Rsa(_) => SigningAlgorithm::Rs256,
+    };
+    store
+        .send(ImportKeySet(KeySet {
+            signing_alg,
+            current: Some(Expiring {
+                value: contents,
+                expires: SystemTime::now() + keys_ttl,
+            }),
+            next: None,
+            previous: None,
+        }))
+        .await;
+    eprintln!("Successfully imported {} key", signing_alg);
+
+    // TODO: This is a little hacky, but we don't have code to shutdown gracefully.
+    // (Currently, if a Redis store is simply dropped, the pubsub task panics.)
+    std::process::exit(0);
 }

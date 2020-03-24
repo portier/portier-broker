@@ -1,6 +1,7 @@
 use super::{ConfigBuilder, LimitConfig};
 use crate::crypto::SigningAlgorithm;
 use serde_derive::Deserialize;
+use std::path::PathBuf;
 use std::time::Duration;
 
 /// Intermediate structure for deserializing environment variables
@@ -22,13 +23,13 @@ pub struct EnvConfig {
     session_ttl: Option<u64>,
     cache_ttl: Option<u64>,
 
-    keyfiles: Option<Vec<String>>,
+    keyfiles: Option<Vec<PathBuf>>,
     keytext: Option<String>,
     signing_algs: Option<Vec<SigningAlgorithm>>,
     generate_rsa_command: Option<String>,
 
     redis_url: Option<String>,
-    sqlite_db: Option<String>,
+    sqlite_db: Option<PathBuf>,
     memory_storage: Option<bool>,
 
     from_name: Option<String>,

@@ -58,6 +58,7 @@ impl<A, M: Message> Context<A, M> {
     ///
     /// This is useful for blocks of code that operate on `Result`, and would benefit from using
     /// the `?`-operator.
+    #[allow(dead_code)]
     pub fn reply_with<F>(self, f: F)
     where
         F: FnOnce() -> M::Reply,

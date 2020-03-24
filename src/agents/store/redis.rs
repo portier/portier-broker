@@ -267,6 +267,17 @@ impl Handler<RotateKeysLocked> for RedisStore {
     }
 }
 
+impl Handler<ImportKeySet> for RedisStore {
+    fn handle(&mut self, message: ImportKeySet, cx: Context<Self, ImportKeySet>) {
+        let me = cx.addr().clone();
+        cx.reply_later(async move {
+            me.send(SaveKeys(message.0))
+                .await
+                .expect("Failed to save keys to Redis");
+        });
+    }
+}
+
 impl Handler<LockKeys> for RedisStore {
     fn handle(&mut self, message: LockKeys, cx: Context<Self, LockKeys>) {
         let mut locking = self.locking.clone();

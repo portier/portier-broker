@@ -3,6 +3,7 @@ use crate::config::LimitConfig;
 use crate::crypto::SigningAlgorithm;
 use crate::utils::{agent::*, unix_timestamp};
 use ::rusqlite::{Connection, Error as SqlError, OptionalExtension, ToSql, NO_PARAMS};
+use std::path::PathBuf;
 use std::time::Duration;
 use tokio::task::spawn_blocking;
 use url::Url;
@@ -56,7 +57,7 @@ pub struct RusqliteStore {
 
 impl RusqliteStore {
     pub async fn new(
-        sqlite_db: String,
+        sqlite_db: PathBuf,
         expire_sessions: Duration,
         expire_cache: Duration,
         limit_per_email_config: LimitConfig,
@@ -67,7 +68,10 @@ impl RusqliteStore {
             conn.busy_timeout(Duration::from_millis(500))?;
             Self::verify_app_id(&conn)?;
             Self::verify_schema(&conn)?;
-            log::warn!("Storing sessions and keys in SQLite at: {}", sqlite_db);
+            log::warn!(
+                "Storing sessions and keys in SQLite at: {}",
+                sqlite_db.display()
+            );
             log::warn!("Please always double check this directory has secure permissions!");
             log::warn!("(This warning can't be fixed; it's a friendly reminder.)");
             Ok(RusqliteStore {
@@ -361,6 +365,17 @@ impl Handler<RotateKeysLocked> for RusqliteStore {
                     .expect("Could not save keys to SQLite");
                 key_manager.send(UpdateKeys(key_set)).await;
             }
+        });
+    }
+}
+
+impl Handler<ImportKeySet> for RusqliteStore {
+    fn handle(&mut self, message: ImportKeySet, cx: Context<Self, ImportKeySet>) {
+        let me = cx.addr().clone();
+        cx.reply_later(async move {
+            me.send(SaveKeys(message.0))
+                .await
+                .expect("Could not save keys to SQLite");
         });
     }
 }

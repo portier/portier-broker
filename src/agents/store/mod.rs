@@ -1,4 +1,4 @@
-use crate::agents::key_manager::rotating::RotatingKeys;
+use crate::agents::key_manager::rotating::{KeySet, RotatingKeys};
 use crate::crypto::SigningAlgorithm;
 use crate::utils::agent::{Addr, Message, Sender};
 use crate::utils::BoxError;
@@ -82,6 +82,14 @@ impl Message for RotateKeysLocked {
     type Reply = ();
 }
 
+/// Write a new key set, and notify other workers if possible.
+///
+/// This is used to implement `--import-key`.
+pub struct ImportKeySet(pub KeySet);
+impl Message for ImportKeySet {
+    type Reply = ();
+}
+
 /// Store abstraction. Combines all message types.
 ///
 /// Downside of this is that it needs to be implemented on the agent side as:
@@ -94,6 +102,7 @@ pub trait StoreSender:
     + Sender<IncrAndTestLimit>
     + Sender<EnableRotatingKeys>
     + Sender<RotateKeysLocked>
+    + Sender<ImportKeySet>
 {
 }
 

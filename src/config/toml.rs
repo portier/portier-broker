@@ -4,6 +4,7 @@ use crate::webfinger::Link;
 use serde_derive::Deserialize;
 use std::collections::HashMap;
 use std::fs;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 /// Intermediate structure for deserializing TOML files
@@ -22,13 +23,13 @@ pub struct TomlConfig {
     session_ttl: Option<u64>,
     cache_ttl: Option<u64>,
 
-    keyfiles: Option<Vec<String>>,
+    keyfiles: Option<Vec<PathBuf>>,
     keytext: Option<String>,
     signing_algs: Option<Vec<SigningAlgorithm>>,
     generate_rsa_command: Option<Vec<String>>,
 
     redis_url: Option<String>,
-    sqlite_db: Option<String>,
+    sqlite_db: Option<PathBuf>,
     memory_storage: Option<bool>,
 
     from_name: Option<String>,
@@ -70,7 +71,7 @@ struct TomlHeadersTable {
 #[derive(Deserialize)]
 struct TomlCryptoTable {
     token_ttl: Option<u64>,
-    keyfiles: Option<Vec<String>>,
+    keyfiles: Option<Vec<PathBuf>>,
     keytext: Option<String>,
 }
 
@@ -101,7 +102,7 @@ struct TomlGoogleTable {
 }
 
 impl TomlConfig {
-    pub fn parse_and_apply(path: &str, builder: &mut ConfigBuilder) {
+    pub fn parse_and_apply(path: &Path, builder: &mut ConfigBuilder) {
         let parsed = Self::parse(path);
         Self::apply(parsed, builder);
     }
@@ -115,7 +116,7 @@ impl TomlConfig {
     }
 
     #[allow(clippy::cognitive_complexity)]
-    fn parse(path: &str) -> TomlConfig {
+    fn parse(path: &Path) -> TomlConfig {
         let data = fs::read(path).expect("Could not read config file");
         let mut parsed: TomlConfig =
             toml::from_slice(&data).expect("Could not parse TOML in config file");
