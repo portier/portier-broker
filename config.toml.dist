@@ -1,64 +1,169 @@
-[server]
-# IP address to bind to - Default: "127.0.0.1"
+################################################################
+# Portier Broker configuration template
+#
+# All settings in this template are listed with their defaults. If the default
+# value of a setting is fine, you can leave the setting out of your
+# configuration.
+#
+# If a setting in this template is commented, that means it is unset by
+# default, and any value listed is an example only.
+#
+# Alternatively, the broker can be configured using the environment. Each
+# setting here has a matching `BROKER_*` environment variable. For example,
+# `public_url` can also be set using the `BROKER_PUBLIC_URL` environment
+# variable.
+#
+# Configuration from the environment takes precedence over the configuration
+# file. (It's also possible to use the environment only, without a
+# configuration file.)
+
+################################################################
+# Basic settings
+
+# The IP address and port to bind the HTTP server to. Note that `listen_ip`
+# accepts IPv4 and IPv6, but currently not hostnames.
+# 
+# Alternatively, you may use systemd socket activation to pass in a listening
+# socket, in which case these settings are ignored. (See the included systemd
+# unit file.)
+#
+# Also note that the broker currently only talks plain HTTP, and not HTTPS.
+# Using HTTPS is strongly recommended, but you'll need to add a reverse proxy
+# in front of the broker to do this. (Apache or Nginx can do this for you.)
+#
+# If using the Docker image, you can leave these settings out of your config.
+
 listen_ip = "127.0.0.1"
-# Port to bind to - Default: 3333
 listen_port = 3333
-# Server's user-facing URL (mandatory, CHANGE THIS)
-public_url =
-# Whitelist of client origins to allow - Default: (none (unrestricted))
-allowed_origins =
 
+# The broker server's public-facing URL.
+#
+# It's important to set this correctly, or JSON Web Tokens will fail to
+# validate. Relying Parties will use the same value for their Broker URL. To
+# ensure consistency, trailing slashes should be avoided.
 
-[headers]
-# Static resources cache max-age we indicate to clients - Default: 604800 (1 week)
-static_ttl = 604800
-# Discovery JSON cache max-age we indicate to clients - Default: 604800 (1 week)
-discovery_ttl = 604800
-# Keys JSON cache max-age we indicate to clients - Default: 86400 (1 day)
-keys_ttl = 86400
+public_url = "" # Required
 
+# Whitelist of origins that are allowed to use this broker. If left unset, the
+# broker will allow any Relying Party to use it. (Note that an empty list here
+# has different meaning than leaving it unset.)
 
-[crypto]
-# Duration that id_tokens are valid for - Default: 600 (10 minutes)
-token_ttl = 600
-# Array of file paths to PEM-formatted signing keys - (mandatory, CHANGE THIS)
-keyfiles = []
-# Text of the key file in PEM format (set either this or keyfiles) - Default: (none)
-keytext =
+#allowed_origins = ["https://example.com"]
 
+# Storage method to use. Selecting one of these is required.
+#
+# For simple installations, SQLite is recommended. Please also read:
+# https://github.com/portier/portier-broker/blob/master/docs/storage/sqlite.md
+#
+# Alternatively, Redis can be useful when running multiple instances of the
+# broker, or when there's no persistent file storage. This is common with cloud
+# hosting, like Heroku. Please also read:
+# https://github.com/portier/portier-broker/blob/master/docs/storage/redis.md
+#
+# In-memory storage is an option that should only be used for local testing.
 
-[redis]
-# Redis connection URL - Default: (mandatory, CHANGE THIS) (example: redis://localhost, redis://localhost:6379/0)
-url =
-# Time that users have to complete authentication - Default: 900 (15 minutes)
-session_ttl = 900
-# Time that provider discovery documents are cached - Default: 3600 (1 hour)
-cache_ttl = 3600
+#sqlite_db = "/var/lib/portier-broker/db.sqlite3"
+#redis_url = "redis://localhost/0"
+#memory_storage = true
 
+# The 'From' name and address used by Portier to send emails.
 
-[smtp]
-# Display name for confirmation emails - Default: "Portier"
 from_name = "Portier"
-# Sender address for confirmation emails - (mandatory, CHANGE THIS)
-from_address =
-# Outgoing mailserver address - (mandatory, CHANGE THIS)
-server =
-# Outgoing mailserver username - Default: (none)
-username =
-# Outgoing mailserver password - Default: (none)
-password =
+from_address = "" # Required
 
+# SMTP server configuration.
 
-[limit]
-# Authentication ratelimit for a single email address - Default: "5/min"
+smtp_server = "" # Required
+#smtp_username = ""
+#smtp_password = ""
+
+# Optional Google Client ID for verifying `@gmail.com` addresses.
+# You can create one of these at: https://console.cloud.google.com/
+
+#google_client_id = ""
+
+# To generate RSA keys, the broker runs an external command. By default, this
+# looks for the OpenSSL CLI in `$PATH`, but you may need to change this for
+# your environment. Whatever command you specify here should output a single
+# PEM key on stdout.
+#
+# Using automatic key rotation is strongly recommended, but if you cannot
+# provide a working value for this setting, it's possible to manually configure
+# keys. See the `keyfiles` and `keytext` options in the advanced section for
+# how to do this.
+
+generate_rsa_command = ["openssl", "genrsa", "2048"]
+
+################################################################
+# Advanced settings
+
+# Authentication ratelimit for a single email address.
 # Currently only supports "/min" unit.
-per_email = "5/min"
 
+limit_per_email = "5/min"
 
-[providers."gmail.com"]
-# Google OAuth API Client ID - Default: (none)
-client_id =
-# Google OpenID Connect discovery URL - Default: "https://accounts.google.com/.well-known/openid-configuration"
-discovery_url = "https://accounts.google.com/.well-known/openid-configuration"
-# Google OpenID Connect id_token issuer domain - Default: "accounts.google.com"
-issuer_domain = "accounts.google.com"
+# By default, the broker automatically generates and rotates keys used to sign
+# JSON Web Tokens. If for some reason you wish to provide keys manually, you
+# can do so with these settings.
+#
+# Only PEM format is accepted, but the `keytext` and each file in `keyfiles`
+# may contain multiple PEM blocks. The broker will list all public keys in API
+# responses, but will only use the last key for signing.
+
+keyfiles = []
+#keytext = """
+#-----BEGIN PRIVATE KEY-----
+#[...]
+#"""
+
+# Signing algorithms to use for JSON Web Tokens. Currently supported values
+# are: RS256, EdDSA. The protocol for selecting algorithms other than RS256 is
+# experimental and non-standard, so by default only RS256 is enabled.
+
+signing_algs = ["RS256"]
+
+# Directory that contains broker data files. This directory should contain the
+# `lang`, `res` and `tmpl` subdirectories. The default empty string value for
+# this setting causes the broker to use the current working directory.
+
+data_dir = ""
+
+# Various Time-To-Live values can be tweaked from their recommended defaults.
+# If the default values don't suit your deployment, we'd love to hear why!
+
+# HTTP max-age for our static resources
+static_ttl = 604800 # 1 week
+# HTTP max-age for our discovery JSON
+discovery_ttl = 604800 # 1 week
+# Key rotation rate, and HTTP max-age for our keys JSON
+keys_ttl = 86400 # 1 day
+# Duration that JSON Web Tokens are valid for
+token_ttl = 600 # 10 minutes
+# Time that users have to complete authentication
+session_ttl = 900 # 15 minutes
+# Minimum cache time for downstream HTTP requests made by the broker
+cache_ttl = 3600 # 1 hour
+
+################################################################
+# WebFinger overrides
+
+# The broker uses WebFinger to discover domains that provide custom
+# authentication. If WebFinger cannot be configured on a domain, custom
+# overrides can be configured with sections like the ones below. (Note that it
+# is currently not possible to configure these overrides using environment
+# variables.)
+
+# The following example enables Google authentication for a domain. Note that
+# both `rel` and `href` should be treated as magic constants.
+
+#[[domain_overrides."example.com"]]
+#rel = "https://portier.io/specs/auth/1.0/idp/google"
+#href = "https://accounts.google.com"
+
+# The following example configures a custom Portier Identity Provider for a
+# domain. Note that `rel` here should be treated as a magic constant, and
+# `href` points to the actual Identity Provider implementation.
+
+#[[domain_overrides."example.com"]]
+#rel = "https://portier.io/specs/auth/1.0/idp"
+#href = "https://identity-provider.example.com"

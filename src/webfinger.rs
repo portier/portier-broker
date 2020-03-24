@@ -1,9 +1,10 @@
+use crate::agents::FetchUrlCached;
 use crate::config::ConfigRc;
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
-use crate::serde_helpers::UrlDef;
-use crate::store_cache::{fetch_json_url, CacheKey};
+use err_derive::Error;
 use serde_derive::{Deserialize, Serialize};
+use std::fmt::{Display, Error as FmtError, Formatter};
 use std::str::FromStr;
 use url::Url;
 
@@ -27,40 +28,63 @@ pub struct LinkDef {
     pub href: String,
 }
 
+#[derive(Debug, Error)]
+pub enum ParseRelationError {
+    #[error(display = "invalid value: {}", _0)]
+    InvalidValue(String),
+}
+
 /// Parsed and validated webfinger relation
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Relation {
     Portier,
     Google,
 }
 
+impl Display for Relation {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), FmtError> {
+        match self {
+            Relation::Portier => Display::fmt(WEBFINGER_PORTIER_REL, f),
+            Relation::Google => Display::fmt(WEBFINGER_GOOGLE_REL, f),
+        }
+    }
+}
+
 impl FromStr for Relation {
-    type Err = &'static str;
-    fn from_str(s: &str) -> Result<Relation, &'static str> {
+    type Err = ParseRelationError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             WEBFINGER_PORTIER_REL => Ok(Relation::Portier),
             WEBFINGER_GOOGLE_REL => Ok(Relation::Google),
-            _ => Err("unsupported value"),
+            value => Err(ParseRelationError::InvalidValue(value.to_owned())),
         }
     }
+}
+
+serde_string!(Relation);
+
+#[derive(Debug, Error)]
+pub enum ParseLinkError {
+    #[error(display = "invalid relation: {}", _0)]
+    InvalidRelation(#[error(source)] ParseRelationError),
+    #[error(display = "invalid href: {}", _0)]
+    InvalidHref(#[error(source)] url::ParseError),
 }
 
 /// Parsed and validated webfinger link
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Link {
     pub rel: Relation,
-    #[serde(with = "UrlDef")]
     pub href: Url,
 }
 
 impl Link {
     /// Parse and validate a deserialized link
-    pub fn from_de_link(link: &LinkDef) -> Result<Link, String> {
-        match (link.rel.parse(), link.href.parse()) {
-            (Ok(rel), Ok(href)) => Ok(Link { rel, href }),
-            (Err(e), _) => Err(format!("invalid rel: {}", e)),
-            (_, Err(e)) => Err(format!("invalid href: {}", e)),
-        }
+    pub fn from_de_link(link: &LinkDef) -> Result<Link, ParseLinkError> {
+        let rel = link.rel.parse()?;
+        let href = link.href.parse()?;
+        Ok(Link { rel, href })
     }
 }
 
@@ -93,14 +117,13 @@ pub async fn query(app: &ConfigRc, email_addr: &EmailAddress) -> Result<Vec<Link
     .map_err(|e| BrokerError::Internal(format!("could not build webfinger query url: {}", e)))?;
 
     // Make the request.
-    let descriptor: DescriptorDef = fetch_json_url(
-        app,
-        url,
-        &CacheKey::Discovery {
-            acct: email_addr.as_str(),
-        },
-    )
-    .await?;
+    let descriptor = app
+        .store
+        .send(FetchUrlCached { url })
+        .await
+        .map_err(|e| BrokerError::Provider(format!("webfinger request failed: {}", e)))?;
+    let descriptor: DescriptorDef = serde_json::from_str(&descriptor)
+        .map_err(|e| BrokerError::Provider(format!("invalid webfinger response: {}", e)))?;
 
     // Parse the relations.
     let links = descriptor

@@ -1,11 +1,11 @@
 use crate::error::BrokerError;
-use crate::http_ext::ResponseExt;
+use crate::utils::http::ResponseExt;
 use crate::web::{empty_response, Context, HandlerResult};
 use headers::ContentType;
 use http::{Response, StatusCode};
 use hyper::Body;
 use hyper_staticfile::{resolve_path, ResponseBuilder};
-use std::{env, path::Path};
+use std::env;
 
 /// Handler for the root path, redirects to the Portier homepage.
 pub async fn index(_: &mut Context) -> HandlerResult {
@@ -35,13 +35,12 @@ pub async fn version(_: &mut Context) -> HandlerResult {
 
 /// Static serving of resources.
 pub async fn static_(ctx: &mut Context) -> HandlerResult {
-    let res_path = Path::new("./res/");
-    let result = resolve_path(res_path, ctx.uri.path())
+    let result = resolve_path(&ctx.app.res_dir, ctx.uri.path())
         .await
         .map_err(|e| BrokerError::Internal(format!("static serving failed: {}", e)))?;
     let res = ResponseBuilder::new()
         .request_parts(&ctx.method, &ctx.uri, &ctx.headers)
-        .cache_headers(Some(ctx.app.static_ttl))
+        .cache_headers(Some(ctx.app.static_ttl.as_secs() as u32))
         .build(result)
         .expect("could not build static serving response");
     Ok(res)

@@ -1,12 +1,13 @@
+use crate::agents::{GetSession, SaveSession};
 use crate::bridges::BridgeData;
 use crate::config::ConfigRc;
-use crate::crypto;
+use crate::crypto::{self, SigningAlgorithm};
 use crate::email_address::EmailAddress;
 use crate::error::{BrokerError, BrokerResult};
-use crate::http_ext::ResponseExt;
 use crate::router::router;
-use crate::serde_helpers::UrlDef;
+use crate::utils::{http::ResponseExt, BoxError, BoxFuture};
 use bytes::{Bytes, BytesMut};
+use err_derive::Error;
 use futures_util::stream::StreamExt;
 use gettext::Catalog;
 use headers::{CacheControl, ContentType, Header, StrictTransportSecurity};
@@ -17,27 +18,16 @@ use hyper::Body;
 use log::info;
 use serde_derive::{Deserialize, Serialize};
 use serde_json as json;
-use std::{
-    collections::HashMap, error::Error, fmt, future::Future, net::SocketAddr, pin::Pin, sync::Arc,
-    task::Poll, time::Duration,
-};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc, task::Poll, time::Duration};
 use url::{form_urlencoded, Url};
 
-pub type BoxError = Box<dyn Error + Send + Sync>;
-pub type BoxFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send>>;
-
 /// Error type used within an `io::Error`, to indicate a size limit was exceeded.
-#[derive(Debug)]
+#[derive(Debug, Error)]
+#[error(display = "size limit exceeded")]
 pub struct SizeLimitExceeded;
-impl Error for SizeLimitExceeded {}
-impl fmt::Display for SizeLimitExceeded {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        fmt.write_str("size limit exceeded")
-    }
-}
 
 /// A session as stored in Redis.
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Session {
     pub data: SessionData,
     pub bridge_data: BridgeData,
@@ -55,7 +45,6 @@ pub enum ResponseMode {
 /// Parameters used to return to the relying party
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ReturnParams {
-    #[serde(with = "UrlDef")]
     pub redirect_uri: Url,
     pub response_mode: ResponseMode,
     pub response_errors: bool,
@@ -63,13 +52,13 @@ pub struct ReturnParams {
 }
 
 /// Common session data.
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct SessionData {
     pub return_params: ReturnParams,
     pub email: String,
-    #[serde(deserialize_with = "EmailAddress::deserialize_trusted")]
     pub email_addr: EmailAddress,
     pub nonce: String,
+    pub signing_alg: SigningAlgorithm,
 }
 
 /// Context for a request
@@ -115,12 +104,13 @@ impl Context {
     }
 
     /// Start a session by filling out the common part.
-    pub fn start_session(
+    pub async fn start_session(
         &mut self,
         client_id: &str,
         email: &str,
         email_addr: &EmailAddress,
         nonce: &str,
+        signing_alg: SigningAlgorithm,
     ) {
         assert!(self.session_id.is_empty());
         assert!(self.session_data.is_none());
@@ -128,12 +118,13 @@ impl Context {
             .return_params
             .as_ref()
             .expect("start_session called without return parameters");
-        self.session_id = crypto::session_id(email_addr, client_id, &self.app.rng);
+        self.session_id = crypto::session_id(email_addr, client_id, &self.app.rng).await;
         self.session_data = Some(SessionData {
             return_params: return_params.clone(),
             email: email.to_owned(),
             email_addr: email_addr.clone(),
             nonce: nonce.to_owned(),
+            signing_alg,
         });
     }
 
@@ -146,12 +137,14 @@ impl Context {
             Some(data) => data,
             None => return Ok(false),
         };
-        let data = json::to_string(&Session { data, bridge_data })
-            .map_err(|e| BrokerError::Internal(format!("could not serialize session: {}", e)))?;
         self.app
             .store
-            .store_session(&self.session_id, &data)
-            .await?;
+            .send(SaveSession {
+                session_id: self.session_id.clone(),
+                data: Session { data, bridge_data },
+            })
+            .await
+            .map_err(|e| BrokerError::Internal(format!("could not save a session: {}", e)))?;
         Ok(true)
     }
 
@@ -160,9 +153,15 @@ impl Context {
         assert!(self.session_id.is_empty());
         assert!(self.session_data.is_none());
         assert!(self.return_params.is_none());
-        let data = self.app.store.get_session(id).await?;
-        let Session { data, bridge_data } = json::from_str(&data)
-            .map_err(|e| BrokerError::Internal(format!("could not deserialize session: {}", e)))?;
+        let Session { data, bridge_data } = self
+            .app
+            .store
+            .send(GetSession {
+                session_id: id.to_owned(),
+            })
+            .await
+            .map_err(|e| BrokerError::Internal(format!("could not load a session: {}", e)))?
+            .ok_or(BrokerError::SessionExpired)?;
         self.return_params = Some(data.return_params.clone());
         self.session_id = id.to_owned();
         self.session_data = Some(data);
@@ -242,7 +241,10 @@ impl Service {
         let result = router(&mut ctx).await;
 
         // Translate broker errors to responses.
-        let mut response = result.unwrap_or_else(|err| handle_error(&ctx, err));
+        let mut response = match result {
+            Ok(res) => res,
+            Err(err) => handle_error(&ctx, err).await,
+        };
 
         // Set common response headers.
         set_headers(&mut response);
@@ -254,7 +256,7 @@ impl Service {
 impl HyperService<Request> for Service {
     type Response = Response;
     type Error = BoxError;
-    type Future = BoxFuture<Response, BoxError>;
+    type Future = BoxFuture<Result<Response, BoxError>>;
 
     fn poll_ready(&mut self, _cx: &mut std::task::Context) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
@@ -287,8 +289,8 @@ impl HyperService<Request> for Service {
 ///
 /// The large match-statement below handles all these scenario's properly, and
 /// sets proper response codes for each category.
-fn handle_error(ctx: &Context, err: BrokerError) -> Response {
-    let reference = err.log(Some(&ctx.app.rng));
+async fn handle_error(ctx: &Context, err: BrokerError) -> Response {
+    let reference = err.log(Some(&ctx.app.rng)).await;
 
     // Check if we can redirect to the RP. We must have return parameters, and the RP must not have
     // opted out from receiving errors in the redirect response.
@@ -413,13 +415,9 @@ pub fn parse_form_encoded(input: &[u8]) -> HashMap<String, String> {
 pub async fn read_body(mut body: Body) -> Result<Bytes, BoxError> {
     let mut acc = BytesMut::new();
     while let Some(result) = body.next().await {
-        // TODO: We can use `.map_err(Box::new)?` starting Rust 1.40.
-        let chunk = match result {
-            Ok(chunk) => chunk,
-            Err(err) => return Err(Box::new(err).into()),
-        };
+        let chunk = result.map_err(Box::new)?;
         if acc.len() + chunk.len() > 8096 {
-            return Err(Box::new(SizeLimitExceeded).into());
+            return Err(Box::new(SizeLimitExceeded));
         }
         acc.extend(chunk);
     }
@@ -479,15 +477,11 @@ pub fn return_to_relier(ctx: &Context, params: &[(&str, &str)]) -> Response {
 ///
 /// Serializes the argument value to JSON and returns a HTTP 200 response
 /// code with the serialized JSON as the body.
-pub fn json_response(obj: &json::Value, max_age: u64) -> Response {
+pub fn json_response(obj: &json::Value, max_age: Duration) -> Response {
     let body = json::to_string(&obj).expect("unable to coerce JSON Value into string");
     let mut res = Response::new(Body::from(body));
     res.typed_header(ContentType::json());
-    res.typed_header(
-        CacheControl::new()
-            .with_public()
-            .with_max_age(Duration::from_secs(max_age)),
-    );
+    res.typed_header(CacheControl::new().with_public().with_max_age(max_age));
     res
 }
 

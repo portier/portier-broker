@@ -1,10 +1,11 @@
+use crate::agents::{GetPublicJwks, IncrAndTestLimit};
 use crate::bridges;
+use crate::crypto::SigningAlgorithm;
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
-use crate::store_limits::addr_limiter;
 use crate::validation::parse_redirect_uri;
 use crate::web::{html_response, json_response, Context, HandlerResult, ReturnParams};
-use crate::webfinger::{self, Link, Relation};
+use crate::webfinger::{self, Relation};
 use futures_util::future::{self, Either};
 use http::Method;
 use log::info;
@@ -27,7 +28,9 @@ pub async fn discovery(ctx: &mut Context) -> HandlerResult {
         "response_modes_supported": vec!["form_post", "fragment"],
         "grant_types_supported": vec!["implicit"],
         "subject_types_supported": vec!["public"],
-        "id_token_signing_alg_values_supported": vec!["RS256"],
+        "id_token_signing_alg_values_supported": &ctx.app.signing_algs,
+        // NOTE: This field is non-standard.
+        "accepts_id_token_signing_alg_query_param": true,
     });
     Ok(json_response(&obj, ctx.app.discovery_ttl))
 }
@@ -40,9 +43,7 @@ pub async fn discovery(ctx: &mut Context) -> HandlerResult {
 /// tokens issued by this daemon instance.
 pub async fn key_set(ctx: &mut Context) -> HandlerResult {
     let obj = json!({
-        "keys": ctx.app.keys.iter()
-            .map(|key| key.public_jwk())
-            .collect::<Vec<_>>(),
+        "keys": ctx.app.key_manager.send(GetPublicJwks).await
     });
     Ok(json_response(&obj, ctx.app.keys_ttl))
 }
@@ -120,13 +121,25 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
         ));
     }
 
+    // NOTE: This query parameter is non-standard.
+    let signing_alg = try_get_input_param!(params, "id_token_signing_alg", "RS256".to_owned());
+    let signing_alg = signing_alg
+        .parse()
+        .ok()
+        .filter(|alg| ctx.app.signing_algs.contains(alg))
+        .ok_or_else(|| {
+            BrokerError::Input(format!(
+                "unsupported id_token_signing_alg, must be one of: {}",
+                SigningAlgorithm::format_list(&*ctx.app.signing_algs)
+            ))
+        })?;
+
     let login_hint = try_get_input_param!(params, "login_hint", "".to_string());
     if login_hint == "" {
         let display_origin = redirect_uri_.origin().unicode_serialization();
 
         let catalog = ctx.catalog();
         let data = mustache::MapBuilder::new()
-            // TODO: catalog/localization?
             .insert_str("display_origin", display_origin)
             .insert_str("title", catalog.gettext("Finish logging in to"))
             .insert_str(
@@ -159,18 +172,27 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
         .map_err(|_| BrokerError::Input("login_hint is not a valid email address".to_owned()))?;
 
     // Enforce ratelimit based on the normalized email.
-    if !addr_limiter(
-        &ctx.app.store,
-        email_addr.as_str(),
-        &ctx.app.limit_per_email,
-    )
-    .await?
+    match ctx
+        .app
+        .store
+        .send(IncrAndTestLimit::PerEmail {
+            addr: email_addr.as_str().to_owned(),
+        })
+        .await
     {
-        return Err(BrokerError::RateLimited);
+        Ok(true) => {}
+        Ok(false) => return Err(BrokerError::RateLimited),
+        Err(e) => {
+            return Err(BrokerError::Internal(format!(
+                "could not test rate limit: {}",
+                e
+            )))
+        }
     }
 
     // Create the session with common data, but do not yet save it.
-    ctx.start_session(&client_id, &login_hint, &email_addr, &nonce);
+    ctx.start_session(&client_id, &login_hint, &email_addr, &nonce, signing_alg)
+        .await;
 
     // Discover the authentication endpoints based on the email domain.
     let discovery_future = async {
@@ -178,21 +200,12 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
 
         // Try to authenticate with the first provider.
         // TODO: Queue discovery of links and process in order, with individual timeouts.
-        match links.first() {
+        let link = links.first().ok_or(BrokerError::ProviderCancelled)?;
+        match link.rel {
             // Portier and Google providers share an implementation
-            Some(
-                link @ &Link {
-                    rel: Relation::Portier,
-                    ..
-                },
-            )
-            | Some(
-                link @ &Link {
-                    rel: Relation::Google,
-                    ..
-                },
-            ) => bridges::oidc::auth(ctx, &email_addr, link).await,
-            _ => Err(BrokerError::ProviderCancelled),
+            Relation::Portier | Relation::Google => {
+                bridges::oidc::auth(ctx, &email_addr, link).await
+            }
         }
     };
 
@@ -229,7 +242,7 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
         Either::Right((Err(e @ BrokerError::Provider(_)), _))
         | Either::Right((Err(e @ BrokerError::ProviderCancelled), _)) => {
             // Provider errors cause fallback to email loop auth.
-            e.log(None);
+            e.log(None).await;
         }
         Either::Right((Err(e), _)) => {
             // Other errors during discovery are bubbled.

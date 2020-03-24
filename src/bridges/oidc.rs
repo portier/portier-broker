@@ -1,17 +1,14 @@
+use crate::agents::FetchUrlCached;
 use crate::bridges::{complete_auth, BridgeData};
-use crate::config::GoogleConfig;
-use crate::crypto;
+use crate::crypto::{self, SigningAlgorithm};
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
-use crate::http_ext::ResponseExt;
-use crate::serde_helpers::UrlDef;
-use crate::store_cache::{fetch_json_url, CacheKey};
+use crate::utils::{http::ResponseExt, unix_timestamp};
 use crate::validation;
 use crate::web::{empty_response, Context, HandlerResult};
 use crate::webfinger::{Link, Relation};
 use http::StatusCode;
 use serde_derive::{Deserialize, Serialize};
-use std::time::{SystemTime, UNIX_EPOCH};
 use url::Url;
 
 /// The origin of the Google identity provider.
@@ -20,27 +17,35 @@ pub const GOOGLE_IDP_ORIGIN: &str = "https://accounts.google.com";
 pub const LEEWAY: u64 = 30;
 
 /// Data we store in the session.
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct OidcBridgeData {
     pub link: Link,
     pub origin: String,
     pub client_id: String,
     pub nonce: String,
+    pub signing_alg: SigningAlgorithm,
 }
 
 /// OpenID Connect configuration document.
 #[derive(Deserialize)]
 struct ProviderConfig {
-    #[serde(with = "UrlDef")]
     authorization_endpoint: Url,
-    #[serde(with = "UrlDef")]
     jwks_uri: Url,
     #[serde(default = "default_response_modes_supported")]
     response_modes_supported: Vec<String>,
+    #[serde(default = "default_id_token_signing_alg_values_supported")]
+    id_token_signing_alg_values_supported: Vec<String>,
+    // NOTE: This field is non-standard.
+    #[serde(default)]
+    accepts_id_token_signing_alg_query_param: bool,
 }
 
 fn default_response_modes_supported() -> Vec<String> {
     vec!["fragment".to_owned()]
+}
+
+fn default_id_token_signing_alg_values_supported() -> Vec<String> {
+    vec!["RS256".to_owned()]
 }
 
 /// OpenID Connect key set document.
@@ -53,14 +58,20 @@ struct ProviderKeys {
 #[derive(Deserialize)]
 pub struct ProviderKey {
     #[serde(default)]
-    pub kid: String,
+    pub alg: String,
+    #[serde(default)]
+    pub crv: String,
     #[serde(rename = "use")]
     #[serde(default)]
     pub use_: String,
     #[serde(default)]
+    pub kid: String,
+    #[serde(default)]
     pub n: String,
     #[serde(default)]
     pub e: String,
+    #[serde(default)]
+    pub x: String,
 }
 
 /// Provide authentication using OpenID Connect.
@@ -73,13 +84,13 @@ pub struct ProviderKey {
 /// the Google provider, for which we have a preregistered `client_id`.
 pub async fn auth(ctx: &mut Context, email_addr: &EmailAddress, link: &Link) -> HandlerResult {
     // Generate a nonce for the provider.
-    let provider_nonce = crypto::nonce(&ctx.app.rng);
+    let provider_nonce = crypto::nonce(&ctx.app.rng).await;
 
     // Determine the parameters to use, based on the webfinger link.
     let provider_origin = validation::parse_oidc_href(&link.href).ok_or_else(|| {
         BrokerError::Provider(format!("invalid href (validation failed): {}", link.href))
     })?;
-    let bridge_data = match link.rel {
+    let mut bridge_data = match link.rel {
         Relation::Portier => {
             #[cfg(not(feature = "insecure"))]
             {
@@ -95,13 +106,14 @@ pub async fn auth(ctx: &mut Context, email_addr: &EmailAddress, link: &Link) -> 
                 origin: provider_origin,
                 client_id: ctx.app.public_url.clone(),
                 nonce: provider_nonce,
+                signing_alg: SigningAlgorithm::Rs256,
             }
         }
         // Delegate to the OpenID Connect bridge for Google, if configured.
         Relation::Google => {
-            let GoogleConfig { ref client_id } = ctx
+            let client_id = ctx
                 .app
-                .google
+                .google_client_id
                 .as_ref()
                 .ok_or(BrokerError::ProviderCancelled)?;
             if provider_origin != GOOGLE_IDP_ORIGIN {
@@ -115,16 +127,22 @@ pub async fn auth(ctx: &mut Context, email_addr: &EmailAddress, link: &Link) -> 
                 origin: provider_origin,
                 client_id: client_id.clone(),
                 nonce: provider_nonce,
+                signing_alg: SigningAlgorithm::Rs256,
             }
         }
     };
 
     // Retrieve the provider's configuration.
-    let ProviderConfig {
-        authorization_endpoint: mut auth_url,
-        response_modes_supported: response_modes,
-        ..
-    } = fetch_config(ctx, &bridge_data).await?;
+    let (
+        ProviderConfig {
+            authorization_endpoint: mut auth_url,
+            response_modes_supported: response_modes,
+            id_token_signing_alg_values_supported: signing_algs,
+            accepts_id_token_signing_alg_query_param: accepts_signing_alg,
+            ..
+        },
+        key_set,
+    ) = fetch_config(ctx, &bridge_data).await?;
 
     {
         // Create the URL to redirect to.
@@ -149,6 +167,30 @@ pub async fn auth(ctx: &mut Context, email_addr: &EmailAddress, link: &Link) -> 
             )));
         }
 
+        // NOTE: This query parameter is non-standard.
+        // Prefer `Ed25519`, but there is no standard way to select it, so we introduce extra
+        // fields, and take care we don't accidentally break the protocol. On top of this,
+        // `alg=EdDSA` could also mean Ed448, so we inspect the key set to make sure there are only
+        // Ed25519 keys among EdDSA keys.
+        if accepts_signing_alg && signing_algs.iter().any(|s| s.as_str() == "EdDSA") {
+            let mut found_ed25519 = false;
+            let mut found_other_ed_dsa = false;
+            for key in &key_set.keys {
+                if key.use_ == "sig" && key.alg == "EdDSA" {
+                    if key.crv == "Ed25519" {
+                        found_ed25519 = true;
+                    } else {
+                        found_other_ed_dsa = true;
+                        break;
+                    }
+                }
+            }
+            if found_ed25519 && !found_other_ed_dsa {
+                bridge_data.signing_alg = SigningAlgorithm::EdDsa;
+                query.append_pair("id_token_signing_alg", "EdDSA");
+            }
+        }
+
         query.finish();
     }
 
@@ -169,45 +211,27 @@ pub async fn auth(ctx: &mut Context, email_addr: &EmailAddress, link: &Link) -> 
 /// token returned by the provider and verify it. Return an identity token for the relying party if
 /// successful, or an error message otherwise.
 pub async fn callback(ctx: &mut Context) -> HandlerResult {
-    let (bridge_data, id_token) = {
-        let mut params = ctx.form_params();
+    let mut params = ctx.form_params();
 
-        let session_id = try_get_provider_param!(params, "state");
-        let bridge_data = match ctx.load_session(&session_id).await? {
-            BridgeData::Oidc(bridge_data) => bridge_data,
-            _ => return Err(BrokerError::ProviderInput("invalid session".to_owned())),
-        };
-
-        let id_token = try_get_provider_param!(params, "id_token");
-        (bridge_data, id_token)
+    let session_id = try_get_provider_param!(params, "state");
+    let bridge_data = match ctx.load_session(&session_id).await? {
+        BridgeData::Oidc(bridge_data) => bridge_data,
+        _ => return Err(BrokerError::ProviderInput("invalid session".to_owned())),
     };
 
-    // Retrieve the provider's configuration.
-    let ProviderConfig { jwks_uri, .. } = fetch_config(ctx, &bridge_data).await?;
+    let id_token = try_get_provider_param!(params, "id_token");
 
-    // Grab the keys from the provider.
-    let key_set: ProviderKeys = fetch_json_url(
-        &ctx.app,
-        jwks_uri,
-        &CacheKey::OidcKeySet {
-            origin: bridge_data.origin.as_str(),
-        },
-    )
-    .await
-    .map_err(|e| {
-        BrokerError::Provider(format!(
-            "could not fetch {}'s keys: {}",
-            bridge_data.origin, e
-        ))
-    })?;
+    // Retrieve the provider's configuration.
+    let (_, key_set) = fetch_config(ctx, &bridge_data).await?;
 
     // Verify the signature.
-    let jwt_payload = crypto::verify_jws(&id_token, &key_set.keys).map_err(|_| {
-        BrokerError::ProviderInput(format!(
-            "could not verify the token received from {}",
-            bridge_data.origin
-        ))
-    })?;
+    let jwt_payload = crypto::verify_jws(&id_token, &key_set.keys, bridge_data.signing_alg)
+        .map_err(|_| {
+            BrokerError::ProviderInput(format!(
+                "could not verify the token received from {}",
+                bridge_data.origin
+            ))
+        })?;
 
     let data = ctx.session_data.as_ref().expect("session vanished");
 
@@ -225,10 +249,7 @@ pub async fn callback(ctx: &mut Context) -> HandlerResult {
     check_token_field!(aud == bridge_data.client_id, "aud", descr);
     check_token_field!(nonce == bridge_data.nonce, "nonce", descr);
 
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
+    let now = unix_timestamp();
     let exp = exp.checked_add(LEEWAY).unwrap_or(u64::min_value());
     let iat = iat.checked_sub(LEEWAY).unwrap_or(u64::max_value());
     check_token_field!(now < exp, "exp", descr);
@@ -267,22 +288,25 @@ pub async fn callback(ctx: &mut Context) -> HandlerResult {
 async fn fetch_config(
     ctx: &mut Context,
     bridge_data: &OidcBridgeData,
-) -> Result<ProviderConfig, BrokerError> {
+) -> Result<(ProviderConfig, ProviderKeys), BrokerError> {
     let config_url = format!("{}/.well-known/openid-configuration", bridge_data.origin)
         .parse()
         .expect("could not build the OpenID Connect configuration URL");
 
-    let provider_config = fetch_json_url::<ProviderConfig>(
-        &ctx.app,
-        config_url,
-        &CacheKey::OidcConfig {
-            origin: bridge_data.origin.as_str(),
-        },
-    )
-    .await
-    .map_err(|e| {
+    let provider_config = ctx
+        .app
+        .store
+        .send(FetchUrlCached { url: config_url })
+        .await
+        .map_err(|e| {
+            BrokerError::Provider(format!(
+                "could not fetch {}'s configuration: {}",
+                bridge_data.origin, e
+            ))
+        })?;
+    let provider_config: ProviderConfig = serde_json::from_str(&provider_config).map_err(|e| {
         BrokerError::Provider(format!(
-            "could not fetch {}'s configuration: {}",
+            "could not parse {}'s configuration: {}",
             bridge_data.origin, e
         ))
     })?;
@@ -303,5 +327,26 @@ async fn fetch_config(
         }
     }
 
-    Ok(provider_config)
+    // Grab the keys from the provider.
+    let key_set = ctx
+        .app
+        .store
+        .send(FetchUrlCached {
+            url: provider_config.jwks_uri.clone(),
+        })
+        .await
+        .map_err(|e| {
+            BrokerError::Provider(format!(
+                "could not fetch {}'s keys: {}",
+                bridge_data.origin, e
+            ))
+        })?;
+    let key_set: ProviderKeys = serde_json::from_str(&key_set).map_err(|e| {
+        BrokerError::Provider(format!(
+            "could not parse{}'s keys: {}",
+            bridge_data.origin, e
+        ))
+    })?;
+
+    Ok((provider_config, key_set))
 }

@@ -1,5 +1,5 @@
 use crate::email_address::EmailAddress;
-use crate::http_ext::ResponseExt;
+use crate::utils::http::ResponseExt;
 use crate::web::{Context, HandlerResult};
 use headers::{CacheControl, ContentType};
 use http::Response;

@@ -57,6 +57,13 @@ test("successful flow following the email link", async ({ driver }) => {
   const textElement = await driver.findElement(By.tagName("p"));
   const text = await textElement.getText();
   assert.equal(text, JOHN_EMAIL);
+
+  // Ensure the link no longer works.
+  await driver.get(url);
+
+  const introElement = await driver.findElement(By.className("head"));
+  const intro = await introElement.getText();
+  assert.equal(intro, "The session has expired.");
 });
 
 test("can omit email scope", async ({ driver, relyingParty }) => {

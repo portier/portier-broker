@@ -3,9 +3,8 @@
 This directory contains end-to-end tests for the Portier broker, written using
 Node.js and Selenium WebDriver.
 
-To run the tests, you'll need to have a Redis instance running and reachable at
-`localhost:6379`, and a Mailhog instance running and reachable at
-`localhost:1025` for SMTP and `localhost:8025` for the API.
+To run the tests, you'll need to have a Mailhog instance running and reachable
+at `localhost:1025` for SMTP and `localhost:8025` for the API.
 
 You must also have a debug build ready of the broker. The tests expect to find
 it at the cargo default path `target/debug/portier-broker`. The tests will
