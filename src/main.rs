@@ -44,7 +44,7 @@ Portier Broker
 
 Usage:
   portier-broker [CONFIG]
-  portier-broker [CONFIG] [--import-key FILE]
+  portier-broker [CONFIG] --import-key FILE
   portier-broker --version
   portier-broker --help
 

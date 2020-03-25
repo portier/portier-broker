@@ -4,7 +4,7 @@ An [SQLite] database can be used for storing all broker state. This is the
 recommended option for simple installations on a single server, that don't need
 to service large numbers of users or provide high availability.
 
-To use Redis storage, set `sqlite_db` in your configuration, or
+To use SQLite storage, set `sqlite_db` in your configuration, or
 `BROKER_SQLITE_DB` in the environment:
 
 ```toml
