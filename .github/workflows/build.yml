@@ -31,10 +31,10 @@ jobs:
         default: true
 
     - name: Build
-      run: cargo build
+      run: cargo build --locked
 
     - name: Test
-      run: cargo test
+      run: cargo test --locked
 
     - name: Clippy
       uses: actions-rs/clippy-check@v1
@@ -89,7 +89,7 @@ jobs:
         default: true
 
     - name: Build
-      run: cargo build
+      run: cargo build --locked
 
     - name: Test
-      run: cargo test
+      run: cargo test --locked
