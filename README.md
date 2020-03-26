@@ -4,7 +4,7 @@ This is the Portier Broker reference implementation.
 
 - [Portier Broker on GitHub](https://github.com/portier/portier-broker)
 - [Portier main website](https://portier.github.io/)
-- [Portier specification](https://github.com/portier/portier.github.io/tree/master/specs)
+- [Portier specification](https://github.com/portier/portier.github.io/blob/master/Specs.md)
 
 ## How to run your own broker
 
