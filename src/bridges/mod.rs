@@ -1,8 +1,9 @@
 use crate::agents::DeleteSession;
 use crate::crypto;
 use crate::error::BrokerError;
-use crate::web::{return_to_relier, Context, HandlerResult};
+use crate::web::{json_response, return_to_relier, Context, HandlerResult};
 use serde_derive::{Deserialize, Serialize};
+use serde_json::json;
 
 /// Session data stored by bridges.
 #[derive(Clone, Serialize, Deserialize)]
@@ -47,10 +48,20 @@ pub async fn complete_auth(ctx: &mut Context) -> HandlerResult {
         BrokerError::Internal(format!("Could not create a JWT: {:?}", err))
     })?;
 
-    Ok(return_to_relier(
-        ctx,
-        &[("id_token", &jwt), ("state", &data.return_params.state)],
-    ))
+    if ctx.want_json() {
+        Ok(json_response(
+            &json!({
+                "id_token": &jwt,
+                "state": &data.return_params.state,
+            }),
+            None,
+        ))
+    } else {
+        Ok(return_to_relier(
+            ctx,
+            &[("id_token", &jwt), ("state", &data.return_params.state)],
+        ))
+    }
 }
 
 pub mod email;

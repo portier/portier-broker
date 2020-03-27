@@ -17,7 +17,7 @@ use hyper::service::Service as HyperService;
 use hyper::Body;
 use log::info;
 use serde_derive::{Deserialize, Serialize};
-use serde_json as json;
+use serde_json::json;
 use std::{collections::HashMap, net::SocketAddr, sync::Arc, task::Poll, time::Duration};
 use url::{form_urlencoded, Url};
 
@@ -101,6 +101,15 @@ impl Context {
     /// Parse the form-encoded body into a `HashMap`.
     pub fn form_params(&self) -> HashMap<String, String> {
         parse_form_encoded(&self.body)
+    }
+
+    /// Whether this request wants a JSON response.
+    pub fn want_json(&self) -> bool {
+        if let Some(accept) = self.headers.get(hyper::header::ACCEPT) {
+            accept == "application/json"
+        } else {
+            false
+        }
     }
 
     /// Start a session by filling out the common part.
@@ -292,6 +301,19 @@ impl HyperService<Request> for Service {
 async fn handle_error(ctx: &Context, err: BrokerError) -> Response {
     let reference = err.log(Some(&ctx.app.rng)).await;
 
+    if ctx.want_json() {
+        let mut res = json_response(
+            &json!({
+                "error": err.oauth_error_code(),
+                "error_description": &format!("{}", err),
+                "reference": reference,
+            }),
+            None,
+        );
+        *res.status_mut() = err.http_status_code();
+        return res;
+    }
+
     // Check if we can redirect to the RP. We must have return parameters, and the RP must not have
     // opted out from receiving errors in the redirect response.
     let can_redirect = match ctx.return_params {
@@ -477,11 +499,13 @@ pub fn return_to_relier(ctx: &Context, params: &[(&str, &str)]) -> Response {
 ///
 /// Serializes the argument value to JSON and returns a HTTP 200 response
 /// code with the serialized JSON as the body.
-pub fn json_response(obj: &json::Value, max_age: Duration) -> Response {
-    let body = json::to_string(&obj).expect("unable to coerce JSON Value into string");
+pub fn json_response(obj: &serde_json::Value, max_age: Option<Duration>) -> Response {
+    let body = serde_json::to_string(&obj).expect("unable to coerce JSON Value into string");
     let mut res = Response::new(Body::from(body));
     res.typed_header(ContentType::json());
-    res.typed_header(CacheControl::new().with_public().with_max_age(max_age));
+    if let Some(max_age) = max_age {
+        res.typed_header(CacheControl::new().with_public().with_max_age(max_age));
+    }
     res
 }
 

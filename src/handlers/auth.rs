@@ -32,7 +32,7 @@ pub async fn discovery(ctx: &mut Context) -> HandlerResult {
         // NOTE: This field is non-standard.
         "accepts_id_token_signing_alg_query_param": true,
     });
-    Ok(json_response(&obj, ctx.app.discovery_ttl))
+    Ok(json_response(&obj, Some(ctx.app.discovery_ttl)))
 }
 
 /// Request handler for the JSON Web Key Set document.
@@ -45,7 +45,7 @@ pub async fn key_set(ctx: &mut Context) -> HandlerResult {
     let obj = json!({
         "keys": ctx.app.key_manager.send(GetPublicJwks).await
     });
-    Ok(json_response(&obj, ctx.app.keys_ttl))
+    Ok(json_response(&obj, Some(ctx.app.keys_ttl)))
 }
 
 /// Request handler for authentication requests from the RP.
@@ -83,6 +83,7 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
         BrokerError::Input("unsupported response_mode, must be fragment or form_post".to_owned())
     })?;
 
+    // NOTE: This query parameter is non-standard.
     let response_errors = response_errors
         .parse::<bool>()
         .map_err(|_| BrokerError::Input("response_errors must be true or false".to_owned()))?;
@@ -135,7 +136,7 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
         })?;
 
     let login_hint = try_get_input_param!(params, "login_hint", "".to_string());
-    if login_hint == "" {
+    if login_hint == "" && !ctx.want_json() {
         let display_origin = redirect_uri_.origin().unicode_serialization();
 
         let catalog = ctx.catalog();

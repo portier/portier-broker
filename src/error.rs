@@ -75,17 +75,12 @@ impl BrokerError {
     /// Get the OAuth2 error code for this error
     pub fn oauth_error_code(&self) -> &str {
         match *self {
-            BrokerError::Input(_) => "invalid_request",
-            BrokerError::Provider(_)
-                | BrokerError::ProviderInput(_)
-                => "temporarily_unavailable",
+            BrokerError::Input(_) | BrokerError::SessionExpired => "invalid_request",
+            BrokerError::Provider(_) | BrokerError::ProviderInput(_) => "temporarily_unavailable",
             BrokerError::Internal(_) => "server_error",
-            // We will never redirect for these types of errors
-            BrokerError::RateLimited
-                | BrokerError::SessionExpired
-                // Internal status that should never bubble this far
-                | BrokerError::ProviderCancelled
-                => unreachable!(),
+            BrokerError::RateLimited => "access_denied",
+            // Internal status that should never bubble this far
+            BrokerError::ProviderCancelled => unreachable!(),
         }
     }
 }
