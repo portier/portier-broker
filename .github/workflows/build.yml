@@ -5,7 +5,7 @@ on:
     branches: '**'
 
 jobs:
-  checked-build:
+  linux-build:
     runs-on: ubuntu-latest
     services:
       redis:
@@ -32,6 +32,12 @@ jobs:
 
     - name: Build
       run: cargo build --locked
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v1
+      with:
+        name: Linux binary (debug)
+        path: target/debug/portier-broker
 
     - name: Test
       run: cargo test --locked
@@ -71,11 +77,8 @@ jobs:
     - name: E2E test SQLite
       run: cd tests/e2e/ && TEST_SQLITE=1 TEST_ROTATING_KEYS=1 ./main.js
 
-  build:
-    strategy:
-      matrix:
-        os: [macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+  macos-build:
+    runs-on: macos-latest
     steps:
 
     - name: Checkout
@@ -90,6 +93,38 @@ jobs:
 
     - name: Build
       run: cargo build --locked
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v1
+      with:
+        name: MacOS binary (debug)
+        path: target/debug/portier-broker
+
+    - name: Test
+      run: cargo test --locked
+
+  windows-build:
+    runs-on: windows-latest
+    steps:
+
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        default: true
+
+    - name: Build
+      run: cargo build --locked
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v1
+      with:
+        name: Windows binary (debug)
+        path: target/debug/portier-broker.exe
 
     - name: Test
       run: cargo test --locked
