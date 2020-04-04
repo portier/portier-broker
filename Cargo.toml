@@ -23,26 +23,26 @@ base64 = "0.12.0"
 bytes = "0.5.4"
 docopt = "1.1.0"
 envy = "0.4.1"
-err-derive = "0.2.2"
-futures-util = "0.3.1"
+err-derive = "0.2.4"
+futures-util = "0.3.4"
 gettext = "0.4.0"
-headers = "0.3.1"
-http = "0.2.0"
-hyper = "0.13.1"
+headers = "0.3.2"
+http = "0.2.1"
+hyper = "0.13.5"
 hyper-staticfile = "0.5.1"
 hyper-tls = "0.4.1"
 idna = "0.2.0"
-lettre = "0.9.2"
-lettre_email = "0.9.2"
+lettre = "0.9.3"
+lettre_email = "0.9.4"
 listenfd = "0.3.3"
 matches = "0.1.8"
 mustache = "0.9.0"
-native-tls = "0.2.3"
+native-tls = "0.2.4"
 percent-encoding = "2.1.0"
-ring = "0.16.9"
-serde = "1.0.104"
-serde_derive = "1.0.104"
-serde_json = "1.0.45"
+ring = "0.16.12"
+serde = "1.0.106"
+serde_derive = "1.0.106"
+serde_json = "1.0.51"
 toml = "0.5.6"
 
 [dependencies.log]
@@ -56,11 +56,11 @@ features = ["tokio-rt-core"]
 
 [dependencies.rusqlite]
 optional = true
-version = "0.21.0"
+version = "0.23.1"
 features = ["bundled"]
 
 [dependencies.tokio]
-version = "0.2.11"
+version = "0.2.18"
 features = ["fs", "macros", "process", "rt-threaded", "sync", "time"]
 
 [dependencies.url]
