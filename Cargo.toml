@@ -5,7 +5,7 @@ authors = ["The Portier project contributors"]
 description = "Reference implementation of the Portier broker protocol"
 homepage = "http://portier.io"
 repository = "https://github.com/portier/portier-broker"
-readme = "README.rst"
+readme = "README.md"
 license = "MIT/Apache-2.0"
 edition = "2018"
 
