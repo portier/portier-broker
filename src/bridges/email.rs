@@ -3,7 +3,7 @@ use crate::config::Config;
 use crate::crypto::random_zbase32;
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
-use crate::web::{html_response, Context, HandlerResult};
+use crate::web::{html_response, json_response, Context, HandlerResult};
 use lettre::smtp::authentication::Credentials;
 use lettre::smtp::client::net::ClientTlsParameters;
 use lettre::smtp::{ClientSecurity, SmtpClient, SmtpTransport};
@@ -12,6 +12,7 @@ use lettre_email::EmailBuilder;
 use native_tls::TlsConnector;
 use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
 use serde_derive::{Deserialize, Serialize};
+use serde_json::json;
 
 const QUERY_ESCAPE: &AsciiSet = &CONTROLS.add(b' ').add(b'"').add(b'#').add(b'<').add(b'>');
 
@@ -99,26 +100,36 @@ pub async fn auth(ctx: &mut Context, email_addr: &EmailAddress) -> HandlerResult
     mailer.close();
 
     // Render a form for the user.
-    let catalog = ctx.catalog();
-    Ok(html_response(ctx.app.templates.confirm_email.render(&[
-        ("display_origin", display_origin.as_str()),
-        ("session_id", &ctx.session_id),
-        ("title", catalog.gettext("Confirm your address")),
-        (
-            "explanation",
-            catalog.gettext("We've sent you an email to confirm your address."),
-        ),
-        (
-            "use",
-            catalog.gettext("Use the link in that email to login to"),
-        ),
-        (
-            "alternate",
-            catalog.gettext(
-                "Alternatively, enter the code from the email to continue in this browser tab:",
+    if ctx.want_json() {
+        Ok(json_response(
+            &json!({
+                "result": "verification_code_sent",
+                "session": &ctx.session_id,
+            }),
+            None,
+        ))
+    } else {
+        let catalog = ctx.catalog();
+        Ok(html_response(ctx.app.templates.confirm_email.render(&[
+            ("display_origin", display_origin.as_str()),
+            ("session_id", &ctx.session_id),
+            ("title", catalog.gettext("Confirm your address")),
+            (
+                "explanation",
+                catalog.gettext("We've sent you an email to confirm your address."),
             ),
-        ),
-    ])))
+            (
+                "use",
+                catalog.gettext("Use the link in that email to login to"),
+            ),
+            (
+                "alternate",
+                catalog.gettext(
+                    "Alternatively, enter the code from the email to continue in this browser tab:",
+                ),
+            ),
+        ])))
+    }
 }
 
 /// Request handler for one-time pad email loop confirmation.

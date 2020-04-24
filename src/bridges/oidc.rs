@@ -5,10 +5,11 @@ use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
 use crate::utils::{http::ResponseExt, unix_timestamp};
 use crate::validation;
-use crate::web::{empty_response, Context, HandlerResult};
+use crate::web::{empty_response, json_response, Context, HandlerResult};
 use crate::webfinger::{Link, Relation};
 use http::StatusCode;
 use serde_derive::{Deserialize, Serialize};
+use serde_json::json;
 use url::Url;
 
 /// The origin of the Google identity provider.
@@ -200,9 +201,19 @@ pub async fn auth(ctx: &mut Context, email_addr: &EmailAddress, link: &Link) -> 
         return Err(BrokerError::ProviderCancelled);
     }
 
-    let mut res = empty_response(StatusCode::SEE_OTHER);
-    res.header(hyper::header::LOCATION, auth_url.as_str());
-    Ok(res)
+    if ctx.want_json() {
+        Ok(json_response(
+            &json!({
+                "result": "redirect_to_provider",
+                "url": auth_url.as_str(),
+            }),
+            None,
+        ))
+    } else {
+        let mut res = empty_response(StatusCode::SEE_OTHER);
+        res.header(hyper::header::LOCATION, auth_url.as_str());
+        Ok(res)
+    }
 }
 
 /// Request handler for OpenID Connect callbacks.
