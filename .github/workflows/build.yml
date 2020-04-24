@@ -103,6 +103,15 @@ jobs:
     - name: Test
       run: cargo test --locked
 
+    - name: E2E test deps
+      run: |
+        set -xe
+        brew install mailhog && brew services run mailhog
+        cd tests/e2e/ && yarn --frozen-lockfile
+
+    - name: E2E test Safari
+      run: cd tests/e2e/ && SELENIUM_BROWSER=safari ./main.js
+
   windows-build:
     runs-on: windows-latest
     steps:

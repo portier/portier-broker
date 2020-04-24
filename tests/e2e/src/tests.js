@@ -8,14 +8,18 @@ const { By, Key, until } = require("selenium-webdriver");
 const ALL_TESTS = [];
 const test = (name, fn) => ALL_TESTS.push({ name, fn });
 
-const TIMEOUT = 5000;
+const TIMEOUT = 10000;
+const OVERALL_TIMEOUT = 30000;
 const JOHN_EMAIL = "john.doe@example.com";
 const BROKER_CONFIRM_TITLE = "Portier – Confirm your address";
+const BROKER_ERROR_TITLE = "Portier – Error";
+const RP_LOGIN_TITLE = "RP: Login";
 const RP_CONFIRMED_TITLE = "RP: Confirmed";
 const RP_GOT_ERROR_TITLE = "RP: Got error";
 
 test("successful flow with code input", async ({ driver }) => {
   await driver.get("http://localhost:8000/");
+  await driver.wait(until.titleIs(RP_LOGIN_TITLE), TIMEOUT);
 
   const emailInput = await driver.findElement(By.name("email"));
   await emailInput.sendKeys(JOHN_EMAIL, Key.RETURN);
@@ -39,6 +43,7 @@ test("successful flow with code input", async ({ driver }) => {
 
 test("successful flow following the email link", async ({ driver }) => {
   await driver.get("http://localhost:8000/");
+  await driver.wait(until.titleIs(RP_LOGIN_TITLE), TIMEOUT);
 
   const emailInput = await driver.findElement(By.name("email"));
   await emailInput.sendKeys(JOHN_EMAIL, Key.RETURN);
@@ -60,6 +65,7 @@ test("successful flow following the email link", async ({ driver }) => {
 
   // Ensure the link no longer works.
   await driver.get(url);
+  await driver.wait(until.titleIs(BROKER_ERROR_TITLE), TIMEOUT);
 
   const introElement = await driver.findElement(By.className("head"));
   const intro = await introElement.getText();
@@ -112,7 +118,7 @@ module.exports = async ctx => {
       const timeout = new Promise((resolve, reject) =>
         setTimeout(() => {
           reject(Error("Test timed out"));
-        }, TIMEOUT).unref()
+        }, OVERALL_TIMEOUT).unref()
       );
       await Promise.race([timeout, fn(ctx)]);
     } catch (err) {
