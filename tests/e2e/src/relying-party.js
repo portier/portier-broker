@@ -17,7 +17,7 @@ module.exports = () => {
 
   app.get("/", (req, res) => {
     res.type("html").end(`
-      <title>Login</title>
+      <title>RP: Login</title>
       <form method="post" action="/auth">
         <input name="email" type="email">
       </form>

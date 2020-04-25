@@ -5,6 +5,23 @@ on:
     branches: '**'
 
 jobs:
+  toolchain-compat:
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: '1.41.0'
+        profile: minimal
+        default: true
+
+    - name: Check
+      run: cargo check --locked
+
   linux-build:
     runs-on: ubuntu-latest
     services:
@@ -102,6 +119,15 @@ jobs:
 
     - name: Test
       run: cargo test --locked
+
+    - name: E2E test deps
+      run: |
+        set -xe
+        brew install mailhog && brew services run mailhog
+        cd tests/e2e/ && yarn --frozen-lockfile
+
+    - name: E2E test Safari
+      run: cd tests/e2e/ && SELENIUM_BROWSER=safari ./main.js
 
   windows-build:
     runs-on: windows-latest
