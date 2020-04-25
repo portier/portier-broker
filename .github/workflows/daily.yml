@@ -1,0 +1,35 @@
+name: Daily checks
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Security audit
+      uses: actions-rs/audit-check@v1
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+  check-tlds:
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Check TLDs
+      run: |
+        set -e
+        ./mktlds.rb
+        if [ -n "$(git status -s)" ]; then
+          echo "If this fails, the src/utils/tlds.rs file is out of date."
+          echo "To fix this, run: ./mktlds.rb > src/utils/tlds.rs"
+          exit 1
+        fi
