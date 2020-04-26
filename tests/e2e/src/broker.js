@@ -18,9 +18,10 @@ module.exports = () => {
   const env = {
     RUST_LOG: process.env.RUST_LOG || "error",
     RUST_BACKTRACE: "1",
-    BROKER_PUBLIC_URL: "http://localhost:3333",
+    BROKER_LISTEN_PORT: "44133",
+    BROKER_PUBLIC_URL: "http://localhost:44133",
     BROKER_FROM_ADDRESS: "portier@example.com",
-    BROKER_SMTP_SERVER: "localhost:1025",
+    BROKER_SMTP_SERVER: "127.0.0.1:44125",
     BROKER_LIMIT_PER_EMAIL: "10000/min"
   };
 

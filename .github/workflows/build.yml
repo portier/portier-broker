@@ -29,11 +29,6 @@ jobs:
         image: redis:latest
         ports:
           - 6379:6379
-      mailhog:
-        image: mailhog/mailhog:latest
-        ports:
-          - 1025:1025
-          - 8025:8025
     steps:
 
     - name: Checkout
@@ -121,10 +116,7 @@ jobs:
       run: cargo test --locked
 
     - name: E2E test deps
-      run: |
-        set -xe
-        brew install mailhog && brew services run mailhog
-        cd tests/e2e/ && yarn --frozen-lockfile
+      run: cd tests/e2e/ && yarn --frozen-lockfile
 
     - name: E2E test Safari
       run: cd tests/e2e/ && SELENIUM_BROWSER=safari ./main.js

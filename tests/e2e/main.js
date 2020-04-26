@@ -2,6 +2,7 @@
 
 // Entry point for the test runner.
 
+const runMailServer = require("./src/mailServer");
 const runBroker = require("./src/broker");
 const runRelyingParty = require("./src/relying-party");
 const runTests = require("./src/tests");
@@ -10,12 +11,13 @@ const chrome = require("selenium-webdriver/chrome");
 const firefox = require("selenium-webdriver/firefox");
 
 const main = async () => {
-  let broker, relyingParty, driver;
+  let mailServer, broker, relyingParty, driver;
   try {
+    mailServer = runMailServer();
     broker = runBroker();
     relyingParty = runRelyingParty();
     driver = await createDriver();
-    await runTests({ broker, relyingParty, driver });
+    await runTests({ mailServer, broker, relyingParty, driver });
   } finally {
     if (driver) {
       await driver.quit().catch(err => {
@@ -28,6 +30,9 @@ const main = async () => {
     }
     if (broker) {
       broker.destroy();
+    }
+    if (mailServer) {
+      mailServer.destroy();
     }
   }
 };
