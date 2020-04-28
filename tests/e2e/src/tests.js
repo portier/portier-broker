@@ -2,7 +2,6 @@
 
 const assert = require("assert");
 const fetch = require("node-fetch");
-const mailhog = require("./mailhog");
 const { By, Key, until } = require("selenium-webdriver");
 
 const ALL_TESTS = [];
@@ -17,15 +16,15 @@ const RP_LOGIN_TITLE = "RP: Login";
 const RP_CONFIRMED_TITLE = "RP: Confirmed";
 const RP_GOT_ERROR_TITLE = "RP: Got error";
 
-test("successful flow with code input", async ({ driver }) => {
-  await driver.get("http://localhost:8000/");
+test("successful flow with code input", async ({ mailServer, driver }) => {
+  await driver.get("http://localhost:44180/");
   await driver.wait(until.titleIs(RP_LOGIN_TITLE), TIMEOUT);
 
   const emailInput = await driver.findElement(By.name("email"));
   await emailInput.sendKeys(JOHN_EMAIL, Key.RETURN);
   await driver.wait(until.titleIs(BROKER_CONFIRM_TITLE), TIMEOUT);
 
-  const mail = await mailhog.fetchOne();
+  const mail = mailServer.nextMail();
   const match = /^[a-z0-9]{6} [a-z0-9]{6}$/m.exec(mail);
   if (!match) {
     throw Error("Could not find the verification code in the email text");
@@ -41,16 +40,19 @@ test("successful flow with code input", async ({ driver }) => {
   assert.equal(text, JOHN_EMAIL);
 });
 
-test("successful flow following the email link", async ({ driver }) => {
-  await driver.get("http://localhost:8000/");
+test("successful flow following the email link", async ({
+  mailServer,
+  driver
+}) => {
+  await driver.get("http://localhost:44180/");
   await driver.wait(until.titleIs(RP_LOGIN_TITLE), TIMEOUT);
 
   const emailInput = await driver.findElement(By.name("email"));
   await emailInput.sendKeys(JOHN_EMAIL, Key.RETURN);
   await driver.wait(until.titleIs(BROKER_CONFIRM_TITLE), TIMEOUT);
 
-  const mail = await mailhog.fetchOne();
-  const match = /^http:\/\/localhost:3333\/confirm\?.+$/m.exec(mail);
+  const mail = mailServer.nextMail();
+  const match = /^http:\/\/localhost:44133\/confirm\?.+$/m.exec(mail);
   if (!match) {
     throw Error("Could not find the confirmation URL in the email text");
   }
@@ -112,7 +114,7 @@ module.exports = async ctx => {
   for (const { name, fn } of ALL_TESTS) {
     // Preparation.
     ctx.relyingParty.removeAllListeners();
-    await mailhog.deleteAll();
+    ctx.mailServer.clearMail();
     // Run test and apply a timeout.
     try {
       const timeout = new Promise((resolve, reject) =>

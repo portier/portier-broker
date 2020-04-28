@@ -9,8 +9,8 @@ module.exports = () => {
   const instance = new EventEmitter();
 
   const portier = new PortierClient({
-    broker: "http://localhost:3333",
-    redirectUri: "http://localhost:8000/verify"
+    broker: "http://localhost:44133",
+    redirectUri: "http://localhost:44180/verify"
   });
 
   const app = express();
@@ -69,7 +69,7 @@ module.exports = () => {
     `);
   });
 
-  const server = app.listen(8000);
+  const server = app.listen(44180, "localhost");
 
   instance.portier = portier;
   instance.destroy = () => {
