@@ -67,10 +67,11 @@ jobs:
 
     - name: Check translations
       run: |
+        set -e
         ./msgfmt.sh
         if [ -n "$(git status -s)" ]; then
           echo "If this fails, the lang/*.mo files are out of date."
-          echo "Run ./msgfmt.sh to fix this."
+          echo "To fix this, run: ./msgfmt.sh"
           exit 1
         fi
 
