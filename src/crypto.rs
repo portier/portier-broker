@@ -9,7 +9,7 @@ use ring::{
     signature::{self, UnparsedPublicKey},
 };
 use serde_json as json;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::fmt;
 use std::iter::Iterator;
 
@@ -116,7 +116,7 @@ pub async fn random_zbase32(len: usize, rng: &SecureRandom) -> String {
 
 /// Helper function to deserialize key from JWK Key Set.
 ///
-/// Searches the provided JWK Key Set Value for the key matching the given
+/// Searches the provided JWK key set for the key matching the given
 /// id. Returns a usable public key if exactly one key is found.
 pub fn jwk_key_set_find(key_set: &[ProviderKey], kid: &str) -> Result<SupportedPublicKey, ()> {
     let matching: Vec<&ProviderKey> = key_set
@@ -147,7 +147,7 @@ pub fn jwk_key_set_find(key_set: &[ProviderKey], kid: &str) -> Result<SupportedP
     }
 }
 
-/// Verify a JWS signature, returning the payload as Value if successful.
+/// Verify a JWS signature, returning the payload as a `Value` if successful.
 pub fn verify_jws(
     jws: &str,
     key_set: &[ProviderKey],
@@ -164,7 +164,7 @@ pub fn verify_jws(
         .map(|s| base64url::decode(s))
         .collect::<Result<Vec<_>, _>>()?;
     let jwt_header: json::Value = json::from_slice(&decoded[0]).map_err(|_| ())?;
-    let kid = jwt_header.get("kid").and_then(|v| v.as_str()).ok_or(())?;
+    let kid = jwt_header.get("kid").and_then(Value::as_str).ok_or(())?;
     let pub_key = jwk_key_set_find(key_set, kid)?;
 
     // Make sure the key matches the algorithm originally selected.

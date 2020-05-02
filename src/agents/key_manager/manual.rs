@@ -23,7 +23,7 @@ pub enum ManualKeysError {
     MissingKeys { signing_alg: SigningAlgorithm },
 }
 
-/// KeyManager where the use provided keys to us manually.
+/// A `KeyManager` where the use provided keys to us manually.
 pub struct ManualKeys {
     ed25519_keys: Vec<NamedKeyPair<Ed25519KeyPair>>,
     rsa_keys: Vec<NamedKeyPair<RsaKeyPair>>,
@@ -32,7 +32,7 @@ pub struct ManualKeys {
 
 impl ManualKeys {
     pub fn new(
-        keyfiles: Vec<PathBuf>,
+        keyfiles: &[PathBuf],
         keytext: Option<String>,
         signing_algs: &[SigningAlgorithm],
         rng: SecureRandom,
@@ -42,7 +42,7 @@ impl ManualKeys {
             SigningAlgorithm::format_list(signing_algs)
         );
         let mut parsed = vec![];
-        for keyfile in &keyfiles {
+        for keyfile in keyfiles {
             let file = match File::open(keyfile) {
                 Ok(file) => file,
                 Err(err) => {

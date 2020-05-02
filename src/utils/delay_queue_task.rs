@@ -70,8 +70,7 @@ impl<K: Clone + Eq + Hash + Send + 'static> DelayQueueTask<K> {
                     Poll::Ready(None) => Poll::Ready(Event::Cancelled),
                     Poll::Pending => match delay
                         .as_mut()
-                        .map(|delay| Delay::poll(Pin::new(delay), cx))
-                        .unwrap_or(Poll::Pending)
+                        .map_or(Poll::Pending, |delay| Delay::poll(Pin::new(delay), cx))
                     {
                         Poll::Ready(_) => Poll::Ready(Event::Timer),
                         Poll::Pending => Poll::Pending,

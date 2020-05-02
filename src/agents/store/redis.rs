@@ -293,9 +293,10 @@ impl Handler<FetchKeys> for RedisStore {
         let db_key = format!("keys:{}", signing_alg);
         cx.reply_later(async move {
             let key_set: Option<String> = conn.get(db_key).await?;
-            let key_set = key_set
-                .map(|data| serde_json::from_str(&data).expect("Invalid key set JSON in Redis"))
-                .unwrap_or_else(|| KeySet::empty(signing_alg));
+            let key_set = key_set.map_or_else(
+                || KeySet::empty(signing_alg),
+                |data| serde_json::from_str(&data).expect("Invalid key set JSON in Redis"),
+            );
             Ok(key_set)
         })
     }

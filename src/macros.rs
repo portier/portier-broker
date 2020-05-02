@@ -53,7 +53,7 @@ macro_rules! try_get_token_field {
         })?
     };
     ( $input:expr, $key:tt, $descr:expr ) => {
-        try_get_token_field!($input, $key, |v| v.as_str(), $descr)
+        try_get_token_field!($input, $key, serde_json::Value::as_str, $descr)
     };
 }
 

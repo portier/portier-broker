@@ -9,7 +9,7 @@ use crate::web::{empty_response, json_response, Context, HandlerResult};
 use crate::webfinger::{Link, Relation};
 use http::StatusCode;
 use serde_derive::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
 use url::Url;
 
 /// The origin of the Google identity provider.
@@ -251,8 +251,8 @@ pub async fn callback(ctx: &mut Context) -> HandlerResult {
     let iss = try_get_token_field!(jwt_payload, "iss", descr);
     let aud = try_get_token_field!(jwt_payload, "aud", descr);
     let email = try_get_token_field!(jwt_payload, "email", descr);
-    let iat = try_get_token_field!(jwt_payload, "iat", |v| v.as_u64(), descr);
-    let exp = try_get_token_field!(jwt_payload, "exp", |v| v.as_u64(), descr);
+    let iat = try_get_token_field!(jwt_payload, "iat", Value::as_u64, descr);
+    let exp = try_get_token_field!(jwt_payload, "exp", Value::as_u64, descr);
     let nonce = try_get_token_field!(jwt_payload, "nonce", descr);
 
     // Verify the token claims.
@@ -271,7 +271,7 @@ pub async fn callback(ctx: &mut Context) -> HandlerResult {
             // `email` should match the normalized email, as we sent it to the IdP.
             check_token_field!(email == data.email_addr.as_str(), "email", descr);
             // `email_original` should not be necessary for Broker -> IdP, but verify it any way.
-            if let Some(email_original) = jwt_payload.get("email_original").and_then(|v| v.as_str())
+            if let Some(email_original) = jwt_payload.get("email_original").and_then(Value::as_str)
             {
                 check_token_field!(
                     email_original == data.email_addr.as_str(),

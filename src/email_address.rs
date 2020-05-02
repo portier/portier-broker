@@ -37,7 +37,7 @@ impl FromStr for EmailAddress {
     type Err = ParseEmailError;
 
     /// Parse and normalize an email address.
-    /// https://github.com/portier/portier.github.io/blob/master/specs/Email-Normalization.md
+    /// <https://github.com/portier/portier.github.io/blob/master/specs/Email-Normalization.md>
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         let local_end = input.rfind('@').ok_or(ParseEmailError::NoSeparator)?;
         // Transform the local part to lowercase
@@ -54,7 +54,7 @@ impl FromStr for EmailAddress {
             return Err(ParseEmailError::InvalidDomainChars);
         }
         // Verify the domain has a valid TLD.
-        let tld_start = domain.rfind('.').map(|v| v + 1).unwrap_or(0);
+        let tld_start = domain.rfind('.').map_or(0, |v| v + 1);
         if !TLDS.contains(&domain[tld_start..]) {
             return Err(ParseEmailError::InvalidTld);
         }

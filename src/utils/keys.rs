@@ -184,7 +184,7 @@ pub trait GeneratedKeyPair: KeyPairExt + Sized {
     /// If this fails, we panic, because it may happen at an arbitrary moment at run-time.
     fn generate(config: Self::Config) -> String;
 
-    /// Convert a ParsedKeyPair, if it is of the correct type.
+    /// Convert a `ParsedKeyPair`, if it is of the correct type.
     fn from_parsed(parsed: ParsedKeyPair) -> Option<Self>;
 }
 

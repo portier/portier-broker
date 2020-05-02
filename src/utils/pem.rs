@@ -101,7 +101,7 @@ pub fn from_der(der: &[u8]) -> String {
     let mut cursor = Cursor::new(b64.as_bytes());
     res.push_str(PKCS8_START_MARK);
     res.push('\n');
-    let mut buf = [0u8; 64];
+    let mut buf = [0_u8; 64];
     loop {
         let size = cursor.read(&mut buf[..]).unwrap();
         if size == 0 {
