@@ -42,6 +42,8 @@ pub struct EnvConfig {
 
     sendmail_command: Option<String>,
 
+    postmark_token: Option<String>,
+
     limit_per_email: Option<LimitConfig>,
 
     google_client_id: Option<String>,
@@ -158,6 +160,10 @@ impl EnvConfig {
 
         if let Some(val) = parsed.sendmail_command {
             builder.sendmail_command = Some(val);
+        }
+
+        if let Some(val) = parsed.postmark_token {
+            builder.postmark_token = Some(val);
         }
 
         if let Some(val) = parsed.limit_per_email {

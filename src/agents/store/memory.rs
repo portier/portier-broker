@@ -182,7 +182,7 @@ impl Handler<FetchUrlCached> for MemoryStore {
             if let Some(entry) = slot.as_ref().filter(|entry| entry.is_alive()) {
                 return Ok(entry.value.clone());
             }
-            let result = fetcher.send(FetchUrl { url: message.url }).await?;
+            let result = fetcher.send(FetchUrl::get(&message.url)).await?;
             let ttl = std::cmp::max(expire_cache, result.max_age);
             *slot = Some(Expiring::from_duration(result.data.clone(), ttl));
             Ok(result.data)

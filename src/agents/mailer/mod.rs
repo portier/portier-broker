@@ -39,3 +39,8 @@ pub use self::lettre_smtp::SmtpMailer;
 pub mod lettre_sendmail;
 #[cfg(feature = "lettre_sendmail")]
 pub use self::lettre_sendmail::SendmailMailer;
+
+#[cfg(feature = "postmark")]
+pub mod postmark;
+#[cfg(feature = "postmark")]
+pub use self::postmark::PostmarkMailer;

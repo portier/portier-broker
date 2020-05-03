@@ -3,6 +3,6 @@
 # A dummy sendmail executable for testing.
 # The output is parsed in `broker.js`.
 
-echo '-----BEGIN SENDMAIL INPUT-----' >&2
+echo '-----BEGIN RAW EMAIL-----' >&2
 cat >&2
-echo '-----END SENDMAIL INPUT-----' >&2
+echo '-----END RAW EMAIL-----' >&2

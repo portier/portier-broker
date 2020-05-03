@@ -93,6 +93,9 @@ jobs:
     - name: E2E test sendmail
       run: cd tests/e2e/ && TEST_MAILER=sendmail ./main.js
 
+    - name: E2E test Postmark
+      run: cd tests/e2e/ && TEST_MAILER=postmark ./main.js
+
   macos-build:
     runs-on: macos-latest
     steps:

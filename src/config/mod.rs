@@ -170,6 +170,7 @@ impl StoreConfig {
 
 /// Parameters for `MailerConfig::spawn_mailer`.
 struct MailerParams {
+    fetcher: Addr<FetchAgent>,
     from_address: EmailAddress,
     from_name: String,
 }
@@ -183,6 +184,8 @@ enum MailerConfig {
     },
     #[cfg(feature = "lettre_sendmail")]
     LettreSendmail { command: String },
+    #[cfg(feature = "postmark")]
+    Postmark { token: String },
 }
 
 impl MailerConfig {
@@ -191,10 +194,11 @@ impl MailerConfig {
         smtp_username: Option<String>,
         smtp_password: Option<String>,
         sendmail_command: Option<String>,
+        postmark_token: Option<String>,
     ) -> Result<Self, ConfigError> {
-        match (smtp_server, sendmail_command) {
+        match (smtp_server, sendmail_command, postmark_token) {
             #[cfg(feature = "lettre_smtp")]
-            (Some(server), None) => {
+            (Some(server), None, None) => {
                 let credentials = match (smtp_username, smtp_password) {
                     (Some(username), Some(password)) => Some((username, password)),
                     (None, None) => None,
@@ -209,20 +213,31 @@ impl MailerConfig {
                 })
             }
             #[cfg(not(feature = "lettre_smtp"))]
-            (Some(_), None) => {
+            (Some(_), None, None) => {
                 Err("SMTP mailer requested, but this build does not support it.".into())
             }
 
             #[cfg(feature = "lettre_sendmail")]
-            (None, Some(command)) => Ok(MailerConfig::LettreSendmail { command }),
+            (None, Some(command), None) => Ok(MailerConfig::LettreSendmail { command }),
             #[cfg(not(feature = "lettre_sendmail"))]
-            (None, Some(_)) => {
+            (None, Some(_), None) => {
                 Err("sendmail mailer requested, but this build does not support it.".into())
             }
 
-            (None, None) => Err("Must specify one of smtp_server or sendmail_command".into()),
+            #[cfg(feature = "postmark")]
+            (None, None, Some(token)) => Ok(MailerConfig::Postmark { token }),
+            #[cfg(not(feature = "postmark"))]
+            (None, None, Some(_)) => {
+                Err("Postmark mailer requested, but this build does not support it.".into())
+            }
 
-            _ => Err("Can only specify one of smtp_server or sendmail_command".into()),
+            (None, None, None) => {
+                Err("Must specify one of smtp_server, sendmail_command or postmark_token".into())
+            }
+
+            _ => Err(
+                "Can only specify one of smtp_server, sendmail_command or postmark_token".into(),
+            ),
         }
     }
 
@@ -245,6 +260,16 @@ impl MailerConfig {
             MailerConfig::LettreSendmail { command } => {
                 let mailer =
                     agents::SendmailMailer::new(command, params.from_address, params.from_name);
+                Box::new(spawn_agent(mailer).await)
+            }
+            #[cfg(feature = "postmark")]
+            MailerConfig::Postmark { token } => {
+                let mailer = agents::PostmarkMailer::new(
+                    params.fetcher,
+                    token,
+                    &params.from_address,
+                    &params.from_name,
+                );
                 Box::new(spawn_agent(mailer).await)
             }
         }
@@ -282,6 +307,8 @@ pub struct ConfigBuilder {
     pub smtp_password: Option<String>,
 
     pub sendmail_command: Option<String>,
+
+    pub postmark_token: Option<String>,
 
     pub limit_per_email: LimitConfig,
 
@@ -325,6 +352,8 @@ impl ConfigBuilder {
             smtp_server: None,
 
             sendmail_command: None,
+
+            postmark_token: None,
 
             limit_per_email: LimitConfig::per_minute(5),
 
@@ -385,16 +414,18 @@ impl ConfigBuilder {
             self.smtp_username,
             self.smtp_password,
             self.sendmail_command,
+            self.postmark_token,
         )?;
 
         // Child structs
         let rng = SecureRandom::new().await;
+        let fetcher = spawn_agent(FetchAgent::new()).await;
         let store = store_config
             .spawn_store(StoreParams {
                 session_ttl: self.session_ttl,
                 cache_ttl: self.cache_ttl,
                 limit_per_email: self.limit_per_email,
-                fetcher: spawn_agent(FetchAgent::new()).await,
+                fetcher: fetcher.clone(),
                 rng: rng.clone(),
             })
             .await;
@@ -424,6 +455,7 @@ impl ConfigBuilder {
             };
         let mailer = mailer_config
             .spawn_mailer(MailerParams {
+                fetcher,
                 from_address: self
                     .from_address
                     .expect("No mail 'From' address configured")

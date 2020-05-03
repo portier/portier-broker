@@ -63,6 +63,9 @@ module.exports = ({ mailbox }) => {
     case "sendmail":
       env.BROKER_SENDMAIL_COMMAND = `${__dirname}/sendmail.sh`;
       break;
+    case "postmark":
+      env.BROKER_POSTMARK_TOKEN = "POSTMARK_API_TEST";
+      break;
     default:
       throw Error(`Invalid TEST_MAILER: ${TEST_MAILER}`);
   }
@@ -73,7 +76,8 @@ module.exports = ({ mailbox }) => {
     env
   });
 
-  // Parse `sendmail.sh` output appearing on broker stderr.
+  // Parse output appearing on broker stderr.
+  // This is produced by `sendmail.sh` or the Postmark code in the broker.
   let inMail = false;
   let mailBuffer = "";
   readline
@@ -82,20 +86,40 @@ module.exports = ({ mailbox }) => {
       crlfDelay: Infinity
     })
     .on("line", line => {
-      if (line === "-----BEGIN SENDMAIL INPUT-----") {
-        inMail = true;
-        mailBuffer = "";
-      } else if (line === "-----END SENDMAIL INPUT-----") {
-        const mail = mailBuffer;
-        inMail = false;
-        mailBuffer = "";
-        if (mail) {
-          mailbox.pushRawMail(mail);
+      switch (line) {
+        case "-----BEGIN RAW EMAIL-----":
+        case "-----BEGIN EMAIL TEXT BODY-----":
+          inMail = true;
+          mailBuffer = "";
+          break;
+
+        case "-----END RAW EMAIL-----": {
+          const mail = mailBuffer;
+          inMail = false;
+          mailBuffer = "";
+          if (mail) {
+            mailbox.pushRawMail(mail);
+          }
+          break;
         }
-      } else if (inMail) {
-        mailBuffer += `${line}\n`;
-      } else {
-        process.stderr.write(`${line}\n`);
+
+        case "-----END EMAIL TEXT BODY-----": {
+          const mail = mailBuffer;
+          inMail = false;
+          mailBuffer = "";
+          if (mail) {
+            mailbox.pushMail(mail);
+          }
+          break;
+        }
+
+        default:
+          if (inMail) {
+            mailBuffer += `${line}\n`;
+          } else {
+            process.stderr.write(`${line}\n`);
+          }
+          break;
       }
     });
 

@@ -11,14 +11,17 @@ const parseOptions = {
 const { TEST_MAILER } = require("./env");
 
 module.exports = () => {
+  // SMTP server instance, created when testing SMTP only.
   let server;
+  // Contains text bodies of mails received.
   const mails = [];
 
+  // Exported API.
   const api = {
     pushRawMail(input, callback) {
       simpleParser(input, parseOptions, (err, parsed) => {
         if (!err) {
-          mails.push(parsed.text);
+          api.pushMail(parsed.text);
         }
         if (callback) {
           callback(err);
@@ -26,6 +29,9 @@ module.exports = () => {
           console.error(err);
         }
       });
+    },
+    pushMail(mail) {
+      mails.push(mail);
     },
     nextMail() {
       return mails.shift();
@@ -41,6 +47,7 @@ module.exports = () => {
     }
   };
 
+  // Start the SMTP server if needed.
   if (TEST_MAILER === "smtp") {
     server = new SMTPServer({
       hideSTARTTLS: true,
