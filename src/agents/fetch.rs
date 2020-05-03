@@ -3,7 +3,7 @@ use crate::utils::BoxError;
 use crate::web::read_body;
 use err_derive::Error;
 use headers::{CacheControl, HeaderMapExt};
-use http::{Request, StatusCode};
+use http::{HeaderValue, Request, StatusCode};
 use hyper::client::{Client, HttpConnector};
 use hyper::Body;
 use hyper_tls::HttpsConnector;
@@ -55,20 +55,28 @@ impl FetchUrl {
 /// Agent that fetches URLs.
 pub struct FetchAgent {
     client: Client<HttpsConnector<HttpConnector>>,
+    user_agent: HeaderValue,
 }
 
 impl FetchAgent {
     pub fn new() -> Self {
-        let connector = HttpsConnector::new();
-        let client = Client::builder().build(connector);
-        FetchAgent { client }
+        FetchAgent {
+            client: Client::builder().build(HttpsConnector::new()),
+            user_agent: HeaderValue::from_str(&format!("portier.io/{}", env!("CARGO_PKG_VERSION")))
+                .expect("Could not prepare User-Agent header"),
+        }
     }
 }
 
 impl Agent for FetchAgent {}
 
 impl Handler<FetchUrl> for FetchAgent {
-    fn handle(&mut self, message: FetchUrl, cx: Context<Self, FetchUrl>) {
+    fn handle(&mut self, mut message: FetchUrl, cx: Context<Self, FetchUrl>) {
+        message
+            .request
+            .headers_mut()
+            .insert("User-Agent", self.user_agent.clone());
+
         let future = self.client.request(message.request);
         cx.reply_later(async {
             let res = future.await?;
