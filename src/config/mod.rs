@@ -11,12 +11,13 @@ use self::i18n::I18n;
 use self::templates::Templates;
 use self::toml::TomlConfig;
 use crate::agents::{
-    self, FetchAgent, KeyManagerSender, ManualKeys, ManualKeysError, RotatingKeys, StoreSender,
+    self, FetchAgent, KeyManagerSender, ManualKeys, ManualKeysError, RotatingKeys, SendMail,
+    SmtpMailer, StoreSender,
 };
 use crate::bridges::oidc::GOOGLE_IDP_ORIGIN;
 use crate::crypto::SigningAlgorithm;
 use crate::utils::{
-    agent::{spawn_agent, Addr},
+    agent::{spawn_agent, Addr, Sender},
     SecureRandom,
 };
 use crate::webfinger::{Link, ParseLinkError, Relation};
@@ -63,12 +64,7 @@ pub struct Config {
     pub signing_algs: Vec<SigningAlgorithm>,
 
     pub store: Arc<dyn StoreSender>,
-
-    pub from_name: String,
-    pub from_address: String,
-    pub smtp_server: String,
-    pub smtp_username: Option<String>,
-    pub smtp_password: Option<String>,
+    pub mailer: Box<dyn Sender<SendMail>>,
 
     pub google_client_id: Option<String>,
     pub domain_overrides: HashMap<String, Vec<Link>>,
@@ -336,6 +332,21 @@ impl ConfigBuilder {
                 );
                 Box::new(spawn_agent(key_manager).await)
             };
+        let mailer: Box<dyn Sender<SendMail>> = {
+            let mailer = SmtpMailer::new(
+                self.smtp_server
+                    .as_ref()
+                    .expect("No SMTP server address configured"),
+                self.smtp_username,
+                self.smtp_password,
+                self.from_address
+                    .expect("No mail 'From' address configured")
+                    .parse()
+                    .expect("Invalid mail 'From' address configured"),
+                self.from_name,
+            );
+            Box::new(spawn_agent(mailer).await)
+        };
 
         // Configure default domain overrides for hosted Google
         let mut domain_overrides = HashMap::new();
@@ -374,14 +385,7 @@ impl ConfigBuilder {
             signing_algs: self.signing_algs,
 
             store,
-
-            from_name: self.from_name,
-            from_address: self.from_address.expect("no smtp from address configured"),
-            smtp_server: self
-                .smtp_server
-                .expect("no smtp outserver address configured"),
-            smtp_username: self.smtp_username,
-            smtp_password: self.smtp_password,
+            mailer,
 
             google_client_id: self.google_client_id,
             domain_overrides,

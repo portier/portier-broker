@@ -252,5 +252,5 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
     }
 
     // Fall back to email loop auth.
-    bridges::email::auth(ctx, &email_addr).await
+    bridges::email::auth(ctx, email_addr).await
 }
