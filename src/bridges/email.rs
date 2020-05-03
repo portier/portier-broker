@@ -5,7 +5,7 @@ use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
 use crate::web::{html_response, json_response, Context, HandlerResult};
 use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
-use serde_derive::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 const QUERY_ESCAPE: &AsciiSet = &CONTROLS.add(b' ').add(b'"').add(b'#').add(b'<').add(b'>');

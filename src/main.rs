@@ -37,7 +37,7 @@ use crate::web::Service;
 use futures_util::future;
 use hyper::{server::Server, service::make_service_fn};
 use log::info;
-use serde_derive::Deserialize;
+use serde::Deserialize;
 use std::{
     io::{Cursor, Read},
     net::SocketAddr,

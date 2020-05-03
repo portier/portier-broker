@@ -1,6 +1,6 @@
 use super::{ConfigBuilder, LimitConfig};
 use crate::crypto::SigningAlgorithm;
-use serde_derive::Deserialize;
+use serde::Deserialize;
 use std::borrow::ToOwned;
 use std::path::PathBuf;
 use std::time::Duration;

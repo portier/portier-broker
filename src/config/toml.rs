@@ -1,7 +1,7 @@
 use super::{ConfigBuilder, LimitConfig};
 use crate::crypto::SigningAlgorithm;
 use crate::webfinger::Link;
-use serde_derive::Deserialize;
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};

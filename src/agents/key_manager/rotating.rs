@@ -6,7 +6,7 @@ use crate::utils::{
     pem, DelayQueueTask, SecureRandom,
 };
 use ring::signature::{Ed25519KeyPair, RsaKeyPair};
-use serde_derive::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::io::Cursor;
 use std::sync::Arc;
