@@ -34,3 +34,8 @@ impl SendMail {
 pub mod lettre_smtp;
 #[cfg(feature = "lettre_smtp")]
 pub use self::lettre_smtp::SmtpMailer;
+
+#[cfg(feature = "lettre_sendmail")]
+pub mod lettre_sendmail;
+#[cfg(feature = "lettre_sendmail")]
+pub use self::lettre_sendmail::SendmailMailer;

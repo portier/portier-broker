@@ -50,32 +50,10 @@ public_url = "" # Required
 
 #allowed_origins = ["https://example.com"]
 
-# Storage method to use. Selecting one of these is required.
-#
-# For simple installations, SQLite is recommended. Please also read:
-# https://github.com/portier/portier-broker/blob/master/docs/storage/sqlite.md
-#
-# Alternatively, Redis can be useful when running multiple instances of the
-# broker, or when there's no persistent file storage. This is common with cloud
-# hosting, like Heroku. Please also read:
-# https://github.com/portier/portier-broker/blob/master/docs/storage/redis.md
-#
-# In-memory storage is an option that should only be used for local testing.
-
-#sqlite_db = "/var/lib/portier-broker/db.sqlite3"
-#redis_url = "redis://localhost/0"
-#memory_storage = true
-
 # The 'From' name and address used by Portier to send emails.
 
 from_name = "Portier"
 from_address = "" # Required
-
-# SMTP server configuration.
-
-smtp_server = "" # Required
-#smtp_username = ""
-#smtp_password = ""
 
 # Optional Google Client ID for verifying `@gmail.com` addresses.
 # You can create one of these at: https://console.cloud.google.com/
@@ -93,6 +71,49 @@ smtp_server = "" # Required
 # how to do this.
 
 generate_rsa_command = ["openssl", "genrsa", "2048"]
+
+################################################################
+# Storage
+
+# Selecting one of these storage methods is required.
+#
+# For simple installations, SQLite is recommended. Alternatively, Redis can be
+# useful when running multiple instances of the broker, or when there's no
+# persistent file storage. This is common with cloud hosting, like Heroku.
+
+# Setting `sqlite_db` enables SQLite storage. Please also read:
+# https://github.com/portier/portier-broker/blob/master/docs/storage/sqlite.md
+
+#sqlite_db = "/var/lib/portier-broker/db.sqlite3"
+
+# Setting `redis_url` enables Redis storage. Please also read:
+# https://github.com/portier/portier-broker/blob/master/docs/storage/redis.md
+
+#redis_url = "redis://localhost/0"
+
+# Setting `memory_storage` enables in-memory storage. This should only be used
+# for local testing.
+
+#memory_storage = true
+
+################################################################
+# Sending mail
+
+# Selecting one of these methods to send mail is required.
+
+# Setting `smtp_server` enables SMTP to send mail. The value should be a
+# hostname or IP address, and may optionally have a port. (If not specified,
+# port 25 is used.) The `smtp_username` and `smtp_password` fields are
+# optional.
+
+#smtp_server = ""
+#smtp_username = ""
+#smtp_password = ""
+
+# Setting `sendmail_command` enables sending mail using the given `sendmail`
+# executable. The path in this example is usually the correct one.
+
+#sendmail_command = "/usr/sbin/sendmail"
 
 ################################################################
 # Advanced settings
