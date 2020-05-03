@@ -22,6 +22,7 @@ use crate::utils::{
 use crate::webfinger::{Link, ParseLinkError, Relation};
 use err_derive::Error;
 use std::{
+    borrow::ToOwned,
     collections::HashMap,
     env::var as env_var,
     io::Error as IoError,
@@ -226,7 +227,7 @@ impl ConfigBuilder {
             signing_algs: vec![SigningAlgorithm::Rs256],
             generate_rsa_command: "openssl genrsa 2048"
                 .split_whitespace()
-                .map(|arg| arg.to_owned())
+                .map(ToOwned::to_owned)
                 .collect(),
 
             redis_url: None,
@@ -313,8 +314,12 @@ impl ConfigBuilder {
             .await;
         let key_manager: Box<dyn KeyManagerSender> =
             if !self.keyfiles.is_empty() || self.keytext.is_some() {
-                let key_manager =
-                    ManualKeys::new(self.keyfiles, self.keytext, &self.signing_algs, rng.clone())?;
+                let key_manager = ManualKeys::new(
+                    &self.keyfiles,
+                    self.keytext,
+                    &self.signing_algs,
+                    rng.clone(),
+                )?;
                 Box::new(spawn_agent(key_manager).await)
             } else {
                 if self.signing_algs.contains(&SigningAlgorithm::Rs256)

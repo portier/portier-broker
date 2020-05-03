@@ -136,7 +136,7 @@ impl<T: KeyPairExt + GeneratedKeyPair> ActiveKeySet<T> {
     }
 }
 
-/// KeyManager where we rotate 3 keys of each type.
+/// A `KeyManager` where we rotate 3 keys of each type.
 pub struct RotatingKeys {
     store: Arc<dyn StoreSender>,
     keys_ttl: Duration,
@@ -226,6 +226,8 @@ impl Handler<Check> for RotatingKeys {
 
 impl Handler<UpdateKeys> for RotatingKeys {
     fn handle(&mut self, message: UpdateKeys, cx: Context<Self, UpdateKeys>) {
+        use SigningAlgorithm::*;
+
         let key_set = message.0;
 
         // Start rotation if the store loaded incomplete or expired keys.
@@ -251,7 +253,6 @@ impl Handler<UpdateKeys> for RotatingKeys {
         }
 
         // Parse and activate keys. After this, we can be sure usable keys are loaded.
-        use SigningAlgorithm::*;
         match key_set.signing_alg {
             Rs256 => self.rsa_keys = Some(ActiveKeySet::parse(&key_set)),
             EdDsa => self.ed25519_keys = Some(ActiveKeySet::parse(&key_set)),

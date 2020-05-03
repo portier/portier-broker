@@ -14,7 +14,7 @@ macro_rules! params {
     );
 }
 
-/// SQLite `application_id` value. 'Prtr' in hex.
+/// Database file `application_id` value. 'Prtr' in hex.
 const APP_ID: u32 = 0x5072_7472;
 
 /// Message sent at an interval to collect garbage.
@@ -39,7 +39,7 @@ impl Message for SaveKeys {
     type Reply = Result<(), SqlError>;
 }
 
-/// Store implementation using SQLite.
+/// Store implementation using `rusqlite`.
 pub struct RusqliteStore {
     /// TTL of session keys
     expire_sessions: Duration,
@@ -173,10 +173,10 @@ impl RusqliteStore {
             )
             .optional()
             .expect("Could not fetch keys from SQLite")
-            .map(|data: String| {
-                serde_json::from_str(&data).expect("Invalid key set JSON in SQLite")
-            })
-            .unwrap_or_else(|| KeySet::empty(signing_alg))
+            .map_or_else(
+                || KeySet::empty(signing_alg),
+                |data: String| serde_json::from_str(&data).expect("Invalid key set JSON in SQLite"),
+            )
     }
 }
 

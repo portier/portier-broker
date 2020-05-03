@@ -146,7 +146,7 @@ pub async fn confirmation(ctx: &mut Context) -> HandlerResult {
     };
 
     let code = try_get_provider_param!(params, "code")
-        .replace(|c: char| c.is_whitespace(), "")
+        .replace(char::is_whitespace, "")
         .to_lowercase();
     if code != bridge_data.code {
         return Err(BrokerError::ProviderInput("incorrect code".to_owned()));

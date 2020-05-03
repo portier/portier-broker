@@ -204,9 +204,9 @@ impl Service {
     async fn serve(req: Request, app: ConfigRc) -> Result<Response, BoxError> {
         // Handle only simple path requests.
         if req.uri().scheme_str().is_some() || req.uri().host().is_some() {
-            let mut res = empty_response(StatusCode::BAD_REQUEST);
-            set_headers(&mut res);
-            return Ok(res);
+            let mut response = empty_response(StatusCode::BAD_REQUEST);
+            set_headers(&mut response);
+            return Ok(response);
         }
 
         // Read the request body.
@@ -251,7 +251,7 @@ impl Service {
 
         // Translate broker errors to responses.
         let mut response = match result {
-            Ok(res) => res,
+            Ok(response) => response,
             Err(err) => handle_error(&ctx, err).await,
         };
 
@@ -410,7 +410,7 @@ fn set_headers<B>(res: &mut hyper::Response<B>) {
     .join("; ");
 
     res.typed_header(StrictTransportSecurity::excluding_subdomains(
-        Duration::from_secs(31_536_000u64),
+        Duration::from_secs(31_536_000_u64),
     ));
     res.header(hyper::header::CONTENT_SECURITY_POLICY, csp.clone());
     res.header("x-content-security-policy", csp);

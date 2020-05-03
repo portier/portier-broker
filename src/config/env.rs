@@ -1,6 +1,7 @@
 use super::{ConfigBuilder, LimitConfig};
 use crate::crypto::SigningAlgorithm;
 use serde_derive::Deserialize;
+use std::borrow::ToOwned;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -122,8 +123,7 @@ impl EnvConfig {
             builder.signing_algs = val;
         }
         if let Some(val) = parsed.generate_rsa_command {
-            builder.generate_rsa_command =
-                val.split_whitespace().map(|arg| arg.to_owned()).collect();
+            builder.generate_rsa_command = val.split_whitespace().map(ToOwned::to_owned).collect();
         }
 
         if let Some(val) = parsed.redis_url {
