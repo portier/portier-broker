@@ -96,6 +96,13 @@ jobs:
     - name: E2E test Postmark
       run: cd tests/e2e/ && TEST_MAILER=postmark ./main.js
 
+    - name: Deploy staging
+      if: github.repository == 'portier/portier-broker' && github.ref == 'refs/heads/master'
+      env:
+        SECRET: ${{ secrets.DEPLOY_WEBHOOK_SECRET }}
+      run: |
+        curl -sS -X POST -H @- https://server.portier.io/webhook <<< "Authorization: Bearer $SECRET"
+
   macos-build:
     runs-on: macos-latest
     steps:
