@@ -21,12 +21,10 @@ pub async fn index(_: &mut Context) -> HandlerResult {
 pub async fn version(_: &mut Context) -> HandlerResult {
     // TODO: Find a more robust way of detecting the git commit.
     // Maybe check/set it in build.rs? Fall back to HEROKU_SLUG_COMMIT?
-    let version = env!("CARGO_PKG_VERSION");
-    let sha = match env::var("HEROKU_SLUG_COMMIT") {
-        Ok(sha) => sha,
-        Err(_) => "unknown".to_owned(),
-    };
-    let body = format!("Portier {} (git commit {})", version, sha);
+    let mut body = format!("Portier {}", env!("CARGO_PKG_VERSION"));
+    if let Ok(commit) = env::var("HEROKU_SLUG_COMMIT") {
+        body.push_str(&format!(" (git commit {})", commit));
+    }
 
     let mut res = Response::new(Body::from(body));
     res.typed_header(ContentType::text_utf8());

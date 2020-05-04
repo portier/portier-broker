@@ -2,22 +2,25 @@
 
 // Entry point for the test runner.
 
-const runMailServer = require("./src/mailServer");
-const runBroker = require("./src/broker");
-const runRelyingParty = require("./src/relying-party");
-const runTests = require("./src/tests");
 const { Builder } = require("selenium-webdriver");
 const chrome = require("selenium-webdriver/chrome");
 const firefox = require("selenium-webdriver/firefox");
 
+const createMailbox = require("./src/mailbox");
+const createBroker = require("./src/broker");
+const createRelyingParty = require("./src/relying-party");
+const createTests = require("./src/tests");
+
+const { HEADLESS } = require("./src/env");
+
 const main = async () => {
-  let mailServer, broker, relyingParty, driver;
+  let mailbox, broker, relyingParty, driver;
   try {
-    mailServer = runMailServer();
-    broker = runBroker();
-    relyingParty = runRelyingParty();
+    mailbox = createMailbox();
+    broker = createBroker({ mailbox });
+    relyingParty = createRelyingParty();
     driver = await createDriver();
-    await runTests({ mailServer, broker, relyingParty, driver });
+    await createTests({ mailbox, broker, relyingParty, driver });
   } finally {
     if (driver) {
       await driver.quit().catch(err => {
@@ -31,8 +34,8 @@ const main = async () => {
     if (broker) {
       broker.destroy();
     }
-    if (mailServer) {
-      mailServer.destroy();
+    if (mailbox) {
+      mailbox.destroy();
     }
   }
 };
@@ -41,8 +44,7 @@ const createDriver = async browser => {
   const windowSize = { width: 800, height: 600 };
   const firefoxOptions = new firefox.Options().windowSize(windowSize);
   const chromeOptions = new chrome.Options().windowSize(windowSize);
-  const { HEADLESS = "1" } = process.env;
-  if (parseInt(HEADLESS, 10)) {
+  if (HEADLESS === "1") {
     firefoxOptions.headless();
     chromeOptions.headless();
   }
@@ -50,9 +52,6 @@ const createDriver = async browser => {
   const builder = new Builder();
   builder.setFirefoxOptions(firefoxOptions);
   builder.setChromeOptions(chromeOptions);
-  if (!process.env.SELENIUM_BROWSER) {
-    builder.forBrowser("firefox");
-  }
   return builder.build();
 };
 

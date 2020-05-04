@@ -11,12 +11,14 @@ use self::i18n::I18n;
 use self::templates::Templates;
 use self::toml::TomlConfig;
 use crate::agents::{
-    self, FetchAgent, KeyManagerSender, ManualKeys, ManualKeysError, RotatingKeys, StoreSender,
+    self, FetchAgent, KeyManagerSender, ManualKeys, ManualKeysError, RotatingKeys, SendMail,
+    StoreSender,
 };
 use crate::bridges::oidc::GOOGLE_IDP_ORIGIN;
 use crate::crypto::SigningAlgorithm;
+use crate::email_address::EmailAddress;
 use crate::utils::{
-    agent::{spawn_agent, Addr},
+    agent::{spawn_agent, Addr, Sender},
     SecureRandom,
 };
 use crate::webfinger::{Link, ParseLinkError, Relation};
@@ -63,12 +65,7 @@ pub struct Config {
     pub signing_algs: Vec<SigningAlgorithm>,
 
     pub store: Arc<dyn StoreSender>,
-
-    pub from_name: String,
-    pub from_address: String,
-    pub smtp_server: String,
-    pub smtp_username: Option<String>,
-    pub smtp_password: Option<String>,
+    pub mailer: Box<dyn Sender<SendMail>>,
 
     pub google_client_id: Option<String>,
     pub domain_overrides: HashMap<String, Vec<Link>>,
@@ -171,6 +168,114 @@ impl StoreConfig {
     }
 }
 
+/// Parameters for `MailerConfig::spawn_mailer`.
+struct MailerParams {
+    fetcher: Addr<FetchAgent>,
+    from_address: EmailAddress,
+    from_name: String,
+}
+
+/// Mailer configuration is first translated into this intermediate enum.
+enum MailerConfig {
+    #[cfg(feature = "lettre_smtp")]
+    LettreSmtp {
+        server: String,
+        credentials: Option<(String, String)>,
+    },
+    #[cfg(feature = "lettre_sendmail")]
+    LettreSendmail { command: String },
+    #[cfg(feature = "postmark")]
+    Postmark { token: String },
+}
+
+impl MailerConfig {
+    fn from_options(
+        smtp_server: Option<String>,
+        smtp_username: Option<String>,
+        smtp_password: Option<String>,
+        sendmail_command: Option<String>,
+        postmark_token: Option<String>,
+    ) -> Result<Self, ConfigError> {
+        match (smtp_server, sendmail_command, postmark_token) {
+            #[cfg(feature = "lettre_smtp")]
+            (Some(server), None, None) => {
+                let credentials = match (smtp_username, smtp_password) {
+                    (Some(username), Some(password)) => Some((username, password)),
+                    (None, None) => None,
+                    _ => return Err(
+                        "only one of SMTP username and password specified; provide both or neither"
+                            .into(),
+                    ),
+                };
+                Ok(MailerConfig::LettreSmtp {
+                    server,
+                    credentials,
+                })
+            }
+            #[cfg(not(feature = "lettre_smtp"))]
+            (Some(_), None, None) => {
+                Err("SMTP mailer requested, but this build does not support it.".into())
+            }
+
+            #[cfg(feature = "lettre_sendmail")]
+            (None, Some(command), None) => Ok(MailerConfig::LettreSendmail { command }),
+            #[cfg(not(feature = "lettre_sendmail"))]
+            (None, Some(_), None) => {
+                Err("sendmail mailer requested, but this build does not support it.".into())
+            }
+
+            #[cfg(feature = "postmark")]
+            (None, None, Some(token)) => Ok(MailerConfig::Postmark { token }),
+            #[cfg(not(feature = "postmark"))]
+            (None, None, Some(_)) => {
+                Err("Postmark mailer requested, but this build does not support it.".into())
+            }
+
+            (None, None, None) => {
+                Err("Must specify one of smtp_server, sendmail_command or postmark_token".into())
+            }
+
+            _ => Err(
+                "Can only specify one of smtp_server, sendmail_command or postmark_token".into(),
+            ),
+        }
+    }
+
+    async fn spawn_mailer(self, params: MailerParams) -> Box<dyn Sender<SendMail>> {
+        match self {
+            #[cfg(feature = "lettre_smtp")]
+            MailerConfig::LettreSmtp {
+                server,
+                credentials,
+            } => {
+                let mailer = agents::SmtpMailer::new(
+                    &server,
+                    credentials,
+                    params.from_address,
+                    params.from_name,
+                );
+                Box::new(spawn_agent(mailer).await)
+            }
+            #[cfg(feature = "lettre_sendmail")]
+            MailerConfig::LettreSendmail { command } => {
+                let mailer =
+                    agents::SendmailMailer::new(command, params.from_address, params.from_name);
+                Box::new(spawn_agent(mailer).await)
+            }
+            #[cfg(feature = "postmark")]
+            MailerConfig::Postmark { token } => {
+                let mailer = agents::PostmarkMailer::new(
+                    params.fetcher,
+                    token,
+                    &params.from_address,
+                    &params.from_name,
+                );
+                Box::new(spawn_agent(mailer).await)
+            }
+        }
+    }
+}
+
 pub struct ConfigBuilder {
     pub listen_ip: String,
     pub listen_port: u16,
@@ -196,9 +301,14 @@ pub struct ConfigBuilder {
 
     pub from_name: String,
     pub from_address: Option<String>,
+
     pub smtp_server: Option<String>,
     pub smtp_username: Option<String>,
     pub smtp_password: Option<String>,
+
+    pub sendmail_command: Option<String>,
+
+    pub postmark_token: Option<String>,
 
     pub limit_per_email: LimitConfig,
 
@@ -236,9 +346,14 @@ impl ConfigBuilder {
 
             from_name: "Portier".to_owned(),
             from_address: None,
+
             smtp_username: None,
             smtp_password: None,
             smtp_server: None,
+
+            sendmail_command: None,
+
+            postmark_token: None,
 
             limit_per_email: LimitConfig::per_minute(5),
 
@@ -292,23 +407,25 @@ impl ConfigBuilder {
     }
 
     pub async fn done(self) -> Result<Config, ConfigError> {
-        // Additional validations
         let store_config =
             StoreConfig::from_options(self.redis_url, self.sqlite_db, self.memory_storage)?;
-        if self.smtp_username.is_none() != self.smtp_password.is_none() {
-            return Err(
-                "only one of smtp username and password specified; provide both or neither".into(),
-            );
-        }
+        let mailer_config = MailerConfig::from_options(
+            self.smtp_server,
+            self.smtp_username,
+            self.smtp_password,
+            self.sendmail_command,
+            self.postmark_token,
+        )?;
 
         // Child structs
         let rng = SecureRandom::new().await;
+        let fetcher = spawn_agent(FetchAgent::new()).await;
         let store = store_config
             .spawn_store(StoreParams {
                 session_ttl: self.session_ttl,
                 cache_ttl: self.cache_ttl,
                 limit_per_email: self.limit_per_email,
-                fetcher: spawn_agent(FetchAgent::new()).await,
+                fetcher: fetcher.clone(),
                 rng: rng.clone(),
             })
             .await;
@@ -336,6 +453,17 @@ impl ConfigBuilder {
                 );
                 Box::new(spawn_agent(key_manager).await)
             };
+        let mailer = mailer_config
+            .spawn_mailer(MailerParams {
+                fetcher,
+                from_address: self
+                    .from_address
+                    .expect("No mail 'From' address configured")
+                    .parse()
+                    .expect("Invalid mail 'From' address configured"),
+                from_name: self.from_name,
+            })
+            .await;
 
         // Configure default domain overrides for hosted Google
         let mut domain_overrides = HashMap::new();
@@ -374,14 +502,7 @@ impl ConfigBuilder {
             signing_algs: self.signing_algs,
 
             store,
-
-            from_name: self.from_name,
-            from_address: self.from_address.expect("no smtp from address configured"),
-            smtp_server: self
-                .smtp_server
-                .expect("no smtp outserver address configured"),
-            smtp_username: self.smtp_username,
-            smtp_password: self.smtp_password,
+            mailer,
 
             google_client_id: self.google_client_id,
             domain_overrides,

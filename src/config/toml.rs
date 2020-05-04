@@ -1,7 +1,7 @@
 use super::{ConfigBuilder, LimitConfig};
 use crate::crypto::SigningAlgorithm;
 use crate::webfinger::Link;
-use serde_derive::Deserialize;
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -34,9 +34,14 @@ pub struct TomlConfig {
 
     from_name: Option<String>,
     from_address: Option<String>,
+
     smtp_server: Option<String>,
     smtp_username: Option<String>,
     smtp_password: Option<String>,
+
+    sendmail_command: Option<String>,
+
+    postmark_token: Option<String>,
 
     limit_per_email: Option<LimitConfig>,
 
@@ -278,6 +283,7 @@ impl TomlConfig {
         if let Some(val) = parsed.from_address {
             builder.from_address = Some(val);
         }
+
         if let Some(val) = parsed.smtp_server {
             builder.smtp_server = Some(val);
         }
@@ -286,6 +292,14 @@ impl TomlConfig {
         }
         if let Some(val) = parsed.smtp_password {
             builder.smtp_password = Some(val);
+        }
+
+        if let Some(val) = parsed.sendmail_command {
+            builder.sendmail_command = Some(val);
+        }
+
+        if let Some(val) = parsed.postmark_token {
+            builder.postmark_token = Some(val);
         }
 
         if let Some(val) = parsed.limit_per_email {

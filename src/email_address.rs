@@ -83,6 +83,11 @@ impl EmailAddress {
         &self.serialization
     }
 
+    /// Consume and return the serialization.
+    pub fn into_string(self) -> String {
+        self.serialization
+    }
+
     /// Return the normalized local part.
     pub fn local(&self) -> &str {
         &self.serialization[..self.local_end]

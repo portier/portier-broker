@@ -2,7 +2,7 @@ use crate::agents::DeleteSession;
 use crate::crypto;
 use crate::error::BrokerError;
 use crate::web::{json_response, return_to_relier, Context, HandlerResult};
-use serde_derive::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 /// Session data stored by bridges.

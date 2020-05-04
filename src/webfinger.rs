@@ -3,7 +3,7 @@ use crate::config::ConfigRc;
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
 use err_derive::Error;
-use serde_derive::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Error as FmtError, Formatter};
 use std::str::FromStr;
 use url::Url;

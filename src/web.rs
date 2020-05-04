@@ -16,7 +16,7 @@ use hyper::server::conn::AddrStream;
 use hyper::service::Service as HyperService;
 use hyper::Body;
 use log::info;
-use serde_derive::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{collections::HashMap, net::SocketAddr, sync::Arc, task::Poll, time::Duration};
 use url::{form_urlencoded, Url};
