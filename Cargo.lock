@@ -931,7 +931,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "portier_broker"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "accept-language 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "base64 0.12.1 (registry+https://github.com/rust-lang/crates.io-index)",
