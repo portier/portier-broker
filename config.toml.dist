@@ -100,6 +100,9 @@ generate_rsa_command = ["openssl", "genrsa", "2048"]
 # Sending mail
 
 # Selecting one of these methods to send mail is required.
+#
+# If you're looking for an easy way to test the broker locally, consider using
+# SMTP with Mailhog: https://github.com/mailhog/MailHog
 
 # Setting `smtp_server` enables SMTP to send mail. The value should be a
 # hostname or IP address, and may optionally have a port. (If not specified,

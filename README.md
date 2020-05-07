@@ -22,11 +22,6 @@ broker] yourself.
 [GitHub releases]: https://github.com/portier/portier-broker/releases
 [build the broker]: https://github.com/portier/portier-broker/blob/master/docs/build.md
 
-To run your own broker, you'll need access to an SMTP server for sending email.
-For local testing, [MailHog] can provide this for you.
-
-[MailHog]: https://github.com/mailhog/MailHog
-
 The broker can be configured using a configuration file or through environment
 variables. Both are documented in the [example configuration file].
 
