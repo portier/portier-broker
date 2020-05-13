@@ -5,7 +5,7 @@ use crate::crypto::{self, SigningAlgorithm};
 use crate::email_address::EmailAddress;
 use crate::error::{BrokerError, BrokerResult};
 use crate::router::router;
-use crate::utils::{http::ResponseExt, BoxError, BoxFuture};
+use crate::utils::{http::ResponseExt, real_ip, BoxError, BoxFuture};
 use bytes::{Bytes, BytesMut};
 use err_derive::Error;
 use futures_util::stream::StreamExt;
@@ -272,7 +272,8 @@ impl HyperService<Request> for Service {
     }
 
     fn call(&mut self, req: Request) -> Self::Future {
-        info!("{} - {} {}", self.remote_addr, req.method(), req.uri());
+        let ip = real_ip(self.remote_addr, &req, &self.app.trusted_proxies);
+        info!("{} - {} {}", ip, req.method(), req.uri());
 
         // Grab what we need from `self` before creating a future.
         let app = Arc::clone(&self.app);

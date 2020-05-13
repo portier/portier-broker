@@ -5,6 +5,7 @@ pub mod http;
 pub mod keys;
 pub mod logger;
 pub mod pem;
+mod real_ip;
 #[cfg(feature = "redis")]
 pub mod redis;
 mod rng;
@@ -14,6 +15,7 @@ mod tlds;
 use std::{error::Error, future::Future, pin::Pin};
 
 pub use delay_queue_task::*;
+pub use real_ip::*;
 pub use rng::*;
 pub use time::*;
 pub use tlds::*;

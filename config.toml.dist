@@ -44,6 +44,18 @@ listen_port = 3333
 
 public_url = "" # Required
 
+# A list of IP addresses or subnets (CIDR-notation) of trusted reverse proxies.
+#
+# Portier uses this to determine the actual client IP address, and setting this
+# correctly is important for rate-limits.
+#
+# Portier will look for the `X-Forwarded-For` header sent by reverse proxies.
+# In Nginx, you'd accomplish this with:
+#
+#     proxy_set_header  X-Forwarded-For  $proxy_add_x_forwarded_for
+#
+trusted_proxies = ["127.0.0.0/8", "::1"]
+
 # Whitelist of origins that are allowed to use this broker. If left unset, the
 # broker will allow any Relying Party to use it. (Note that an empty list here
 # has different meaning than leaving it unset.)

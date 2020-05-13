@@ -23,6 +23,7 @@ use crate::utils::{
 };
 use crate::webfinger::{Link, ParseLinkError, Relation};
 use err_derive::Error;
+use ipnetwork::IpNetwork;
 use std::{
     borrow::ToOwned,
     collections::HashMap,
@@ -54,6 +55,7 @@ pub struct Config {
     pub listen_ip: String,
     pub listen_port: u16,
     pub public_url: String,
+    pub trusted_proxies: Vec<IpNetwork>,
     pub allowed_origins: Option<Vec<String>>,
 
     pub static_ttl: Duration,
@@ -280,6 +282,7 @@ pub struct ConfigBuilder {
     pub listen_ip: String,
     pub listen_port: u16,
     pub public_url: Option<String>,
+    pub trusted_proxies: Vec<IpNetwork>,
     pub allowed_origins: Option<Vec<String>>,
     pub data_dir: String,
 
@@ -322,6 +325,10 @@ impl ConfigBuilder {
             listen_ip: "127.0.0.1".to_owned(),
             listen_port: 3333,
             public_url: None,
+            trusted_proxies: ["127.0.0.0/8", "::1"]
+                .iter()
+                .map(|v| v.parse().unwrap())
+                .collect(),
             allowed_origins: None,
             data_dir: String::new(),
 
@@ -491,6 +498,7 @@ impl ConfigBuilder {
             listen_ip: self.listen_ip,
             listen_port: self.listen_port,
             public_url: self.public_url.expect("no public url configured"),
+            trusted_proxies: self.trusted_proxies,
             allowed_origins: self.allowed_origins,
 
             static_ttl: self.static_ttl,
