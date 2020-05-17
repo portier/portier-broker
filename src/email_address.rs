@@ -2,6 +2,7 @@ use crate::utils::TLDS;
 use err_derive::Error;
 use matches::matches;
 use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
+use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 
 fn is_invalid_domain_char(c: char) -> bool {
@@ -27,10 +28,24 @@ pub enum ParseEmailError {
     InvalidTld,
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct EmailAddress {
     serialization: String,
     local_end: usize,
+}
+
+impl PartialEq for EmailAddress {
+    fn eq(&self, other: &Self) -> bool {
+        self.serialization == other.serialization
+    }
+}
+
+impl Eq for EmailAddress {}
+
+impl Hash for EmailAddress {
+    fn hash<H>(&self, state: &mut impl Hasher) {
+        self.serialization.hash(state)
+    }
 }
 
 impl FromStr for EmailAddress {
