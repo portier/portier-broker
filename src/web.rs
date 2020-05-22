@@ -18,7 +18,13 @@ use hyper::Body;
 use log::info;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::{collections::HashMap, net::SocketAddr, sync::Arc, task::Poll, time::Duration};
+use std::{
+    collections::HashMap,
+    net::{IpAddr, SocketAddr},
+    sync::Arc,
+    task::Poll,
+    time::Duration,
+};
 use url::{form_urlencoded, Url};
 
 /// Error type used within an `io::Error`, to indicate a size limit was exceeded.
@@ -54,6 +60,7 @@ pub struct ReturnParams {
 /// Common session data.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SessionData {
+    pub original_ip: IpAddr,
     pub return_params: ReturnParams,
     pub email: String,
     pub email_addr: EmailAddress,
@@ -65,6 +72,8 @@ pub struct SessionData {
 pub struct Context {
     /// The application configuration
     pub app: ConfigRc,
+    /// The IP address the request came from.
+    pub ip: IpAddr,
     /// Request method
     pub method: Method,
     /// Request URI
@@ -120,6 +129,7 @@ impl Context {
         email_addr: &EmailAddress,
         nonce: &str,
         signing_alg: SigningAlgorithm,
+        ip: IpAddr,
     ) {
         assert!(self.session_id.is_empty());
         assert!(self.session_data.is_none());
@@ -129,6 +139,7 @@ impl Context {
             .expect("start_session called without return parameters");
         self.session_id = crypto::session_id(email_addr, client_id, &self.app.rng).await;
         self.session_data = Some(SessionData {
+            original_ip: ip,
             return_params: return_params.clone(),
             email: email.to_owned(),
             email_addr: email_addr.clone(),
@@ -201,7 +212,7 @@ impl Service {
         }
     }
 
-    async fn serve(req: Request, app: ConfigRc) -> Result<Response, BoxError> {
+    async fn serve(ip: IpAddr, req: Request, app: ConfigRc) -> Result<Response, BoxError> {
         // Handle only simple path requests.
         if req.uri().scheme_str().is_some() || req.uri().host().is_some() {
             let mut response = empty_response(StatusCode::BAD_REQUEST);
@@ -236,6 +247,7 @@ impl Service {
         // Create the request context.
         let mut ctx = Context {
             app,
+            ip,
             method: parts.method,
             uri: parts.uri,
             headers: parts.headers,
@@ -277,7 +289,7 @@ impl HyperService<Request> for Service {
 
         // Grab what we need from `self` before creating a future.
         let app = Arc::clone(&self.app);
-        Box::pin(Self::serve(req, app))
+        Box::pin(Self::serve(ip, req, app))
     }
 }
 

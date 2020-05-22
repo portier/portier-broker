@@ -1,4 +1,4 @@
-use super::{ConfigBuilder, LimitConfig};
+use super::{ConfigBuilder, LegacyLimitPerEmail, LimitConfig};
 use crate::crypto::SigningAlgorithm;
 use serde::Deserialize;
 use std::borrow::ToOwned;
@@ -44,7 +44,8 @@ pub struct EnvConfig {
 
     postmark_token: Option<String>,
 
-    limit_per_email: Option<LimitConfig>,
+    limits: Option<Vec<LimitConfig>>,
+    limit_per_email: Option<LegacyLimitPerEmail>,
 
     google_client_id: Option<String>,
 
@@ -166,8 +167,12 @@ impl EnvConfig {
             builder.postmark_token = Some(val);
         }
 
+        if let Some(val) = parsed.limits {
+            builder.limits = val;
+        }
         if let Some(val) = parsed.limit_per_email {
-            builder.limit_per_email = val;
+            log::warn!("BROKER_LIMIT_PER_EMAIL is deprecated. Please use BROKER_LIMITS instead.");
+            builder.limits = vec![val.0];
         }
 
         if let Some(val) = parsed.google_client_id {

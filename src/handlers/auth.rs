@@ -1,5 +1,6 @@
-use crate::agents::{GetPublicJwks, IncrAndTestLimit};
+use crate::agents::{GetPublicJwks, IncrAndTestLimits};
 use crate::bridges;
+use crate::config::LimitInput;
 use crate::crypto::SigningAlgorithm;
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
@@ -172,12 +173,16 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
         .parse::<EmailAddress>()
         .map_err(|_| BrokerError::Input("login_hint is not a valid email address".to_owned()))?;
 
-    // Enforce ratelimit based on the normalized email.
+    // Enforce rate limits.
     match ctx
         .app
         .store
-        .send(IncrAndTestLimit::PerEmail {
-            addr: email_addr.as_str().to_owned(),
+        .send(IncrAndTestLimits {
+            input: LimitInput {
+                email_addr: email_addr.clone(),
+                origin: client_id.clone(),
+                ip: ctx.ip,
+            },
         })
         .await
     {
@@ -192,8 +197,15 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
     }
 
     // Create the session with common data, but do not yet save it.
-    ctx.start_session(&client_id, &login_hint, &email_addr, &nonce, signing_alg)
-        .await;
+    ctx.start_session(
+        &client_id,
+        &login_hint,
+        &email_addr,
+        &nonce,
+        signing_alg,
+        ctx.ip,
+    )
+    .await;
 
     // Discover the authentication endpoints based on the email domain.
     let discovery_future = async {

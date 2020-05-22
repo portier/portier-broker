@@ -4,7 +4,7 @@ mod limits;
 mod templates;
 mod toml;
 
-pub use limits::LimitConfig;
+pub use limits::{LegacyLimitPerEmail, LimitConfig, LimitInput};
 
 use self::env::EnvConfig;
 use self::i18n::I18n;
@@ -82,7 +82,7 @@ pub struct Config {
 struct StoreParams {
     session_ttl: Duration,
     cache_ttl: Duration,
-    limit_per_email: LimitConfig,
+    limit_configs: Vec<LimitConfig>,
     fetcher: Addr<FetchAgent>,
     #[allow(dead_code)]
     rng: SecureRandom,
@@ -136,7 +136,7 @@ impl StoreConfig {
                     redis_url,
                     params.session_ttl,
                     params.cache_ttl,
-                    params.limit_per_email,
+                    params.limit_configs,
                     params.fetcher,
                     params.rng,
                 )
@@ -150,7 +150,7 @@ impl StoreConfig {
                     sqlite_db,
                     params.session_ttl,
                     params.cache_ttl,
-                    params.limit_per_email,
+                    params.limit_configs,
                     params.fetcher,
                 )
                 .await
@@ -161,7 +161,7 @@ impl StoreConfig {
                 let store = agents::MemoryStore::new(
                     params.session_ttl,
                     params.cache_ttl,
-                    params.limit_per_email,
+                    params.limit_configs,
                     params.fetcher,
                 );
                 Arc::new(spawn_agent(store).await)
@@ -319,7 +319,7 @@ pub struct ConfigBuilder {
 
     pub postmark_token: Option<String>,
 
-    pub limit_per_email: LimitConfig,
+    pub limits: Vec<LimitConfig>,
 
     pub google_client_id: Option<String>,
     pub domain_overrides: HashMap<String, Vec<Link>>,
@@ -368,7 +368,16 @@ impl ConfigBuilder {
 
             postmark_token: None,
 
-            limit_per_email: LimitConfig::per_minute(5),
+            limits: [
+                "ip:50/s",
+                "ip:extend_window:100/5s",
+                "ip:email:30/h",
+                "ip:email:decr_complete:5/15m",
+                "ip:email:origin:decr_complete:2/15m",
+            ]
+            .iter()
+            .map(|value| value.parse().unwrap())
+            .collect::<Vec<_>>(),
 
             google_client_id: None,
             domain_overrides: HashMap::new(),
@@ -419,7 +428,7 @@ impl ConfigBuilder {
         self
     }
 
-    pub async fn done(self) -> Result<Config, ConfigError> {
+    pub async fn done(mut self) -> Result<Config, ConfigError> {
         let store_config =
             StoreConfig::from_options(self.redis_url, self.sqlite_db, self.memory_storage)?;
         let mailer_config = MailerConfig::from_options(
@@ -430,6 +439,11 @@ impl ConfigBuilder {
             self.postmark_token,
         )?;
 
+        // Assign IDs to limit configs.
+        for (idx, limit) in self.limits.iter_mut().enumerate() {
+            limit.id = idx;
+        }
+
         // Child structs
         let rng = SecureRandom::new().await;
         let fetcher = spawn_agent(FetchAgent::new()).await;
@@ -437,7 +451,7 @@ impl ConfigBuilder {
             .spawn_store(StoreParams {
                 session_ttl: self.session_ttl,
                 cache_ttl: self.cache_ttl,
-                limit_per_email: self.limit_per_email,
+                limit_configs: self.limits,
                 fetcher: fetcher.clone(),
                 rng: rng.clone(),
             })
@@ -535,7 +549,7 @@ impl ConfigBuilder {
             .spawn_store(StoreParams {
                 session_ttl: self.session_ttl,
                 cache_ttl: self.cache_ttl,
-                limit_per_email: self.limit_per_email,
+                limit_configs: self.limits,
                 fetcher: spawn_agent(FetchAgent::new()).await,
                 rng: SecureRandom::new().await,
             })

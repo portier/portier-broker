@@ -54,8 +54,8 @@ pub struct MemoryStore {
     expire_sessions: Duration,
     /// TTL of cache keys
     expire_cache: Duration,
-    /// Configuration for per-email rate limiting.
-    limit_per_email_config: LimitConfig,
+    /// Rate limit configuration.
+    limit_configs: Vec<LimitConfig>,
     /// The agent used for fetching on cache miss.
     fetcher: Addr<FetchAgent>,
     /// Key manager if rotating keys are enabled.
@@ -65,7 +65,7 @@ pub struct MemoryStore {
     /// Cache storage.
     cache: HashMap<Url, CacheSlot>,
     /// Rate limit storage.
-    limits: HashMap<IncrAndTestLimit, Expiring<usize>>,
+    limits: HashMap<String, Expiring<usize>>,
     /// Keys storage.
     keys: HashMap<SigningAlgorithm, KeysSlot>,
 }
@@ -74,7 +74,7 @@ impl MemoryStore {
     pub fn new(
         expire_sessions: Duration,
         expire_cache: Duration,
-        limit_per_email_config: LimitConfig,
+        limit_configs: Vec<LimitConfig>,
         fetcher: Addr<FetchAgent>,
     ) -> Self {
         log::warn!("Storing sessions and keys in memory.");
@@ -83,7 +83,7 @@ impl MemoryStore {
         MemoryStore {
             expire_sessions,
             expire_cache,
-            limit_per_email_config,
+            limit_configs,
             fetcher,
             key_manager: None,
             sessions: HashMap::new(),
@@ -190,28 +190,55 @@ impl Handler<FetchUrlCached> for MemoryStore {
     }
 }
 
-impl Handler<IncrAndTestLimit> for MemoryStore {
-    fn handle(&mut self, message: IncrAndTestLimit, cx: Context<Self, IncrAndTestLimit>) {
-        let config = match message {
-            IncrAndTestLimit::PerEmail { .. } => self.limit_per_email_config,
-        };
-        let count: usize = match self.limits.entry(message) {
-            Entry::Occupied(mut entry) => {
-                let mut expiring = entry.get_mut();
-                if expiring.expires <= Instant::now() {
-                    *expiring = Expiring::from_duration(1, config.duration);
-                    1
-                } else {
-                    expiring.value += 1;
-                    expiring.value
+impl Handler<IncrAndTestLimits> for MemoryStore {
+    fn handle(&mut self, message: IncrAndTestLimits, cx: Context<Self, IncrAndTestLimits>) {
+        let mut ok = true;
+        for config in &self.limit_configs {
+            let key = message.input.build_key(&config, "", "|");
+            let count = match self.limits.entry(key) {
+                Entry::Occupied(mut entry) => {
+                    let mut expiring = entry.get_mut();
+                    let now = Instant::now();
+                    if expiring.expires <= now {
+                        *expiring = Expiring::from_duration(1, config.window);
+                        1
+                    } else {
+                        if config.extend_window {
+                            expiring.expires = now + config.window;
+                        }
+                        expiring.value = expiring.value.saturating_add(1);
+                        expiring.value
+                    }
                 }
+                Entry::Vacant(entry) => {
+                    entry.insert(Expiring::from_duration(1, config.window));
+                    1
+                }
+            };
+            ok = ok && count <= config.max_count;
+        }
+        cx.reply(Ok(ok));
+    }
+}
+
+impl Handler<DecrLimits> for MemoryStore {
+    fn handle(&mut self, message: DecrLimits, cx: Context<Self, DecrLimits>) {
+        for config in &self.limit_configs {
+            if !config.decr_complete {
+                continue;
             }
-            Entry::Vacant(entry) => {
-                entry.insert(Expiring::from_duration(1, config.duration));
-                1
-            }
-        };
-        cx.reply(Ok(count <= config.max_count));
+            let key = message.input.build_key(&config, "", "|");
+            if let Entry::Occupied(mut entry) = self.limits.entry(key) {
+                let Expiring { expires, value } = *entry.get();
+                let now = Instant::now();
+                if expires <= now || value <= 1 {
+                    entry.remove();
+                } else {
+                    entry.get_mut().value -= 1;
+                }
+            };
+        }
+        cx.reply(Ok(()));
     }
 }
 

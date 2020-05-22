@@ -1,4 +1,5 @@
 use crate::agents::key_manager::rotating::{KeySet, RotatingKeys};
+use crate::config::LimitInput;
 use crate::crypto::SigningAlgorithm;
 use crate::utils::agent::{Addr, Message, Sender};
 use crate::utils::BoxError;
@@ -44,14 +45,27 @@ impl Message for FetchUrlCached {
     type Reply = Result<String, BoxError>;
 }
 
-/// Message requesting a rate limit be increased and tested.
-#[derive(PartialEq, Eq, Hash)]
-pub enum IncrAndTestLimit {
-    /// Selects the per-email rate-limit.
-    PerEmail { addr: String },
+/// Message requesting rate limits be increased and tested.
+///
+/// The configured rate limits are passed to the store when it is created. The store should always
+/// increment all rate limits, event if only the first one fails, for example. The result is `true`
+/// if none of the rate limits were hit.
+pub struct IncrAndTestLimits {
+    pub input: LimitInput,
 }
-impl Message for IncrAndTestLimit {
+impl Message for IncrAndTestLimits {
     type Reply = Result<bool, BoxError>;
+}
+
+/// Message requesting rate limits be decreased.
+///
+/// Rate limits are decreased when authentication was successfully completed, but only for rate
+/// limits that have the `only_incomplete` flag set.
+pub struct DecrLimits {
+    pub input: LimitInput,
+}
+impl Message for DecrLimits {
+    type Reply = Result<(), BoxError>;
 }
 
 /// Message requesting rotating keys be enabled.
@@ -99,7 +113,8 @@ pub trait StoreSender:
     + Sender<GetSession>
     + Sender<DeleteSession>
     + Sender<FetchUrlCached>
-    + Sender<IncrAndTestLimit>
+    + Sender<IncrAndTestLimits>
+    + Sender<DecrLimits>
     + Sender<EnableRotatingKeys>
     + Sender<RotateKeysLocked>
     + Sender<ImportKeySet>

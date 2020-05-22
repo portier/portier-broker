@@ -76,16 +76,22 @@ macro_rules! check_token_field {
     };
 }
 
-/// Implements Serialize/Deserialize for a type that is Display/FromStr.
+/// Implements `Serialize` for a type that is `Display`.
 #[macro_export]
-macro_rules! serde_string {
+macro_rules! serde_display {
     ( $type:ty ) => {
         impl serde::Serialize for $type {
             fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
                 serializer.collect_str(self)
             }
         }
+    };
+}
 
+/// Implements `Deserialize` for a type that is `FromStr`.
+#[macro_export]
+macro_rules! serde_from_str {
+    ( $type:ty ) => {
         impl<'de> serde::Deserialize<'de> for $type {
             fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
                 <String as serde::Deserialize>::deserialize(deserializer)?

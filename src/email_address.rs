@@ -43,7 +43,7 @@ impl PartialEq for EmailAddress {
 impl Eq for EmailAddress {}
 
 impl Hash for EmailAddress {
-    fn hash<H>(&self, state: &mut impl Hasher) {
+    fn hash<H: Hasher>(&self, state: &mut H) {
         self.serialization.hash(state)
     }
 }
@@ -158,7 +158,8 @@ impl Debug for EmailAddress {
     }
 }
 
-serde_string!(EmailAddress);
+serde_from_str!(EmailAddress);
+serde_display!(EmailAddress);
 
 #[cfg(test)]
 mod tests {

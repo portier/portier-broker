@@ -4,14 +4,14 @@ use crate::crypto::SigningAlgorithm;
 use crate::utils::{
     agent::*,
     redis::{locking, pubsub},
-    SecureRandom,
+    BoxError, SecureRandom,
 };
 use ::redis::{
     aio::MultiplexedConnection as RedisConn, pipe, AsyncCommands, Client as RedisClient,
     IntoConnectionInfo, RedisResult, Script,
 };
-use std::sync::Arc;
-use std::time::Duration;
+use futures_util::future;
+use std::{convert::identity, sync::Arc, time::Duration};
 
 /// Internal message used to lock a key set.
 struct LockKeys(SigningAlgorithm);
@@ -55,10 +55,12 @@ pub struct RedisStore {
     fetcher: Addr<FetchAgent>,
     /// Key manager if rotating keys are enabled.
     key_manager: Option<Addr<RotatingKeys>>,
-    /// Script used to check a limit.
-    limit_script: Arc<Script>,
-    /// Configuration for per-email rate limiting.
-    limit_per_email_config: LimitConfig,
+    /// Script used to increment a limit.
+    incr_limit_script: Arc<Script>,
+    /// Script used to decrement a limit.
+    decr_limit_script: Arc<Script>,
+    /// Rate limit configuration.
+    limit_configs: Vec<LimitConfig>,
 }
 
 impl RedisStore {
@@ -66,7 +68,7 @@ impl RedisStore {
         mut url: String,
         expire_sessions: Duration,
         expire_cache: Duration,
-        limit_per_email_config: LimitConfig,
+        limit_configs: Vec<LimitConfig>,
         fetcher: Addr<FetchAgent>,
         rng: SecureRandom,
     ) -> RedisResult<Self> {
@@ -87,13 +89,22 @@ impl RedisStore {
         log::warn!("Please always double check this Redis and the connection to it are secure!");
         log::warn!("(This warning can't be fixed; it's a friendly reminder.)");
 
-        let limit_script = Arc::new(Script::new(
+        let incr_limit_script = Arc::new(Script::new(
             r"
             local count = redis.call('incr', KEYS[1])
-            if count == 1 then
+            if count == 1 or ARGV[2] == 'true' then
                 redis.call('expire', KEYS[1], ARGV[1])
             end
             return count
+            ",
+        ));
+
+        let decr_limit_script = Arc::new(Script::new(
+            r"
+            local count = redis.call('decr', KEYS[1])
+            if count <= 0 then
+                redis.call('del', KEYS[1])
+            end
             ",
         ));
 
@@ -106,8 +117,9 @@ impl RedisStore {
             expire_cache,
             fetcher,
             key_manager: None,
-            limit_script,
-            limit_per_email_config,
+            incr_limit_script,
+            decr_limit_script,
+            limit_configs,
         })
     }
 
@@ -198,21 +210,68 @@ impl Handler<FetchUrlCached> for RedisStore {
     }
 }
 
-impl Handler<IncrAndTestLimit> for RedisStore {
-    fn handle(&mut self, message: IncrAndTestLimit, cx: Context<Self, IncrAndTestLimit>) {
-        let mut conn = self.conn.clone();
-        let script = self.limit_script.clone();
-        let (key, config) = match message {
-            IncrAndTestLimit::PerEmail { addr } => (
-                format!("ratelimit:per-email:{}", addr),
-                self.limit_per_email_config,
-            ),
-        };
+impl Handler<IncrAndTestLimits> for RedisStore {
+    fn handle(&mut self, message: IncrAndTestLimits, cx: Context<Self, IncrAndTestLimits>) {
+        let conn = self.conn.clone();
+        let script = self.incr_limit_script.clone();
+        let ops: Vec<_> = self
+            .limit_configs
+            .iter()
+            .map(|config| {
+                let key = message.input.build_key(&config, "rate-limit:", "|");
+                (config.clone(), key)
+            })
+            .collect();
         cx.reply_later(async move {
-            let mut invocation = script.prepare_invoke();
-            invocation.key(key).arg(config.duration.as_secs());
-            let count: usize = invocation.invoke_async(&mut conn).await?;
-            Ok(count <= config.max_count)
+            let results = future::try_join_all(ops.into_iter().map(|(config, key)| {
+                let mut conn = conn.clone();
+                let script = script.clone();
+                async move {
+                    let count: usize = script
+                        .prepare_invoke()
+                        .key(key)
+                        .arg(config.window.as_secs())
+                        .arg(config.extend_window)
+                        .invoke_async(&mut conn)
+                        .await?;
+                    Ok::<_, BoxError>(count <= config.max_count)
+                }
+            }))
+            .await?;
+            Ok(results.into_iter().all(identity))
+        });
+    }
+}
+
+impl Handler<DecrLimits> for RedisStore {
+    fn handle(&mut self, message: DecrLimits, cx: Context<Self, DecrLimits>) {
+        let conn = self.conn.clone();
+        let script = self.decr_limit_script.clone();
+        let keys: Vec<_> = self
+            .limit_configs
+            .iter()
+            .filter_map(|config| {
+                if config.decr_complete {
+                    Some(message.input.build_key(&config, "rate-limit:", "|"))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        cx.reply_later(async move {
+            let _: Vec<()> = future::try_join_all(keys.into_iter().map(|key| {
+                let mut conn = conn.clone();
+                let script = script.clone();
+                async move {
+                    script
+                        .prepare_invoke()
+                        .key(key)
+                        .invoke_async(&mut conn)
+                        .await
+                }
+            }))
+            .await?;
+            Ok(())
         });
     }
 }

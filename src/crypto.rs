@@ -60,7 +60,8 @@ impl std::str::FromStr for SigningAlgorithm {
     }
 }
 
-serde_string!(SigningAlgorithm);
+serde_from_str!(SigningAlgorithm);
+serde_display!(SigningAlgorithm);
 
 /// The types of public keys we support.
 pub enum SupportedPublicKey {

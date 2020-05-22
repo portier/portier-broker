@@ -1,4 +1,5 @@
-use crate::agents::DeleteSession;
+use crate::agents::{DecrLimits, DeleteSession};
+use crate::config::LimitInput;
 use crate::crypto;
 use crate::error::BrokerError;
 use crate::web::{json_response, return_to_relier, Context, HandlerResult};
@@ -28,16 +29,17 @@ pub async fn complete_auth(ctx: &mut Context) -> HandlerResult {
         .await
         .map_err(|e| BrokerError::Internal(format!("could not remove a session: {}", e)))?;
 
-    let aud = data
+    let origin = data
         .return_params
         .redirect_uri
         .origin()
         .ascii_serialization();
+
     let jwt = crypto::create_jwt(
         &ctx.app,
         &data.email,
         &data.email_addr,
-        &aud,
+        &origin,
         &data.nonce,
         data.signing_alg,
     )
@@ -47,6 +49,18 @@ pub async fn complete_auth(ctx: &mut Context) -> HandlerResult {
         // from the RP that suddenly disappeared from our config. Treat as an internal error.
         BrokerError::Internal(format!("Could not create a JWT: {:?}", err))
     })?;
+
+    ctx.app
+        .store
+        .send(DecrLimits {
+            input: LimitInput {
+                email_addr: data.email_addr.clone(),
+                origin,
+                ip: data.original_ip,
+            },
+        })
+        .await
+        .map_err(|e| BrokerError::Internal(format!("could not decrement rate limits: {}", e)))?;
 
     if ctx.want_json() {
         Ok(json_response(

@@ -22,7 +22,7 @@ module.exports = ({ mailbox }) => {
     BROKER_LISTEN_PORT: "44133",
     BROKER_PUBLIC_URL: "http://localhost:44133",
     BROKER_FROM_ADDRESS: "portier@example.com",
-    BROKER_LIMIT_PER_EMAIL: "10000/min"
+    BROKER_LIMITS: "100000/s"
   };
 
   switch (TEST_STORE) {
