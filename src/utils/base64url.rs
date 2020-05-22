@@ -4,6 +4,6 @@ pub fn encode<T: ?Sized + AsRef<[u8]>>(data: &T) -> String {
 }
 
 #[inline]
-pub fn decode<T: ?Sized + AsRef<[u8]>>(data: &T) -> Result<Vec<u8>, ()> {
-    base64::decode_config(data, base64::URL_SAFE_NO_PAD).map_err(|_| ())
+pub fn decode<T: ?Sized + AsRef<[u8]>>(data: &T) -> Result<Vec<u8>, base64::DecodeError> {
+    base64::decode_config(data, base64::URL_SAFE_NO_PAD)
 }
