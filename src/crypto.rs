@@ -3,13 +3,14 @@ use crate::bridges::oidc::ProviderKey;
 use crate::config::Config;
 use crate::email_address::EmailAddress;
 use crate::utils::{base64url, keys::SignError, unix_duration, SecureRandom};
+use err_derive::Error;
 use ring::{
     digest,
     error::Unspecified,
     signature::{self, UnparsedPublicKey},
 };
 use serde_json as json;
-use serde_json::{json, Value};
+use serde_json::{json, Error as JsonError, Value};
 use std::fmt;
 use std::iter::Iterator;
 
@@ -114,37 +115,39 @@ pub async fn random_zbase32(len: usize, rng: &SecureRandom) -> String {
     .expect("failed to build one-time pad")
 }
 
-/// Helper function to deserialize key from JWK Key Set.
-///
-/// Searches the provided JWK key set for the key matching the given
-/// id. Returns a usable public key if exactly one key is found.
-pub fn jwk_key_set_find(key_set: &[ProviderKey], kid: &str) -> Result<SupportedPublicKey, ()> {
-    let matching: Vec<&ProviderKey> = key_set
-        .iter()
-        .filter(|key| key.use_ == "sig" && key.kid == kid)
-        .collect();
-
-    // Verify that we found exactly one key matching the key ID.
-    if matching.len() != 1 {
-        return Err(());
-    }
-    let key = matching.first().expect("expected one key");
-
-    // Then, use the data to build a public key object for verification.
-    match (key.alg.as_str(), key.crv.as_str()) {
-        ("EdDSA", "Ed25519") => {
-            let x = base64url::decode(&key.x).map_err(|_| ())?;
-            let key = UnparsedPublicKey::new(&signature::ED25519, x);
-            Ok(SupportedPublicKey::Ed25519(key))
-        }
-        ("RS256", _) => {
-            let n = base64url::decode(&key.n).map_err(|_| ())?;
-            let e = base64url::decode(&key.e).map_err(|_| ())?;
-            let key = RsaPublicKey { n, e };
-            Ok(SupportedPublicKey::Rsa(key))
-        }
-        _ => Err(()),
-    }
+#[derive(Debug, Error)]
+pub enum VerifyError {
+    #[error(display = "the token must consist of three dot-separated parts")]
+    IncorrectFormat,
+    #[error(display = "token part {} contained invalid base64: {}", index, reason)]
+    InvalidPartBase64 {
+        index: usize,
+        reason: base64::DecodeError,
+    },
+    #[error(display = "the token header contained invalid JSON: {}", _0)]
+    InvalidHeaderJson(JsonError),
+    #[error(display = "did not find a string 'kid' property in the token header")]
+    KidMissing,
+    #[error(
+        display = "the token 'kid' could not be found in the JWKs document: {}",
+        kid
+    )]
+    KidNotMatched { kid: String },
+    #[error(
+        display = "the '{}' field of the matching JWK contains invalid base64: {}",
+        property,
+        reason
+    )]
+    InvalidJwkBase64 {
+        property: &'static str,
+        reason: base64::DecodeError,
+    },
+    #[error(display = "the matching JWK is of an unsupported type")]
+    UnsupportedKeyType,
+    #[error(display = "the token signature did not validate using the matching JWK")]
+    BadSignature,
+    #[error(display = "the token payload contained invalid JSON: {}", _0)]
+    InvalidPayloadJson(JsonError),
 }
 
 /// Verify a JWS signature, returning the payload as a `Value` if successful.
@@ -152,36 +155,78 @@ pub fn verify_jws(
     jws: &str,
     key_set: &[ProviderKey],
     signing_alg: SigningAlgorithm,
-) -> Result<json::Value, ()> {
-    // Extract the header from the JWT structure. Determine what key was used
-    // to sign the token, so we can then verify the signature.
+) -> Result<json::Value, VerifyError> {
+    // Split the token up in parts and decode them.
     let parts: Vec<&str> = jws.split('.').collect();
     if parts.len() != 3 {
-        return Err(());
+        return Err(VerifyError::IncorrectFormat);
     }
     let decoded = parts
         .iter()
-        .map(|s| base64url::decode(s))
+        .enumerate()
+        .map(|(idx, s)| {
+            base64url::decode(s).map_err(|reason| VerifyError::InvalidPartBase64 {
+                index: idx + 1,
+                reason,
+            })
+        })
         .collect::<Result<Vec<_>, _>>()?;
-    let jwt_header: json::Value = json::from_slice(&decoded[0]).map_err(|_| ())?;
-    let kid = jwt_header.get("kid").and_then(Value::as_str).ok_or(())?;
-    let pub_key = jwk_key_set_find(key_set, kid)?;
 
-    // Make sure the key matches the algorithm originally selected.
-    match (signing_alg, &pub_key) {
-        (SigningAlgorithm::EdDsa, &SupportedPublicKey::Ed25519(_))
-        | (SigningAlgorithm::Rs256, &SupportedPublicKey::Rsa(_)) => {}
-        _ => return Err(()),
+    // Parse the header and find the key ID.
+    let jwt_header: json::Value =
+        json::from_slice(&decoded[0]).map_err(VerifyError::InvalidHeaderJson)?;
+    let kid = jwt_header
+        .get("kid")
+        .and_then(Value::as_str)
+        .ok_or(VerifyError::KidMissing)?;
+
+    // Look for they key ID in the JWKs.
+    let matched_keys: Vec<&ProviderKey> = key_set
+        .iter()
+        .filter(|key| key.use_ == "sig" && key.kid == kid)
+        .collect();
+
+    // Verify that we found exactly one key matching the key ID.
+    if matched_keys.len() != 1 {
+        return Err(VerifyError::KidNotMatched {
+            kid: kid.to_owned(),
+        });
     }
+    let key = matched_keys.first().unwrap();
 
-    // Verify the identity token's signature.
+    // Then, use the data to build a public key object for verification.
+    let pub_key = match (signing_alg, key.alg.as_str(), key.crv.as_str()) {
+        (SigningAlgorithm::EdDsa, "EdDSA", "Ed25519") => {
+            let x = base64url::decode(&key.x).map_err(|reason| VerifyError::InvalidJwkBase64 {
+                property: "x",
+                reason,
+            })?;
+            let key = UnparsedPublicKey::new(&signature::ED25519, x);
+            SupportedPublicKey::Ed25519(key)
+        }
+        (SigningAlgorithm::Rs256, "RS256", _) => {
+            let n = base64url::decode(&key.n).map_err(|reason| VerifyError::InvalidJwkBase64 {
+                property: "n",
+                reason,
+            })?;
+            let e = base64url::decode(&key.e).map_err(|reason| VerifyError::InvalidJwkBase64 {
+                property: "e",
+                reason,
+            })?;
+            let key = RsaPublicKey { n, e };
+            SupportedPublicKey::Rsa(key)
+        }
+        _ => return Err(VerifyError::UnsupportedKeyType),
+    };
+
+    // Verify the signature using the public key.
     let message_len = parts[0].len() + parts[1].len() + 1;
     pub_key
         .verify(jws[..message_len].as_bytes(), &decoded[2])
-        .map_err(|_| ())?;
+        .map_err(|_| VerifyError::BadSignature)?;
 
     // Return the payload.
-    Ok(json::from_slice(&decoded[1]).map_err(|_| ())?)
+    Ok(json::from_slice(&decoded[1]).map_err(VerifyError::InvalidPayloadJson)?)
 }
 
 /// Helper method to create a JWT for a given email address and audience.

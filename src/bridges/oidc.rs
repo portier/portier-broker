@@ -237,10 +237,10 @@ pub async fn callback(ctx: &mut Context) -> HandlerResult {
 
     // Verify the signature.
     let jwt_payload = crypto::verify_jws(&id_token, &key_set.keys, bridge_data.signing_alg)
-        .map_err(|_| {
+        .map_err(|err| {
             BrokerError::ProviderInput(format!(
-                "could not verify the token received from {}",
-                bridge_data.origin
+                "could not verify the token received from {}: {}",
+                bridge_data.origin, err
             ))
         })?;
 
