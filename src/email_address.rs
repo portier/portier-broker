@@ -99,6 +99,7 @@ impl EmailAddress {
     }
 
     /// Consume and return the serialization.
+    #[allow(dead_code)]
     pub fn into_string(self) -> String {
         self.serialization
     }

@@ -172,8 +172,11 @@ impl StoreConfig {
 
 /// Parameters for `MailerConfig::spawn_mailer`.
 struct MailerParams {
+    #[allow(unused)]
     fetcher: Addr<FetchAgent>,
+    #[allow(unused)]
     from_address: EmailAddress,
+    #[allow(unused)]
     from_name: String,
 }
 
@@ -193,8 +196,8 @@ enum MailerConfig {
 impl MailerConfig {
     fn from_options(
         smtp_server: Option<String>,
-        smtp_username: Option<String>,
-        smtp_password: Option<String>,
+        #[allow(unused)] smtp_username: Option<String>,
+        #[allow(unused)] smtp_password: Option<String>,
         sendmail_command: Option<String>,
         postmark_token: Option<String>,
     ) -> Result<Self, ConfigError> {
@@ -243,7 +246,10 @@ impl MailerConfig {
         }
     }
 
-    async fn spawn_mailer(self, params: MailerParams) -> Box<dyn Sender<SendMail>> {
+    async fn spawn_mailer(
+        self,
+        #[allow(unused)] params: MailerParams,
+    ) -> Box<dyn Sender<SendMail>> {
         match self {
             #[cfg(feature = "lettre_smtp")]
             MailerConfig::LettreSmtp {
