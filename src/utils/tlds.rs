@@ -400,7 +400,6 @@ const TLDS_LIST: &[&str] = &[
     "es",
     "esq",
     "estate",
-    "esurance",
     "et",
     "etisalat",
     "eu",
