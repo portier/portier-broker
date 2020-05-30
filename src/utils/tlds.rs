@@ -1078,7 +1078,6 @@ const TLDS_LIST: &[&str] = &[
     "schwarz",
     "science",
     "scjohnson",
-    "scor",
     "scot",
     "sd",
     "se",
