@@ -307,7 +307,7 @@ impl TomlConfig {
             builder.limits = val;
         }
         if let Some(val) = parsed.limit_per_email {
-            log::warn!("BROKER_LIMIT_PER_EMAIL is deprecated. Please use BROKER_LIMITS instead.");
+            log::warn!("TOML field 'limit_per_email' is deprecated. Please use 'limits' instead.");
             builder.limits = vec![val.0];
         }
 

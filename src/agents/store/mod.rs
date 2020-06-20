@@ -48,7 +48,7 @@ impl Message for FetchUrlCached {
 /// Message requesting rate limits be increased and tested.
 ///
 /// The configured rate limits are passed to the store when it is created. The store should always
-/// increment all rate limits, event if only the first one fails, for example. The result is `true`
+/// increment all rate limits, even if only the first one fails, for example. The result is `true`
 /// if none of the rate limits were hit.
 pub struct IncrAndTestLimits {
     pub input: LimitInput,
@@ -60,7 +60,7 @@ impl Message for IncrAndTestLimits {
 /// Message requesting rate limits be decreased.
 ///
 /// Rate limits are decreased when authentication was successfully completed, but only for rate
-/// limits that have the `only_incomplete` flag set.
+/// limits that have the `decr_complete` flag set.
 pub struct DecrLimits {
     pub input: LimitInput,
 }
