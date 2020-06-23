@@ -185,31 +185,12 @@ cache_ttl = 3600 # 1 hour
 
 # Limits can be set in a flexible way. We've tried to provide some sensible
 # defaults, but if you're exposing your broker to the internet, you may need
-# control over limits when the need arises. This section details the available
-# options for rate limiting.
+# control over limits.
 #
 # Limits are specified as a list of strings. When setting these using the
 # `BROKER_LIMITS` environment variable, they can be space or comma separated.
 # Each entry contains a count, a time window, and may be preceded with optional
 # flags separated by semi-colons.
-#
-# The time window is a number followed by a unit. The number may be omitted,
-# which will mean 1 of the given unit. The following units can be used:
-#
-# - `s` / `sec` / `secs` / `second` / `seconds`
-# - `m` / `min` / `mins` / `minute` / `minutes`
-# - `h` / `hour` / `hours`
-# - `d` / `day` / `days`
-#
-# Flags control what the limit applies to and its behavior. The following flags
-# can be used:
-#
-# - `ip`: Apply the limit to the users IP address.
-# - `email`: Apply the limit to the users email address.
-# - `domain`: Apply the limit to the users email domain.
-# - `origin`: Apply the limit to the Relying Party origin.
-# - `decr_complete`: Decrement the counter for completed requests.
-# - `extend_window`: Extend the window on every hit, instead of just the first.
 #
 # Here are some examples to illustrate what's possible:
 #
@@ -231,8 +212,27 @@ cache_ttl = 3600 # 1 hour
 #   completely for one full second after the last attempt. This flag can have
 #   drastic effects, and is usually only applied to short time windows.
 #
+# Flags control what the limit applies to and its behavior. These are all the
+# currently implemented flags:
+#
+# - `ip`: Apply the limit to the users IP address.
+# - `email`: Apply the limit to the users email address.
+# - `domain`: Apply the limit to the users email domain.
+# - `origin`: Apply the limit to the Relying Party origin.
+# - `decr_complete`: Decrement the counter for completed requests.
+# - `extend_window`: Extend the window on every hit, instead of just the first.
+#
+# The time window is a number followed by a unit. The number may be omitted,
+# which will mean 1 of the given unit. The following units can be used:
+#
+# - `s` / `sec` / `secs` / `second` / `seconds`
+# - `m` / `min` / `mins` / `minute` / `minutes`
+# - `h` / `hour` / `hours`
+# - `d` / `day` / `days`
+#
 # Note that each limit added also increases the amount of queries to your
-# selected storage method.
+# selected storage method. The list order does not matter, because all limits
+# are always tested on every attempt, and processing does not short-circuit.
 
 limits = [
   # Per IP, max 50 requests per second.
