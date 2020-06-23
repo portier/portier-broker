@@ -58,6 +58,8 @@ jobs:
       uses: actions-rs/clippy-check@v1
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
+      # Clippy 0.0.212 fails on certain valid async code.
+      continue-on-error: true
 
     - name: Rustfmt
       run: cargo fmt -- --check
