@@ -39,7 +39,7 @@ jobs:
       with:
         toolchain: stable
         profile: minimal
-        components: rustfmt, clippy
+        components: rustfmt # Removed clippy, see below.
         default: true
 
     - name: Build
@@ -54,12 +54,13 @@ jobs:
     - name: Test
       run: cargo test --locked
 
-    - name: Clippy
-      uses: actions-rs/clippy-check@v1
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-      # Clippy 0.0.212 fails on certain valid async code.
-      continue-on-error: true
+    # TODO: Clippy 0.0.212 + Rust 1.44 produces a lot of errors that originate
+    # in macros, making it generally unusable. We should add this back once the
+    # situation improves.
+    #- name: Clippy
+    #  uses: actions-rs/clippy-check@v1
+    #  with:
+    #    token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Rustfmt
       run: cargo fmt -- --check
