@@ -45,8 +45,8 @@ pub struct RusqliteStore {
     expire_sessions: Duration,
     /// TTL of cache keys
     expire_cache: Duration,
-    /// Configuration for per-email rate limiting.
-    limit_per_email_config: LimitConfig,
+    /// Rate limit configuration.
+    limit_configs: Vec<LimitConfig>,
     /// SQLite connection.
     conn: Connection,
     /// The agent used for fetching on cache miss.
@@ -60,7 +60,7 @@ impl RusqliteStore {
         sqlite_db: PathBuf,
         expire_sessions: Duration,
         expire_cache: Duration,
-        limit_per_email_config: LimitConfig,
+        limit_configs: Vec<LimitConfig>,
         fetcher: Addr<FetchAgent>,
     ) -> Result<Self, SqlError> {
         spawn_blocking(move || {
@@ -77,7 +77,7 @@ impl RusqliteStore {
             Ok(RusqliteStore {
                 expire_sessions,
                 expire_cache,
-                limit_per_email_config,
+                limit_configs,
                 conn,
                 fetcher,
                 key_manager: None,
@@ -303,32 +303,66 @@ impl Handler<SaveCache> for RusqliteStore {
     }
 }
 
-impl Handler<IncrAndTestLimit> for RusqliteStore {
-    fn handle(&mut self, message: IncrAndTestLimit, cx: Context<Self, IncrAndTestLimit>) {
+impl Handler<IncrAndTestLimits> for RusqliteStore {
+    fn handle(&mut self, message: IncrAndTestLimits, cx: Context<Self, IncrAndTestLimits>) {
         cx.reply_with(move || {
-            let (id, config) = match message {
-                IncrAndTestLimit::PerEmail { addr } => {
-                    (format!("per-email:{}", addr), self.limit_per_email_config)
+            let mut ok = true;
+            for config in &self.limit_configs {
+                let id = message.input.build_key(&config, "", "|");
+                let now = unix_timestamp() as i64;
+                let window = config.window.as_secs() as i64;
+                let tx = self.conn.transaction()?;
+                tx.execute(
+                    "DELETE FROM rate_limits WHERE id = ?1 AND expires <= ?2",
+                    params![&id, &now],
+                )?;
+                if config.extend_window {
+                    tx.execute(
+                        "INSERT INTO rate_limits (id, value, expires) VALUES (?1, 1, ?2 + ?3)
+                        ON CONFLICT(id) DO UPDATE SET value = value + 1, expires = ?2 + ?3",
+                        params![&id, &now, &window],
+                    )?;
+                } else {
+                    tx.execute(
+                        "INSERT INTO rate_limits (id, value, expires) VALUES (?1, 1, ?2 + ?3)
+                        ON CONFLICT(id) DO UPDATE SET value = value + 1",
+                        params![&id, &now, &window],
+                    )?;
                 }
-            };
-            let expires = (unix_timestamp() + config.duration.as_secs()) as i64;
-            let tx = self.conn.transaction()?;
-            tx.execute(
-                "DELETE FROM rate_limits WHERE id = ?1 AND expires <= ?2",
-                params![&id, &expires],
-            )?;
-            tx.execute(
-                "INSERT INTO rate_limits (id, value, expires) VALUES (?1, 1, ?2)
-                ON CONFLICT(id) DO UPDATE SET value = value + 1",
-                params![&id, &expires],
-            )?;
-            let count: i64 = tx.query_row(
-                "SELECT value FROM rate_limits WHERE id = ?1 LIMIT 1",
-                params![&id],
-                |row| row.get(0),
-            )?;
-            tx.commit()?;
-            Ok(count as usize <= config.max_count)
+                let count: i64 = tx.query_row(
+                    "SELECT value FROM rate_limits WHERE id = ?1 LIMIT 1",
+                    params![&id],
+                    |row| row.get(0),
+                )?;
+                tx.commit()?;
+                ok = ok && count as usize <= config.max_count;
+            }
+            Ok(ok)
+        })
+    }
+}
+
+impl Handler<DecrLimits> for RusqliteStore {
+    fn handle(&mut self, message: DecrLimits, cx: Context<Self, DecrLimits>) {
+        cx.reply_with(move || {
+            for config in &self.limit_configs {
+                if !config.decr_complete {
+                    continue;
+                }
+                let id = message.input.build_key(&config, "", "|");
+                let expires = (unix_timestamp() + config.window.as_secs()) as i64;
+                let tx = self.conn.transaction()?;
+                tx.execute(
+                    "DELETE FROM rate_limits WHERE id = ?1 AND (expires <= ?2 OR value <= 1)",
+                    params![&id, &expires],
+                )?;
+                tx.execute(
+                    "UPDATE rate_limits SET value = value - 1 WHERE id = ?1",
+                    params![&id],
+                )?;
+                tx.commit()?;
+            }
+            Ok(())
         })
     }
 }

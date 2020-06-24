@@ -1,4 +1,4 @@
-use super::{ConfigBuilder, LimitConfig};
+use super::{ConfigBuilder, LegacyLimitPerEmail, LimitConfig};
 use crate::crypto::SigningAlgorithm;
 use crate::webfinger::Link;
 use serde::Deserialize;
@@ -43,7 +43,8 @@ pub struct TomlConfig {
 
     postmark_token: Option<String>,
 
-    limit_per_email: Option<LimitConfig>,
+    limits: Option<Vec<LimitConfig>>,
+    limit_per_email: Option<LegacyLimitPerEmail>,
 
     google_client_id: Option<String>,
     domain_overrides: Option<HashMap<String, Vec<Link>>>,
@@ -98,7 +99,7 @@ struct TomlSmtpTable {
 
 #[derive(Deserialize)]
 struct TomlLimitTable {
-    per_email: Option<LimitConfig>,
+    per_email: Option<LegacyLimitPerEmail>,
 }
 
 #[derive(Deserialize)]
@@ -203,7 +204,7 @@ impl TomlConfig {
         if let Some(ref table) = parsed.limit {
             Self::warn_table("limit");
             if parsed.limit_per_email.is_none() {
-                parsed.limit_per_email = table.per_email;
+                parsed.limit_per_email = table.per_email.clone();
             }
         }
 
@@ -302,8 +303,12 @@ impl TomlConfig {
             builder.postmark_token = Some(val);
         }
 
+        if let Some(val) = parsed.limits {
+            builder.limits = val;
+        }
         if let Some(val) = parsed.limit_per_email {
-            builder.limit_per_email = val;
+            log::warn!("TOML field 'limit_per_email' is deprecated. Please use 'limits' instead.");
+            builder.limits = vec![val.0];
         }
 
         if let Some(val) = parsed.google_client_id {

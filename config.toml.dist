@@ -44,6 +44,18 @@ listen_port = 3333
 
 public_url = "" # Required
 
+# A list of IP addresses or subnets (CIDR-notation) of trusted reverse proxies.
+#
+# Portier uses this to determine the actual client IP address, and setting this
+# correctly is important for rate-limits.
+#
+# Portier will look for the `X-Forwarded-For` header sent by reverse proxies.
+# In Nginx, you'd accomplish this with:
+#
+#     proxy_set_header  X-Forwarded-For  $proxy_add_x_forwarded_for
+#
+trusted_proxies = ["127.0.0.0/8", "::1"]
+
 # Whitelist of origins that are allowed to use this broker. If left unset, the
 # broker will allow any Relying Party to use it. (Note that an empty list here
 # has different meaning than leaving it unset.)
@@ -126,11 +138,6 @@ generate_rsa_command = ["openssl", "genrsa", "2048"]
 ################################################################
 # Advanced settings
 
-# Authentication ratelimit for a single email address.
-# Currently only supports "/min" unit.
-
-limit_per_email = "5/min"
-
 # By default, the broker automatically generates and rotates keys used to sign
 # JSON Web Tokens. If for some reason you wish to provide keys manually, you
 # can do so with these settings.
@@ -172,6 +179,73 @@ token_ttl = 600 # 10 minutes
 session_ttl = 900 # 15 minutes
 # Minimum cache time for downstream HTTP requests made by the broker
 cache_ttl = 3600 # 1 hour
+
+################################################################
+# Rate limits
+
+# Limits can be set in a flexible way. We've tried to provide some sensible
+# defaults, but if you're exposing your broker to the internet, you may need
+# control over limits.
+#
+# Limits are specified as a list of strings. When setting these using the
+# `BROKER_LIMITS` environment variable, they can be space or comma separated.
+# Each entry contains a count, a time window, and may be preceded with optional
+# flags separated by semi-colons.
+#
+# Here are some examples to illustrate what's possible:
+#
+# - `1000/sec` - A global limit of 1000 requests per second.
+#
+# - `email:5/min` - Per email address, max 5 requests per minute.
+#
+# - `ip:origin:10/s` - Max 10 requests per second for each unique combination
+#   of IP and Relying Party origin. (A 'compound key' in database terminology.)
+#
+# - `email:decr_complete:5/15m` - Per email, allow max 5 in-progress attempts
+#   per 15 minutes. The `decr_complete` flag ensures that when the user
+#   completes a login, effectively a new 'slot' opens up for them.
+#
+# - `ip:extend_window:1000/s` - Max 1000 requests per second, per IP, with an
+#   extending window. For example, during an ongoing attack, the IP does not
+#   get new slots the next second, because its ongoing attempts keep extending
+#   the window further. The penalty is lifted only when attempts stop
+#   completely for one full second after the last attempt. This flag can have
+#   drastic effects, and is usually only applied to short time windows.
+#
+# Flags control what the limit applies to and its behavior. These are all the
+# currently implemented flags:
+#
+# - `ip`: Apply the limit to the users IP address.
+# - `email`: Apply the limit to the users email address.
+# - `domain`: Apply the limit to the users email domain.
+# - `origin`: Apply the limit to the Relying Party origin.
+# - `decr_complete`: Decrement the counter for completed requests.
+# - `extend_window`: Extend the window on every hit, instead of just the first.
+#
+# The time window is a number followed by a unit. The number may be omitted,
+# which will mean 1 of the given unit. The following units can be used:
+#
+# - `s` / `sec` / `secs` / `second` / `seconds`
+# - `m` / `min` / `mins` / `minute` / `minutes`
+# - `h` / `hour` / `hours`
+# - `d` / `day` / `days`
+#
+# Note that each limit added also increases the amount of queries to your
+# selected storage method. The list order does not matter, because all limits
+# are always tested on every attempt, and processing does not short-circuit.
+
+limits = [
+  # Per IP, max 50 requests per second.
+  "ip:50/s",
+  # Per IP, max 100 requests per 5 seconds, with an extending window.
+  "ip:extend_window:100/5s",
+  # Per IP and email, max 30 requests per hour.
+  "ip:email:30/h",
+  # Per IP and email, allow 5 slots per 15 minutes.
+  "ip:email:decr_complete:5/15m",
+  # Per IP and email, allow 2 slots per 15 minutes on each site.
+  "ip:email:origin:decr_complete:2/15m",
+]
 
 ################################################################
 # WebFinger overrides

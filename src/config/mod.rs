@@ -4,7 +4,7 @@ mod limits;
 mod templates;
 mod toml;
 
-pub use limits::LimitConfig;
+pub use limits::{LegacyLimitPerEmail, LimitConfig, LimitInput};
 
 use self::env::EnvConfig;
 use self::i18n::I18n;
@@ -23,6 +23,7 @@ use crate::utils::{
 };
 use crate::webfinger::{Link, ParseLinkError, Relation};
 use err_derive::Error;
+use ipnetwork::IpNetwork;
 use std::{
     borrow::ToOwned,
     collections::HashMap,
@@ -54,6 +55,7 @@ pub struct Config {
     pub listen_ip: String,
     pub listen_port: u16,
     pub public_url: String,
+    pub trusted_proxies: Vec<IpNetwork>,
     pub allowed_origins: Option<Vec<String>>,
 
     pub static_ttl: Duration,
@@ -80,7 +82,7 @@ pub struct Config {
 struct StoreParams {
     session_ttl: Duration,
     cache_ttl: Duration,
-    limit_per_email: LimitConfig,
+    limit_configs: Vec<LimitConfig>,
     fetcher: Addr<FetchAgent>,
     #[allow(dead_code)]
     rng: SecureRandom,
@@ -134,7 +136,7 @@ impl StoreConfig {
                     redis_url,
                     params.session_ttl,
                     params.cache_ttl,
-                    params.limit_per_email,
+                    params.limit_configs,
                     params.fetcher,
                     params.rng,
                 )
@@ -148,7 +150,7 @@ impl StoreConfig {
                     sqlite_db,
                     params.session_ttl,
                     params.cache_ttl,
-                    params.limit_per_email,
+                    params.limit_configs,
                     params.fetcher,
                 )
                 .await
@@ -159,7 +161,7 @@ impl StoreConfig {
                 let store = agents::MemoryStore::new(
                     params.session_ttl,
                     params.cache_ttl,
-                    params.limit_per_email,
+                    params.limit_configs,
                     params.fetcher,
                 );
                 Arc::new(spawn_agent(store).await)
@@ -170,8 +172,11 @@ impl StoreConfig {
 
 /// Parameters for `MailerConfig::spawn_mailer`.
 struct MailerParams {
+    #[allow(unused)]
     fetcher: Addr<FetchAgent>,
+    #[allow(unused)]
     from_address: EmailAddress,
+    #[allow(unused)]
     from_name: String,
 }
 
@@ -191,8 +196,8 @@ enum MailerConfig {
 impl MailerConfig {
     fn from_options(
         smtp_server: Option<String>,
-        smtp_username: Option<String>,
-        smtp_password: Option<String>,
+        #[allow(unused)] smtp_username: Option<String>,
+        #[allow(unused)] smtp_password: Option<String>,
         sendmail_command: Option<String>,
         postmark_token: Option<String>,
     ) -> Result<Self, ConfigError> {
@@ -241,7 +246,10 @@ impl MailerConfig {
         }
     }
 
-    async fn spawn_mailer(self, params: MailerParams) -> Box<dyn Sender<SendMail>> {
+    async fn spawn_mailer(
+        self,
+        #[allow(unused)] params: MailerParams,
+    ) -> Box<dyn Sender<SendMail>> {
         match self {
             #[cfg(feature = "lettre_smtp")]
             MailerConfig::LettreSmtp {
@@ -280,6 +288,7 @@ pub struct ConfigBuilder {
     pub listen_ip: String,
     pub listen_port: u16,
     pub public_url: Option<String>,
+    pub trusted_proxies: Vec<IpNetwork>,
     pub allowed_origins: Option<Vec<String>>,
     pub data_dir: String,
 
@@ -310,7 +319,7 @@ pub struct ConfigBuilder {
 
     pub postmark_token: Option<String>,
 
-    pub limit_per_email: LimitConfig,
+    pub limits: Vec<LimitConfig>,
 
     pub google_client_id: Option<String>,
     pub domain_overrides: HashMap<String, Vec<Link>>,
@@ -322,6 +331,10 @@ impl ConfigBuilder {
             listen_ip: "127.0.0.1".to_owned(),
             listen_port: 3333,
             public_url: None,
+            trusted_proxies: ["127.0.0.0/8", "::1"]
+                .iter()
+                .map(|v| v.parse().unwrap())
+                .collect(),
             allowed_origins: None,
             data_dir: String::new(),
 
@@ -355,7 +368,16 @@ impl ConfigBuilder {
 
             postmark_token: None,
 
-            limit_per_email: LimitConfig::per_minute(5),
+            limits: [
+                "ip:50/s",
+                "ip:extend_window:100/5s",
+                "ip:email:30/h",
+                "ip:email:decr_complete:5/15m",
+                "ip:email:origin:decr_complete:2/15m",
+            ]
+            .iter()
+            .map(|value| value.parse().unwrap())
+            .collect::<Vec<_>>(),
 
             google_client_id: None,
             domain_overrides: HashMap::new(),
@@ -406,7 +428,7 @@ impl ConfigBuilder {
         self
     }
 
-    pub async fn done(self) -> Result<Config, ConfigError> {
+    pub async fn done(mut self) -> Result<Config, ConfigError> {
         let store_config =
             StoreConfig::from_options(self.redis_url, self.sqlite_db, self.memory_storage)?;
         let mailer_config = MailerConfig::from_options(
@@ -417,6 +439,11 @@ impl ConfigBuilder {
             self.postmark_token,
         )?;
 
+        // Assign IDs to limit configs.
+        for (idx, limit) in self.limits.iter_mut().enumerate() {
+            limit.id = idx;
+        }
+
         // Child structs
         let rng = SecureRandom::new().await;
         let fetcher = spawn_agent(FetchAgent::new()).await;
@@ -424,7 +451,7 @@ impl ConfigBuilder {
             .spawn_store(StoreParams {
                 session_ttl: self.session_ttl,
                 cache_ttl: self.cache_ttl,
-                limit_per_email: self.limit_per_email,
+                limit_configs: self.limits,
                 fetcher: fetcher.clone(),
                 rng: rng.clone(),
             })
@@ -491,6 +518,7 @@ impl ConfigBuilder {
             listen_ip: self.listen_ip,
             listen_port: self.listen_port,
             public_url: self.public_url.expect("no public url configured"),
+            trusted_proxies: self.trusted_proxies,
             allowed_origins: self.allowed_origins,
 
             static_ttl: self.static_ttl,
@@ -521,7 +549,7 @@ impl ConfigBuilder {
             .spawn_store(StoreParams {
                 session_ttl: self.session_ttl,
                 cache_ttl: self.cache_ttl,
-                limit_per_email: self.limit_per_email,
+                limit_configs: self.limits,
                 fetcher: spawn_agent(FetchAgent::new()).await,
                 rng: SecureRandom::new().await,
             })

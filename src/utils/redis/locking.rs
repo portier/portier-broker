@@ -1,9 +1,7 @@
 use crate::utils::{redis::pubsub::Subscriber, SecureRandom};
-use futures_util::future::poll_fn;
+use futures_util::StreamExt;
 use redis::{aio::MultiplexedConnection, RedisResult, Script, Value};
 use std::sync::Arc;
-use std::task::Poll;
-use tokio::stream::Stream;
 use tokio::time::{interval, Duration};
 
 // TODO: Lock locally first, so multiple locks from the same machine are more efficient.
@@ -79,18 +77,13 @@ impl LockClient {
     /// (Unlike, say, file locking, where the lock is conceptually metadata on the file.)
     pub async fn lock(&mut self, key: &[u8]) -> LockGuard {
         let request = self.rng.generate_async(16).await;
-        let mut sub = self.pubsub.subscribe(key.to_vec()).await;
-        let retry = interval(Duration::from_secs(2));
-        tokio::pin!(retry);
+        let mut sub = self.pubsub.subscribe(key.to_vec()).await.fuse();
+        let mut retry = interval(Duration::from_secs(2)).fuse();
         loop {
-            poll_fn(|cx| {
-                if sub.poll_recv(cx).is_ready() || retry.as_mut().poll_next(cx).is_ready() {
-                    Poll::Ready(())
-                } else {
-                    Poll::Pending
-                }
-            })
-            .await;
+            futures_util::select! {
+                _ = retry.next() => {},
+                _ = sub.next() => {},
+            };
             if self.try_lock(key, &request).await {
                 return self.make_guard(key, request);
             }

@@ -62,7 +62,8 @@ impl FromStr for Relation {
     }
 }
 
-serde_string!(Relation);
+serde_from_str!(Relation);
+serde_display!(Relation);
 
 #[derive(Debug, Error)]
 pub enum ParseLinkError {
