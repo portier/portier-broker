@@ -16,21 +16,3 @@ jobs:
       uses: actions-rs/audit-check@v1
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
-
-  check-tlds:
-    runs-on: ubuntu-latest
-    steps:
-
-    - name: Checkout
-      uses: actions/checkout@v2
-
-    - name: Update TLDs
-      run: ./mktlds.rb
-
-    - name: Create PR
-      uses: peter-evans/create-pull-request@v3
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        commit-message: "Update IANA TLD list"
-        title: "Update IANA TLD list"
-        branch: "update-tlds"
