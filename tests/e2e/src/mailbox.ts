@@ -1,27 +1,39 @@
 // Handles the mailbox for testing.
-
-const { SMTPServer } = require("smtp-server");
-const { simpleParser } = require("mailparser");
+import { SMTPServer } from "smtp-server";
+import { simpleParser } from "mailparser";
+import { TEST_MAILER } from "./env";
 
 const parseOptions = {
   skipHtmlToText: true,
-  skipTextToHtml: true
+  skipTextToHtml: true,
 };
 
-const { TEST_MAILER } = require("./env");
+export interface Mailbox {
+  pushRawMail(
+    input: string | NodeJS.ReadableStream,
+    callback?: (err?: Error | undefined) => void
+  ): void;
+  pushMail(mail: string): void;
+  nextMail(): string | undefined;
+  clearMail(): void;
+  destroy(): void;
+}
 
-module.exports = () => {
+export default (): Mailbox => {
   // SMTP server instance, created when testing SMTP only.
-  let server;
+  let server: SMTPServer | undefined;
   // Contains text bodies of mails received.
-  const mails = [];
+  const mails: string[] = [];
 
   // Exported API.
-  const api = {
-    pushRawMail(input, callback) {
-      simpleParser(input, parseOptions, (err, parsed) => {
+  const api: Mailbox = {
+    pushRawMail(
+      input: string | NodeJS.ReadableStream,
+      callback?: (err?: Error) => void
+    ): void {
+      simpleParser(input, parseOptions as any, (err, parsed) => {
         if (!err) {
-          api.pushMail(parsed.text);
+          api.pushMail(parsed.text ?? "");
         }
         if (callback) {
           callback(err);
@@ -30,7 +42,7 @@ module.exports = () => {
         }
       });
     },
-    pushMail(mail) {
+    pushMail(mail: string) {
       mails.push(mail);
     },
     nextMail() {
@@ -44,7 +56,7 @@ module.exports = () => {
         server.close();
         server = undefined;
       }
-    }
+    },
   };
 
   // Start the SMTP server if needed.
@@ -53,9 +65,9 @@ module.exports = () => {
       hideSTARTTLS: true,
       disableReverseLookup: true,
       disabledCommands: ["AUTH"],
-      onData(stream, session, callback) {
+      onData(stream, _session, callback) {
         api.pushRawMail(stream, callback);
-      }
+      },
     });
     server.listen(44125, "localhost");
   }

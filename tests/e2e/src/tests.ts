@@ -1,11 +1,21 @@
 // The main test suite.
 
-const assert = require("assert");
-const fetch = require("node-fetch");
-const { By, Key, until } = require("selenium-webdriver");
+import assert from "assert";
+import { By, Key, until, WebDriver } from "selenium-webdriver";
+import { Mailbox } from "./mailbox";
+import { Broker } from "./broker";
+import { RelyingParty } from "./relying-party";
 
-const ALL_TESTS = [];
-const test = (name, fn) => ALL_TESTS.push({ name, fn });
+export interface TestContext {
+  mailbox: Mailbox;
+  broker: Broker;
+  relyingParty: RelyingParty;
+  driver: WebDriver;
+}
+
+const ALL_TESTS: { name: string; fn: (ctx: TestContext) => void }[] = [];
+const test = (name: string, fn: (ctx: TestContext) => void) =>
+  ALL_TESTS.push({ name, fn });
 
 const TIMEOUT = 10000;
 const OVERALL_TIMEOUT = 30000;
@@ -25,7 +35,7 @@ test("successful flow with code input", async ({ mailbox, driver }) => {
   await driver.wait(until.titleIs(BROKER_CONFIRM_TITLE), TIMEOUT);
 
   const mail = mailbox.nextMail();
-  const match = /^[a-z0-9]{6} [a-z0-9]{6}$/m.exec(mail);
+  const match = /^[a-z0-9]{6} [a-z0-9]{6}$/m.exec(mail ?? "");
   if (!match) {
     throw Error("Could not find the verification code in the email text");
   }
@@ -42,7 +52,7 @@ test("successful flow with code input", async ({ mailbox, driver }) => {
 
 test("successful flow following the email link", async ({
   mailbox,
-  driver
+  driver,
 }) => {
   await driver.get("http://localhost:44180/");
   await driver.wait(until.titleIs(RP_LOGIN_TITLE), TIMEOUT);
@@ -52,7 +62,7 @@ test("successful flow following the email link", async ({
   await driver.wait(until.titleIs(BROKER_CONFIRM_TITLE), TIMEOUT);
 
   const mail = mailbox.nextMail();
-  const match = /^http:\/\/localhost:44133\/confirm\?.+$/m.exec(mail);
+  const match = /^http:\/\/localhost:44133\/confirm\?.+$/m.exec(mail ?? "");
   if (!match) {
     throw Error("Could not find the confirmation URL in the email text");
   }
@@ -75,7 +85,7 @@ test("successful flow following the email link", async ({
 });
 
 test("can omit email scope", async ({ driver, relyingParty }) => {
-  let authUrl = await relyingParty.portier.authenticate(JOHN_EMAIL);
+  let authUrl = await relyingParty.portier!.authenticate(JOHN_EMAIL);
   authUrl = authUrl.replace(/scope=openid%20email/, "scope=openid");
 
   await driver.get(authUrl);
@@ -83,10 +93,10 @@ test("can omit email scope", async ({ driver, relyingParty }) => {
 });
 
 test("cannot omit openid scope", async ({ driver, relyingParty }) => {
-  let authUrl = await relyingParty.portier.authenticate(JOHN_EMAIL);
+  let authUrl = await relyingParty.portier!.authenticate(JOHN_EMAIL);
   authUrl = authUrl.replace(/scope=openid%20email/, "scope=email");
 
-  relyingParty.on("gotError", body => {
+  relyingParty.on("gotError", (body) => {
     assert.equal(
       body.error_description,
       "unsupported scope, must contain 'openid' and optionally 'email'"
@@ -97,10 +107,10 @@ test("cannot omit openid scope", async ({ driver, relyingParty }) => {
 });
 
 test("cannot add unknown scope", async ({ driver, relyingParty }) => {
-  let authUrl = await relyingParty.portier.authenticate(JOHN_EMAIL);
+  let authUrl = await relyingParty.portier!.authenticate(JOHN_EMAIL);
   authUrl = authUrl.replace(/scope=openid%20email/, "scope=openid%20dummy");
 
-  relyingParty.on("gotError", body => {
+  relyingParty.on("gotError", (body) => {
     assert.equal(
       body.error_description,
       "unsupported scope, must contain 'openid' and optionally 'email'"
@@ -110,14 +120,14 @@ test("cannot add unknown scope", async ({ driver, relyingParty }) => {
   await driver.wait(until.titleIs(RP_GOT_ERROR_TITLE), TIMEOUT);
 });
 
-module.exports = async ctx => {
+export default async (ctx: TestContext) => {
   for (const { name, fn } of ALL_TESTS) {
     // Preparation.
     ctx.relyingParty.removeAllListeners();
     ctx.mailbox.clearMail();
     // Run test and apply a timeout.
     try {
-      const timeout = new Promise((resolve, reject) =>
+      const timeout = new Promise((_resolve, reject) =>
         setTimeout(() => {
           reject(Error("Test timed out"));
         }, OVERALL_TIMEOUT).unref()

@@ -7,17 +7,24 @@ const {
   TEST_KEY_MANAGER = "manual",
   TEST_MAILER = "smtp",
   SELENIUM_BROWSER = "firefox",
-  HEADLESS = "1"
+  HEADLESS = "1",
 } = process.env;
 
-module.exports = {
+// Re-apply to environment, mostly for Selenium.
+Object.assign(process.env, {
   RUST_LOG,
   TEST_STORE,
   TEST_KEY_MANAGER,
   TEST_MAILER,
   SELENIUM_BROWSER,
-  HEADLESS
-};
+  HEADLESS,
+});
 
-// Re-apply to environment, mostly for Selenium.
-Object.assign(process.env, module.exports);
+export {
+  RUST_LOG,
+  TEST_STORE,
+  TEST_KEY_MANAGER,
+  TEST_MAILER,
+  SELENIUM_BROWSER,
+  HEADLESS,
+};

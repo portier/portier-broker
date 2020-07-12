@@ -1,28 +1,28 @@
 // Starts a broker with a minimal config.
 
-const crypto = require("crypto");
-const path = require("path");
-const readline = require("readline");
-const { spawn } = require("child_process");
+import crypto from "crypto";
+import path from "path";
+import readline from "readline";
+import { spawn } from "child_process";
+import { Mailbox } from "./mailbox";
 
-const {
-  RUST_LOG,
-  TEST_STORE,
-  TEST_KEY_MANAGER,
-  TEST_MAILER
-} = require("./env");
+import { RUST_LOG, TEST_STORE, TEST_KEY_MANAGER, TEST_MAILER } from "./env";
 
 const ROOT = path.resolve(__dirname, "../../../");
 const BIN = path.resolve(ROOT, "target/debug/portier-broker");
 
-module.exports = ({ mailbox }) => {
-  const env = {
+export interface Broker {
+  destroy(): void;
+}
+
+export default ({ mailbox }: { mailbox: Mailbox }): Broker => {
+  const env: { [key: string]: string } = {
     RUST_LOG,
     RUST_BACKTRACE: "1",
     BROKER_LISTEN_PORT: "44133",
     BROKER_PUBLIC_URL: "http://localhost:44133",
     BROKER_FROM_ADDRESS: "portier@example.com",
-    BROKER_LIMITS: "100000/s"
+    BROKER_LIMITS: "100000/s",
   };
 
   switch (TEST_STORE) {
@@ -45,12 +45,14 @@ module.exports = ({ mailbox }) => {
       break;
     case "manual":
       const { privateKey } = crypto.generateKeyPairSync("rsa", {
-        modulusLength: 2048
+        modulusLength: 2048,
       });
-      env.BROKER_KEYTEXT = privateKey.export({
-        type: "pkcs8",
-        format: "pem"
-      });
+      env.BROKER_KEYTEXT = privateKey
+        .export({
+          type: "pkcs8",
+          format: "pem",
+        })
+        .toString();
       break;
     default:
       throw Error(`Invalid TEST_KEY_MANAGER: ${TEST_KEY_MANAGER}`);
@@ -70,10 +72,10 @@ module.exports = ({ mailbox }) => {
       throw Error(`Invalid TEST_MAILER: ${TEST_MAILER}`);
   }
 
-  const subprocess = spawn(BIN, {
+  const subprocess = spawn(BIN, [], {
     stdio: ["ignore", "inherit", "pipe"],
     cwd: ROOT,
-    env
+    env,
   });
 
   // Parse output appearing on broker stderr.
@@ -83,9 +85,9 @@ module.exports = ({ mailbox }) => {
   readline
     .createInterface({
       input: subprocess.stderr,
-      crlfDelay: Infinity
+      crlfDelay: Infinity,
     })
-    .on("line", line => {
+    .on("line", (line: string) => {
       switch (line) {
         case "-----BEGIN RAW EMAIL-----":
         case "-----BEGIN EMAIL TEXT BODY-----":
@@ -126,6 +128,6 @@ module.exports = ({ mailbox }) => {
   return {
     destroy() {
       subprocess.kill();
-    }
+    },
   };
 };

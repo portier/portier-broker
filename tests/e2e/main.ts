@@ -2,19 +2,22 @@
 
 // Entry point for the test runner.
 
-const { Builder } = require("selenium-webdriver");
-const chrome = require("selenium-webdriver/chrome");
-const firefox = require("selenium-webdriver/firefox");
+import { Builder, WebDriver } from "selenium-webdriver";
+import chrome from "selenium-webdriver/chrome";
+import firefox from "selenium-webdriver/firefox";
 
-const createMailbox = require("./src/mailbox");
-const createBroker = require("./src/broker");
-const createRelyingParty = require("./src/relying-party");
-const createTests = require("./src/tests");
+import createMailbox, { Mailbox } from "./src/mailbox";
+import createBroker, { Broker } from "./src/broker";
+import createRelyingParty, { RelyingParty } from "./src/relying-party";
+import createTests from "./src/tests";
 
-const { HEADLESS } = require("./src/env");
+import { HEADLESS } from "./src/env";
 
 const main = async () => {
-  let mailbox, broker, relyingParty, driver;
+  let mailbox: Mailbox | undefined,
+    broker: Broker | undefined,
+    relyingParty: RelyingParty | undefined,
+    driver: WebDriver | undefined;
   try {
     mailbox = createMailbox();
     broker = createBroker({ mailbox });
@@ -23,13 +26,13 @@ const main = async () => {
     await createTests({ mailbox, broker, relyingParty, driver });
   } finally {
     if (driver) {
-      await driver.quit().catch(err => {
+      await driver.quit().catch((err) => {
         console.error("Error while stopping Selenium:");
         console.error(err);
       });
     }
     if (relyingParty) {
-      relyingParty.destroy();
+      relyingParty.destroy!();
     }
     if (broker) {
       broker.destroy();
@@ -40,7 +43,7 @@ const main = async () => {
   }
 };
 
-const createDriver = async browser => {
+const createDriver = async () => {
   const windowSize = { width: 800, height: 600 };
   const firefoxOptions = new firefox.Options().windowSize(windowSize);
   const chromeOptions = new chrome.Options().windowSize(windowSize);
@@ -55,7 +58,7 @@ const createDriver = async browser => {
   return builder.build();
 };
 
-main().catch(err => {
+main().catch((err) => {
   console.error(err);
   process.exitCode = 1;
 });

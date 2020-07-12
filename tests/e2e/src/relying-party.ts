@@ -1,21 +1,28 @@
 // Starts a simple relying party implementation.
 
-const express = require("express");
-const formParser = require("body-parser").urlencoded({ extended: false });
-const { EventEmitter } = require("events");
-const { PortierClient } = require("portier");
+import express from "express";
+import bodyParser from "body-parser";
+import { EventEmitter } from "events";
+import { PortierClient } from "portier";
 
-module.exports = () => {
-  const instance = new EventEmitter();
+const formParser = bodyParser.urlencoded({ extended: false });
+
+export type RelyingParty = EventEmitter & {
+  portier?: PortierClient;
+  destroy?: () => void;
+};
+
+export default (): RelyingParty => {
+  const instance: RelyingParty = new EventEmitter();
 
   const portier = new PortierClient({
     broker: "http://localhost:44133",
-    redirectUri: "http://localhost:44180/verify"
+    redirectUri: "http://localhost:44180/verify",
   });
 
   const app = express();
 
-  app.get("/", (req, res) => {
+  app.get("/", (_req, res) => {
     res.type("html").end(`
       <title>RP: Login</title>
       <form method="post" action="/auth">
