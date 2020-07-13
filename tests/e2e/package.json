@@ -4,7 +4,7 @@
   "license": "(MIT OR Apache-2.0)",
   "private": true,
   "scripts": {
-    "test": "ts-node main.ts",
+    "test": "./main.js",
     "test:chrome": "cross-env SELENIUM_BROWSER=chrome npm test",
     "test:firefox": "cross-env SELENIUM_BROWSER=firefox npm test"
   },

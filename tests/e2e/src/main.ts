@@ -1,17 +1,15 @@
-#!/usr/bin/env node
-
 // Entry point for the test runner.
 
 import { Builder, WebDriver } from "selenium-webdriver";
 import chrome from "selenium-webdriver/chrome";
 import firefox from "selenium-webdriver/firefox";
 
-import createMailbox, { Mailbox } from "./src/mailbox";
-import createBroker, { Broker } from "./src/broker";
-import createRelyingParty, { RelyingParty } from "./src/relying-party";
-import createTests from "./src/tests";
+import createMailbox, { Mailbox } from "./mailbox";
+import createBroker, { Broker } from "./broker";
+import createRelyingParty, { RelyingParty } from "./relying-party";
+import createTests from "./tests";
 
-import { HEADLESS } from "./src/env";
+import { HEADLESS } from "./env";
 
 const main = async () => {
   let mailbox: Mailbox | undefined,
