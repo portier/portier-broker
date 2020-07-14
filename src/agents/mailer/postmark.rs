@@ -16,6 +16,7 @@ struct PostmarkResponse {
 pub struct PostmarkMailer {
     fetcher: Addr<FetchAgent>,
     token: String,
+    api: String,
     from: String,
 }
 
@@ -23,12 +24,14 @@ impl PostmarkMailer {
     pub fn new(
         fetcher: Addr<FetchAgent>,
         token: String,
+        api: String,
         from_address: &EmailAddress,
         from_name: &str,
     ) -> Self {
         PostmarkMailer {
             fetcher,
             token,
+            api,
             from: format!("{} <{}>", from_name, from_address),
         }
     }
@@ -51,7 +54,7 @@ impl Handler<SendMail> for PostmarkMailer {
         }))
         .expect("Could not build Postmark request JSON body");
 
-        let request = Request::post("https://api.postmarkapp.com/email")
+        let request = Request::post(&self.api)
             .header("Accept", "application/json")
             .header("Content-Type", "application/json")
             .header("X-Postmark-Server-Token", &self.token)

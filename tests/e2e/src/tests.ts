@@ -5,17 +5,23 @@ import { By, Key, until, WebDriver } from "selenium-webdriver";
 import { Mailbox } from "./mailbox";
 import { Broker } from "./broker";
 import { RelyingParty } from "./relying-party";
+import { HttpMailer } from "./http-mailer";
+
+import { TEST_MAILER } from "./env";
 
 export interface TestContext {
   mailbox: Mailbox;
   broker: Broker;
   relyingParty: RelyingParty;
+  httpMailer: HttpMailer;
   driver: WebDriver;
 }
 
 const ALL_TESTS: { name: string; fn: (ctx: TestContext) => void }[] = [];
 const test = (name: string, fn: (ctx: TestContext) => void) =>
   ALL_TESTS.push({ name, fn });
+const postmarkTest = (name: string, fn: (ctx: TestContext) => void) =>
+  TEST_MAILER === "postmark" && test(`postmark -> ${name}`, fn);
 
 const TIMEOUT = 10000;
 const OVERALL_TIMEOUT = 30000;
@@ -120,11 +126,25 @@ test("cannot add unknown scope", async ({ driver, relyingParty }) => {
   await driver.wait(until.titleIs(RP_GOT_ERROR_TITLE), TIMEOUT);
 });
 
+postmarkTest("sends API request", async ({ httpMailer, driver }) => {
+  await driver.get("http://localhost:44180/");
+  await driver.wait(until.titleIs(RP_LOGIN_TITLE), TIMEOUT);
+
+  const emailInput = await driver.findElement(By.name("email"));
+  await emailInput.sendKeys(JOHN_EMAIL, Key.RETURN);
+  await driver.wait(until.titleIs(BROKER_CONFIRM_TITLE), TIMEOUT);
+
+  const requests = httpMailer.getRequests();
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].body["To"], JOHN_EMAIL);
+});
+
 export default async (ctx: TestContext) => {
   for (const { name, fn } of ALL_TESTS) {
     // Preparation.
     ctx.relyingParty.removeAllListeners();
     ctx.mailbox.clearMail();
+    ctx.httpMailer.clearRequests();
     // Run test and apply a timeout.
     try {
       const timeout = new Promise((_resolve, reject) =>
