@@ -22,7 +22,7 @@ const main = async () => {
     mailbox = createMailbox();
     broker = createBroker({ mailbox });
     relyingParty = createRelyingParty();
-    httpMailer = createHttpMailer();
+    httpMailer = createHttpMailer({ mailbox });
     driver = await createDriver();
     await createTests({ mailbox, broker, relyingParty, httpMailer, driver });
   } finally {

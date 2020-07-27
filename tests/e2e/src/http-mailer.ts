@@ -1,5 +1,6 @@
 import express from "express";
 import bodyParser from "body-parser";
+import { Mailbox } from "./mailbox";
 
 export interface HttpMailerRequest {
   headers: { [key: string]: string | string[] | undefined };
@@ -14,13 +15,14 @@ export interface HttpMailer {
 
 const jsonParser = bodyParser.json();
 
-export default (): HttpMailer => {
+export default ({ mailbox }: { mailbox: Mailbox }): HttpMailer => {
   const app = express();
 
   let requests: HttpMailerRequest[] = [];
 
   app.post("/postmark", jsonParser, (req, res) => {
     requests.push({ headers: req.headers, body: req.body });
+    mailbox.pushMail(req.body.TextBody);
     return res.json({ ErrorCode: 0 });
   });
 
