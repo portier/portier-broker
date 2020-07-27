@@ -43,7 +43,6 @@ pub struct EnvConfig {
     sendmail_command: Option<String>,
 
     postmark_token: Option<String>,
-
     postmark_api: Option<String>,
 
     limits: Option<Vec<LimitConfig>>,

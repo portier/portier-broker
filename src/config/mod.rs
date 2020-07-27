@@ -320,7 +320,6 @@ pub struct ConfigBuilder {
     pub sendmail_command: Option<String>,
 
     pub postmark_token: Option<String>,
-
     pub postmark_api: String,
 
     pub limits: Vec<LimitConfig>,
@@ -371,7 +370,6 @@ impl ConfigBuilder {
             sendmail_command: None,
 
             postmark_token: None,
-
             postmark_api: "https://api.postmarkapp.com/email".to_owned(),
 
             limits: [
