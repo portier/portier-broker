@@ -43,6 +43,7 @@ pub struct EnvConfig {
     sendmail_command: Option<String>,
 
     postmark_token: Option<String>,
+    postmark_api: Option<String>,
 
     limits: Option<Vec<LimitConfig>>,
     limit_per_email: Option<LegacyLimitPerEmail>,
@@ -165,6 +166,10 @@ impl EnvConfig {
 
         if let Some(val) = parsed.postmark_token {
             builder.postmark_token = Some(val);
+        }
+
+        if let Some(val) = parsed.postmark_api {
+            builder.postmark_api = val;
         }
 
         if let Some(val) = parsed.limits {

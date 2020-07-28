@@ -67,6 +67,7 @@ export default ({ mailbox }: { mailbox: Mailbox }): Broker => {
       break;
     case "postmark":
       env.BROKER_POSTMARK_TOKEN = "POSTMARK_API_TEST";
+      env.BROKER_POSTMARK_API = "http://localhost:44920/postmark";
       break;
     default:
       throw Error(`Invalid TEST_MAILER: ${TEST_MAILER}`);

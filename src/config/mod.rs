@@ -190,7 +190,7 @@ enum MailerConfig {
     #[cfg(feature = "lettre_sendmail")]
     LettreSendmail { command: String },
     #[cfg(feature = "postmark")]
-    Postmark { token: String },
+    Postmark { token: String, api: String },
 }
 
 impl MailerConfig {
@@ -200,6 +200,7 @@ impl MailerConfig {
         #[allow(unused)] smtp_password: Option<String>,
         sendmail_command: Option<String>,
         postmark_token: Option<String>,
+        postmark_api: String,
     ) -> Result<Self, ConfigError> {
         match (smtp_server, sendmail_command, postmark_token) {
             #[cfg(feature = "lettre_smtp")]
@@ -230,7 +231,7 @@ impl MailerConfig {
             }
 
             #[cfg(feature = "postmark")]
-            (None, None, Some(token)) => Ok(MailerConfig::Postmark { token }),
+            (None, None, Some(token)) => Ok(MailerConfig::Postmark { token, api: postmark_api }),
             #[cfg(not(feature = "postmark"))]
             (None, None, Some(_)) => {
                 Err("Postmark mailer requested, but this build does not support it.".into())
@@ -271,10 +272,11 @@ impl MailerConfig {
                 Box::new(spawn_agent(mailer).await)
             }
             #[cfg(feature = "postmark")]
-            MailerConfig::Postmark { token } => {
+            MailerConfig::Postmark { token, api } => {
                 let mailer = agents::PostmarkMailer::new(
                     params.fetcher,
                     token,
+                    api,
                     &params.from_address,
                     &params.from_name,
                 );
@@ -318,6 +320,7 @@ pub struct ConfigBuilder {
     pub sendmail_command: Option<String>,
 
     pub postmark_token: Option<String>,
+    pub postmark_api: String,
 
     pub limits: Vec<LimitConfig>,
 
@@ -367,6 +370,7 @@ impl ConfigBuilder {
             sendmail_command: None,
 
             postmark_token: None,
+            postmark_api: "https://api.postmarkapp.com/email".to_owned(),
 
             limits: [
                 "ip:50/s",
@@ -437,6 +441,7 @@ impl ConfigBuilder {
             self.smtp_password,
             self.sendmail_command,
             self.postmark_token,
+            self.postmark_api,
         )?;
 
         // Assign IDs to limit configs.
