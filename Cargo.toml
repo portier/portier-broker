@@ -22,8 +22,8 @@ path = "src/main.rs"
 
 [dependencies]
 accept-language = "2.0.0"
-base64 = "0.12.2"
-bytes = "0.5.5"
+base64 = "0.12.3"
+bytes = "0.5.6"
 docopt = "1.1.0"
 envy = "0.4.1"
 err-derive = "0.2.4"
@@ -31,11 +31,11 @@ futures-util = "0.3.5"
 gettext = "0.4.0"
 headers = "0.3.2"
 http = "0.2.1"
-hyper = "0.13.6"
+hyper = "0.13.7"
 hyper-staticfile = "0.5.3"
-hyper-tls = "0.4.1"
+hyper-tls = "0.4.3"
 idna = "0.2.0"
-ipnetwork = "0.16.0"
+ipnetwork = "0.17.0"
 lazy_static = "1.4.0"
 listenfd = "0.3.3"
 matches = "0.1.8"
@@ -43,7 +43,7 @@ mustache = "0.9.0"
 native-tls = "0.2.4"
 percent-encoding = "2.1.0"
 ring = "0.16.15"
-serde_json = "1.0.55"
+serde_json = "1.0.57"
 toml = "0.5.6"
 
 [dependencies.lettre]
@@ -56,7 +56,7 @@ optional = true
 version = "0.9.4"
 
 [dependencies.log]
-version = "0.4.8"
+version = "0.4.11"
 features = ["std", "release_max_level_info"]
 
 [dependencies.redis]
@@ -75,7 +75,7 @@ version = "1.0.114"
 features = ["derive"]
 
 [dependencies.tokio]
-version = "0.2.21"
+version = "0.2.22"
 features = ["fs", "macros", "process", "rt-threaded", "sync", "time"]
 
 [dependencies.url]
