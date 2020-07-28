@@ -231,7 +231,10 @@ impl MailerConfig {
             }
 
             #[cfg(feature = "postmark")]
-            (None, None, Some(token)) => Ok(MailerConfig::Postmark { token, api: postmark_api }),
+            (None, None, Some(token)) => Ok(MailerConfig::Postmark {
+                token,
+                api: postmark_api,
+            }),
             #[cfg(not(feature = "postmark"))]
             (None, None, Some(_)) => {
                 Err("Postmark mailer requested, but this build does not support it.".into())

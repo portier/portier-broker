@@ -167,7 +167,6 @@ impl EnvConfig {
         if let Some(val) = parsed.postmark_token {
             builder.postmark_token = Some(val);
         }
-
         if let Some(val) = parsed.postmark_api {
             builder.postmark_api = val;
         }
