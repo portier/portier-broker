@@ -24,12 +24,13 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v2
 
-    - name: Check TLDs
-      run: |
-        set -e
-        ./mktlds.rb
-        if [ -n "$(git status -s)" ]; then
-          echo "If this fails, the src/utils/tlds.rs file is out of date."
-          echo "To fix this, run: ./mktlds.rb > src/utils/tlds.rs"
-          exit 1
-        fi
+    - name: Update TLDs
+      run: ./mktlds.rb
+
+    - name: Create PR
+      uses: peter-evans/create-pull-request@v2
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: "Update IANA TLD list"
+        title: "Update IANA TLD list"
+        branch: "update-tlds"
