@@ -1,8 +1,6 @@
 name: Build
 
-on:
-  push:
-    branches: '**'
+on: [push, pull_request]
 
 jobs:
   toolchain-compat:
