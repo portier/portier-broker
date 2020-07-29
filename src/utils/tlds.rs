@@ -1176,7 +1176,6 @@ const TLDS_LIST: &[&str] = &[
     "sx",
     "sy",
     "sydney",
-    "symantec",
     "systems",
     "sz",
     "tab",
