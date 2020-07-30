@@ -1027,7 +1027,6 @@ const TLDS_LIST: &[&str] = &[
     "rich",
     "richardli",
     "ricoh",
-    "rightathome",
     "ril",
     "rio",
     "rip",
