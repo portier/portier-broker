@@ -793,7 +793,6 @@ const TLDS_LIST: &[&str] = &[
     "men",
     "menu",
     "merckmsd",
-    "metlife",
     "mg",
     "mh",
     "miami",
