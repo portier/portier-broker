@@ -621,7 +621,6 @@ const TLDS_LIST: &[&str] = &[
     "insurance",
     "insure",
     "int",
-    "intel",
     "international",
     "intuit",
     "investments",
