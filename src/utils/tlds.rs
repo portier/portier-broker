@@ -1136,6 +1136,7 @@ const TLDS_LIST: &[&str] = &[
     "song",
     "sony",
     "soy",
+    "spa",
     "space",
     "sport",
     "spot",
