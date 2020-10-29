@@ -192,7 +192,11 @@ enum MailerConfig {
     #[cfg(feature = "postmark")]
     Postmark { token: String, api: String },
     #[cfg(feature = "mailgun")]
-    Mailgun { token: String, api: String, domain: String },
+    Mailgun {
+        token: String,
+        api: String,
+        domain: String,
+    },
 }
 
 impl MailerConfig {
@@ -205,7 +209,7 @@ impl MailerConfig {
         postmark_api: String,
         mailgun_api: String,
         mailgun_token: Option<String>,
-        mailgun_domain: Option<String>
+        mailgun_domain: Option<String>,
     ) -> Result<Self, ConfigError> {
         match (smtp_server, sendmail_command, postmark_token, mailgun_token, mailgun_domain) {
             #[cfg(feature = "lettre_smtp")]
