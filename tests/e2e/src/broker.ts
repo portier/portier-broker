@@ -69,6 +69,11 @@ export default ({ mailbox }: { mailbox: Mailbox }): Broker => {
       env.BROKER_POSTMARK_TOKEN = "POSTMARK_API_TEST";
       env.BROKER_POSTMARK_API = "http://localhost:44920/postmark";
       break;
+    case "mailgun":
+      env.BROKER_MAILGUN_API = "http://localhost:44920/mailgun";
+      env.BROKER_MAILGUN_TOKEN = "123";
+      env.BROKER_MAILGUN_DOMAIN = "portier.io";
+      break;
     default:
       throw Error(`Invalid TEST_MAILER: ${TEST_MAILER}`);
   }

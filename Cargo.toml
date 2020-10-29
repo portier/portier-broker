@@ -10,11 +10,12 @@ license = "MIT/Apache-2.0"
 edition = "2018"
 
 [features]
-default = ["redis", "rusqlite", "lettre_smtp", "lettre_sendmail", "postmark"]
+default = ["redis", "rusqlite", "lettre_smtp", "lettre_sendmail", "postmark", "mailgun"]
 insecure = []
 lettre_smtp = ["lettre", "lettre/smtp-transport", "lettre_email"]
 lettre_sendmail = ["lettre", "lettre/sendmail-transport", "lettre_email"]
 postmark = []
+mailgun = []
 
 [[bin]]
 name = "portier-broker"

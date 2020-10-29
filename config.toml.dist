@@ -135,6 +135,17 @@ generate_rsa_command = ["openssl", "genrsa", "2048"]
 
 #postmark_token = ""
 
+# Setting the following variables enables sending mail using the Mailgun API.
+# `mailgun_token` is your API token, `mailgun_api` is the Mailgun base URL for
+# your region (typically either `https://api.mailgun.net/v3` or
+# `https://api.eu.mailgun.net/v3`), and `mailgun_domain` is the sending domain
+# you would like to use. In order to use Mailgun, `mailgun_token` and
+# `mailgun_domain` are required.
+
+#mailgun_token = ""
+#mailgun_api = "https://api.mailgun.net/v3"
+#mailgun_domain = ""
+
 ################################################################
 # Advanced settings
 

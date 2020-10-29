@@ -191,6 +191,8 @@ enum MailerConfig {
     LettreSendmail { command: String },
     #[cfg(feature = "postmark")]
     Postmark { token: String, api: String },
+    #[cfg(feature = "mailgun")]
+    Mailgun { token: String, api: String, domain: String },
 }
 
 impl MailerConfig {
@@ -201,10 +203,13 @@ impl MailerConfig {
         sendmail_command: Option<String>,
         postmark_token: Option<String>,
         postmark_api: String,
+        mailgun_api: String,
+        mailgun_token: Option<String>,
+        mailgun_domain: Option<String>
     ) -> Result<Self, ConfigError> {
-        match (smtp_server, sendmail_command, postmark_token) {
+        match (smtp_server, sendmail_command, postmark_token, mailgun_token, mailgun_domain) {
             #[cfg(feature = "lettre_smtp")]
-            (Some(server), None, None) => {
+            (Some(server), None, None, None, None) => {
                 let credentials = match (smtp_username, smtp_password) {
                     (Some(username), Some(password)) => Some((username, password)),
                     (None, None) => None,
@@ -219,29 +224,40 @@ impl MailerConfig {
                 })
             }
             #[cfg(not(feature = "lettre_smtp"))]
-            (Some(_), None, None) => {
+            (Some(_), None, None, None, None) => {
                 Err("SMTP mailer requested, but this build does not support it.".into())
             }
 
             #[cfg(feature = "lettre_sendmail")]
-            (None, Some(command), None) => Ok(MailerConfig::LettreSendmail { command }),
+            (None, Some(command), None, None, None) => Ok(MailerConfig::LettreSendmail { command }),
             #[cfg(not(feature = "lettre_sendmail"))]
-            (None, Some(_), None) => {
+            (None, Some(_), None, None, None) => {
                 Err("sendmail mailer requested, but this build does not support it.".into())
             }
 
             #[cfg(feature = "postmark")]
-            (None, None, Some(token)) => Ok(MailerConfig::Postmark {
+            (None, None, Some(token), None, None) => Ok(MailerConfig::Postmark {
                 token,
                 api: postmark_api,
             }),
             #[cfg(not(feature = "postmark"))]
-            (None, None, Some(_)) => {
+            (None, None, Some(_), None, None) => {
                 Err("Postmark mailer requested, but this build does not support it.".into())
             }
 
-            (None, None, None) => {
-                Err("Must specify one of smtp_server, sendmail_command or postmark_token".into())
+            #[cfg(feature = "mailgun")]
+            (None, None, None, Some(token), Some(domain)) => Ok(MailerConfig::Mailgun {
+                token,
+                api: mailgun_api,
+                domain,
+            }),
+            #[cfg(not(feature = "mailgun"))]
+            (None, None, None, Some(_), Some(_)) => {
+                Err("Mailgun mailer requested, but this build does not support it.".into())
+            }
+
+            (None, None, None, None, None) => {
+                Err("Must specify one of smtp_server, sendmail_command, postmark_token, or mailgun_token and mailgun_domain".into())
             }
 
             _ => Err(
@@ -280,6 +296,18 @@ impl MailerConfig {
                     params.fetcher,
                     token,
                     api,
+                    &params.from_address,
+                    &params.from_name,
+                );
+                Box::new(spawn_agent(mailer).await)
+            }
+            #[cfg(feature = "mailgun")]
+            MailerConfig::Mailgun { token, api, domain } => {
+                let mailer = agents::MailgunMailer::new(
+                    params.fetcher,
+                    token,
+                    api,
+                    domain,
                     &params.from_address,
                     &params.from_name,
                 );
@@ -324,6 +352,10 @@ pub struct ConfigBuilder {
 
     pub postmark_token: Option<String>,
     pub postmark_api: String,
+
+    pub mailgun_token: Option<String>,
+    pub mailgun_api: String,
+    pub mailgun_domain: Option<String>,
 
     pub limits: Vec<LimitConfig>,
 
@@ -374,6 +406,10 @@ impl ConfigBuilder {
 
             postmark_token: None,
             postmark_api: "https://api.postmarkapp.com/email".to_owned(),
+
+            mailgun_token: None,
+            mailgun_api: "https://api.mailgun.net/v3".to_owned(),
+            mailgun_domain: None,
 
             limits: [
                 "ip:50/s",
@@ -445,6 +481,9 @@ impl ConfigBuilder {
             self.sendmail_command,
             self.postmark_token,
             self.postmark_api,
+            self.mailgun_api,
+            self.mailgun_token,
+            self.mailgun_domain,
         )?;
 
         // Assign IDs to limit configs.
