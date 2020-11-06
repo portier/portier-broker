@@ -198,6 +198,7 @@ impl GeneratedKeyPair for Ed25519KeyPair {
     }
 
     fn from_parsed(parsed: ParsedKeyPair) -> Option<Self> {
+        #[allow(clippy::match_wildcard_for_single_variants)]
         match parsed {
             ParsedKeyPair::Ed25519(inner) => Some(inner),
             _ => None,
@@ -227,6 +228,7 @@ impl GeneratedKeyPair for RsaKeyPair {
     }
 
     fn from_parsed(parsed: ParsedKeyPair) -> Option<Self> {
+        #[allow(clippy::match_wildcard_for_single_variants)]
         match parsed {
             ParsedKeyPair::Rsa(inner) => Some(inner),
             _ => None,
