@@ -22,6 +22,8 @@ const test = (name: string, fn: (ctx: TestContext) => void) =>
   ALL_TESTS.push({ name, fn });
 const postmarkTest = (name: string, fn: (ctx: TestContext) => void) =>
   TEST_MAILER === "postmark" && test(`postmark -> ${name}`, fn);
+const mailgunTest = (name: string, fn: (ctx: TestContext) => void) =>
+  TEST_MAILER === "mailgun" && test(`mailgun -> ${name}`, fn);
 
 const TIMEOUT = 10000;
 const OVERALL_TIMEOUT = 30000;
@@ -137,6 +139,39 @@ postmarkTest("sends API request", async ({ httpMailer, driver }) => {
   const requests = httpMailer.getRequests();
   assert.equal(requests.length, 1);
   assert.equal(requests[0].body["To"], JOHN_EMAIL);
+});
+
+mailgunTest("sends API request", async ({ httpMailer, driver }) => {
+  await driver.get("http://localhost:44180/");
+  await driver.wait(until.titleIs(RP_LOGIN_TITLE), TIMEOUT);
+
+  const emailInput = await driver.findElement(By.name("email"));
+  await emailInput.sendKeys(JOHN_EMAIL, Key.RETURN);
+  await driver.wait(until.titleIs(BROKER_CONFIRM_TITLE), TIMEOUT);
+
+  const requests = httpMailer.getRequests();
+  assert.equal(requests.length, 1);
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(requests[0].body, "to"),
+    true
+  );
+  assert.equal(requests[0].body["to"], JOHN_EMAIL);
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(requests[0].body, "from"),
+    true
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(requests[0].body, "subject"),
+    true
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(requests[0].body, "html"),
+    true
+  );
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(requests[0].body, "text"),
+    true
+  );
 });
 
 export default async (ctx: TestContext) => {

@@ -43,6 +43,10 @@ pub struct TomlConfig {
 
     postmark_token: Option<String>,
 
+    mailgun_token: Option<String>,
+    mailgun_api: Option<String>,
+    mailgun_domain: Option<String>,
+
     limits: Option<Vec<LimitConfig>>,
     limit_per_email: Option<LegacyLimitPerEmail>,
 
@@ -301,6 +305,16 @@ impl TomlConfig {
 
         if let Some(val) = parsed.postmark_token {
             builder.postmark_token = Some(val);
+        }
+
+        if let Some(val) = parsed.mailgun_token {
+            builder.mailgun_token = Some(val);
+        }
+        if let Some(val) = parsed.mailgun_domain {
+            builder.mailgun_domain = Some(val);
+        }
+        if let Some(val) = parsed.mailgun_api {
+            builder.mailgun_api = val;
         }
 
         if let Some(val) = parsed.limits {

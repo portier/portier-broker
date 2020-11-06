@@ -44,3 +44,8 @@ pub use self::lettre_sendmail::SendmailMailer;
 pub mod postmark;
 #[cfg(feature = "postmark")]
 pub use self::postmark::PostmarkMailer;
+
+#[cfg(feature = "mailgun")]
+pub mod mailgun;
+#[cfg(feature = "mailgun")]
+pub use self::mailgun::MailgunMailer;
