@@ -23,11 +23,11 @@ path = "src/main.rs"
 
 [dependencies]
 accept-language = "2.0.0"
-base64 = "0.12.3"
-bytes = "0.5.6"
+base64 = "0.13.0"
+bytes = "0.6.0"
 docopt = "1.1.0"
 envy = "0.4.1"
-err-derive = "0.2.4"
+err-derive = "0.3.0"
 futures-util = "0.3.5"
 gettext = "0.4.0"
 headers = "0.3.2"
@@ -68,7 +68,7 @@ features = ["tokio-rt-core"]
 
 [dependencies.rusqlite]
 optional = true
-version = "0.23.1"
+version = "0.24.1"
 features = ["bundled"]
 
 [dependencies.serde]
