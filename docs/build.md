@@ -1,9 +1,9 @@
 # Building the broker
 
 To build the broker from source code, you'll need [Rust] installed. We
-currently support Rust 1.41 and newer.
+currently support Rust 1.42 and newer.
 
-[Rust]: https://www.rust-lang.org/
+[rust]: https://www.rust-lang.org/
 
 Once installed, building the broker is straight-forward:
 
@@ -26,7 +26,7 @@ cargo run -- [config.toml]
 To make a release build, add `--release` to the Cargo commands. See the [Cargo
 manual] for more information.
 
-[Cargo manual]: https://doc.rust-lang.org/cargo/
+[cargo manual]: https://doc.rust-lang.org/cargo/
 
 ## Feature flags
 
@@ -51,9 +51,9 @@ The broker currently defines the following feature flags:
   Identity Providers to use plain HTTP in their discovery documents. Useful for
   testing Identity Provider implementations.
 
-[Redis]: https://redis.io
+[redis]: https://redis.io
 [redis crate]: https://crates.io/crates/redis
-[SQLite]: https://www.sqlite.org/index.html
+[sqlite]: https://www.sqlite.org/index.html
 [rusqlite crate]: https://crates.io/crates/rusqlite
 
 ## Testing
@@ -67,4 +67,4 @@ cargo test
 Also included is an end-to-end test, in `tests/e2e`. See [README.md] in that
 directory for instructions on how to run it.
 
-[README.md]: https://github.com/portier/portier-broker/blob/master/tests/e2e/README.md
+[readme.md]: https://github.com/portier/portier-broker/blob/master/tests/e2e/README.md
