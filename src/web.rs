@@ -7,7 +7,6 @@ use crate::error::{BrokerError, BrokerResult};
 use crate::router::router;
 use crate::utils::{http::ResponseExt, real_ip, BoxError, BoxFuture};
 use bytes::{Bytes, BytesMut};
-use err_derive::Error;
 use futures_util::stream::StreamExt;
 use gettext::Catalog;
 use headers::{CacheControl, ContentType, Header, StrictTransportSecurity};
@@ -25,11 +24,12 @@ use std::{
     task::Poll,
     time::Duration,
 };
+use thiserror::Error;
 use url::{form_urlencoded, Url};
 
 /// Error type used within an `io::Error`, to indicate a size limit was exceeded.
 #[derive(Debug, Error)]
-#[error(display = "size limit exceeded")]
+#[error("size limit exceeded")]
 pub struct SizeLimitExceeded;
 
 /// A session as stored in Redis.

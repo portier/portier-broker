@@ -3,7 +3,6 @@ use crate::bridges::oidc::ProviderKey;
 use crate::config::Config;
 use crate::email_address::EmailAddress;
 use crate::utils::{base64url, keys::SignError, unix_duration, SecureRandom};
-use err_derive::Error;
 use ring::{
     digest,
     error::Unspecified,
@@ -13,6 +12,7 @@ use serde_json as json;
 use serde_json::{json, Error as JsonError, Value};
 use std::fmt;
 use std::iter::Iterator;
+use thiserror::Error;
 
 type RsaPublicKey = signature::RsaPublicKeyComponents<Vec<u8>>;
 
@@ -118,24 +118,21 @@ pub async fn random_zbase32(len: usize, rng: &SecureRandom) -> String {
 
 #[derive(Debug, Error)]
 pub enum VerifyError {
-    #[error(display = "the token must consist of three dot-separated parts")]
+    #[error("the token must consist of three dot-separated parts")]
     IncorrectFormat,
-    #[error(display = "token part {} contained invalid base64: {}", index, reason)]
+    #[error("token part {index} contained invalid base64: {reason}")]
     InvalidPartBase64 {
         index: usize,
         reason: base64::DecodeError,
     },
-    #[error(display = "the token header contained invalid JSON: {}", _0)]
+    #[error("the token header contained invalid JSON: {0}")]
     InvalidHeaderJson(JsonError),
-    #[error(display = "did not find a string 'kid' property in the token header")]
+    #[error("did not find a string 'kid' property in the token header")]
     KidMissing,
-    #[error(
-        display = "the token 'kid' could not be found in the JWKs document: {}",
-        kid
-    )]
+    #[error("the token 'kid' could not be found in the JWKs document: {kid}")]
     KidNotMatched { kid: String },
     #[error(
-        display = "the '{}' field of the matching JWK contains invalid base64: {}",
+        "the '{}' field of the matching JWK contains invalid base64: {}",
         property,
         reason
     )]
@@ -143,11 +140,11 @@ pub enum VerifyError {
         property: &'static str,
         reason: base64::DecodeError,
     },
-    #[error(display = "the matching JWK is of an unsupported type")]
+    #[error("the matching JWK is of an unsupported type")]
     UnsupportedKeyType,
-    #[error(display = "the token signature did not validate using the matching JWK")]
+    #[error("the token signature did not validate using the matching JWK")]
     BadSignature,
-    #[error(display = "the token payload contained invalid JSON: {}", _0)]
+    #[error("the token payload contained invalid JSON: {0}")]
     InvalidPayloadJson(JsonError),
 }
 

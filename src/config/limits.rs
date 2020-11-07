@@ -1,19 +1,19 @@
 use crate::email_address::EmailAddress;
-use err_derive::Error;
 use serde::de::{Deserialize, Deserializer, Error as DeError};
 use std::{net::IpAddr, num::ParseIntError, str::FromStr, time::Duration};
+use thiserror::Error;
 
 #[derive(Debug, Error, Eq, PartialEq)]
 pub enum LimitConfigError {
-    #[error(display = "rate limit must contain a '/' fraction separator")]
+    #[error("rate limit must contain a '/' fraction separator")]
     NoSeparator,
-    #[error(display = "rate limit window is missing a time unit")]
+    #[error("rate limit window is missing a time unit")]
     NoWindowUnit,
-    #[error(display = "rate limit window has an invalid unit: {}", _0)]
+    #[error("rate limit window has an invalid unit: {0}")]
     InvalidUnit(String),
-    #[error(display = "could not parse rate limit count as integer: {}", _0)]
+    #[error("could not parse rate limit count as integer: {0}")]
     InvalidCount(ParseIntError),
-    #[error(display = "rate limit contains an invalid keyword: {}", _0)]
+    #[error("rate limit contains an invalid keyword: {0}")]
     InvalidKeyword(String),
 }
 

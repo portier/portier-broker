@@ -1,20 +1,17 @@
-use err_derive::Error;
+use thiserror::Error;
 use url::{self, Url};
 
 #[derive(Debug, Error)]
 pub enum ValidationError {
-    #[error(display = "the URL is not http(s): {}", _0)]
+    #[error("the URL is not http(s): {0}")]
     NotHttps(String),
-    #[error(display = "the URL could not be parsed: {}", _0)]
-    InvalidUrl(#[error(source)] url::ParseError),
-    #[error(display = "the URL must not contain a username or password: {}", _0)]
+    #[error("the URL could not be parsed: {0}")]
+    InvalidUrl(#[from] url::ParseError),
+    #[error("the URL must not contain a username or password: {0}")]
     UserinfoPresent(Url),
-    #[error(
-        display = "parsing and re-serializing the URL changed its representation (check for unnecessary information like default ports): {}",
-        _0
-    )]
+    #[error("parsing and re-serializing the URL changed its representation (check for unnecessary information like default ports): {0}")]
     InconsistentSerialization(Url),
-    #[error(display = "the URL contains an invalid port: {}", _0)]
+    #[error("the URL contains an invalid port: {0}")]
     InvalidPort(Url),
 }
 

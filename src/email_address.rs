@@ -1,9 +1,9 @@
 use crate::utils::TLDS;
-use err_derive::Error;
 use matches::matches;
 use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
+use thiserror::Error;
 
 fn is_invalid_domain_char(c: char) -> bool {
     matches!(
@@ -14,17 +14,17 @@ fn is_invalid_domain_char(c: char) -> bool {
 
 #[derive(Debug, Error)]
 pub enum ParseEmailError {
-    #[error(display = "missing '@' separator in email address")]
+    #[error("missing '@' separator in email address")]
     NoSeparator,
-    #[error(display = "local part of an email address cannot be empty")]
+    #[error("local part of an email address cannot be empty")]
     EmptyLocal,
-    #[error(display = "invalid international domain name in email address")]
-    InvalidIdna(#[error(from)] idna::Errors),
-    #[error(display = "domain part of an email address cannot be empty")]
+    #[error("invalid international domain name in email address")]
+    InvalidIdna(idna::Errors),
+    #[error("domain part of an email address cannot be empty")]
     EmptyDomain,
-    #[error(display = "email address contains invalid characters in the domain part")]
+    #[error("email address contains invalid characters in the domain part")]
     InvalidDomainChars,
-    #[error(display = "email address domain part is not in a public top-level domain")]
+    #[error("email address domain part is not in a public top-level domain")]
     InvalidTld,
 }
 
@@ -61,7 +61,8 @@ impl FromStr for EmailAddress {
             return Err(ParseEmailError::EmptyLocal);
         }
         // Verify and normalize the domain
-        let domain = idna::domain_to_ascii(&input[local_end + 1..])?;
+        let domain =
+            idna::domain_to_ascii(&input[local_end + 1..]).map_err(ParseEmailError::InvalidIdna)?;
         if domain == "" {
             return Err(ParseEmailError::EmptyDomain);
         }

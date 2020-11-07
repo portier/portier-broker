@@ -22,7 +22,6 @@ use crate::utils::{
     SecureRandom,
 };
 use crate::webfinger::{Link, ParseLinkError, Relation};
-use err_derive::Error;
 use ipnetwork::IpNetwork;
 use std::{
     borrow::ToOwned,
@@ -33,20 +32,27 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use thiserror::Error;
 
 /// Union of all possible error types seen while parsing.
 #[derive(Debug, Error)]
 pub enum ConfigError {
-    #[error(display = "configuration error: {}", _0)]
-    Custom(#[error(from)] &'static str),
-    #[error(display = "IO error: {}", _0)]
-    Io(#[error(source)] IoError),
-    #[error(display = "TOML error: {}", _0)]
-    Toml(#[error(source)] ::toml::de::Error),
-    #[error(display = "keys configuration error: {}", _0)]
-    ManualKeys(#[error(source)] ManualKeysError),
-    #[error(display = "domain override configuration error: {}", _0)]
-    DomainOverride(#[error(source)] ParseLinkError),
+    #[error("configuration error: {0}")]
+    Custom(&'static str),
+    #[error("IO error: {0}")]
+    Io(#[from] IoError),
+    #[error("TOML error: {0}")]
+    Toml(#[from] ::toml::de::Error),
+    #[error("keys configuration error: {0}")]
+    ManualKeys(#[from] ManualKeysError),
+    #[error("domain override configuration error: {0}")]
+    DomainOverride(#[from] ParseLinkError),
+}
+
+impl From<&'static str> for ConfigError {
+    fn from(msg: &'static str) -> ConfigError {
+        ConfigError::Custom(msg)
+    }
 }
 
 pub type ConfigRc = Arc<Config>;

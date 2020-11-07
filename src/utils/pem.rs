@@ -2,9 +2,9 @@
 
 use crate::crypto::SigningAlgorithm;
 use crate::utils::keys::KeyPairExt;
-use err_derive::Error;
 use ring::signature::{Ed25519KeyPair, RsaKeyPair};
 use std::io::{BufRead, Cursor, Error as IoError, Read};
+use thiserror::Error;
 
 const RSA_START_MARK: &str = "-----BEGIN RSA PRIVATE KEY-----";
 const RSA_END_MARK: &str = "-----END RSA PRIVATE KEY-----";
@@ -29,12 +29,12 @@ impl ParsedKeyPair {
 
 #[derive(Debug, Error)]
 pub enum ParseError {
-    #[error(display = "IO error: {}", _0)]
-    Io(#[error(source)] IoError),
-    #[error(display = "invalid base64: {}", _0)]
-    Base64(#[error(source)] base64::DecodeError),
-    #[error(display = "invalid private key: {}", _0)]
-    KeyRejected(#[error(from)] ring::error::KeyRejected),
+    #[error("IO error: {0}")]
+    Io(#[from] IoError),
+    #[error("invalid base64: {0}")]
+    Base64(#[from] base64::DecodeError),
+    #[error("invalid private key: {0}")]
+    KeyRejected(ring::error::KeyRejected),
 }
 
 enum State {
@@ -74,7 +74,8 @@ pub fn parse_key_pairs(mut reader: impl BufRead) -> Result<Vec<ParsedKeyPair>, P
                     let der = base64::decode(&b64buf)?;
                     let key_pair = Ed25519KeyPair::from_pkcs8(&der)
                         .map(ParsedKeyPair::Ed25519)
-                        .or_else(|_| RsaKeyPair::from_pkcs8(&der).map(ParsedKeyPair::Rsa))?;
+                        .or_else(|_| RsaKeyPair::from_pkcs8(&der).map(ParsedKeyPair::Rsa))
+                        .map_err(ParseError::KeyRejected)?;
                     key_pairs.push(key_pair);
                 } else {
                     b64buf.push_str(line.trim());
@@ -84,7 +85,9 @@ pub fn parse_key_pairs(mut reader: impl BufRead) -> Result<Vec<ParsedKeyPair>, P
                 if line.starts_with(RSA_END_MARK) {
                     state = State::Scan;
                     let der = base64::decode(&b64buf)?;
-                    let key_pair = RsaKeyPair::from_der(&der).map(ParsedKeyPair::Rsa)?;
+                    let key_pair = RsaKeyPair::from_der(&der)
+                        .map(ParsedKeyPair::Rsa)
+                        .map_err(ParseError::KeyRejected)?;
                     key_pairs.push(key_pair);
                 } else {
                     b64buf.push_str(line.trim());

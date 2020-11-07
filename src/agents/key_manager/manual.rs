@@ -6,20 +6,20 @@ use crate::utils::{
     pem::{self, ParsedKeyPair},
     SecureRandom,
 };
-use err_derive::Error;
 use log::{info, warn};
 use ring::signature::{Ed25519KeyPair, RsaKeyPair};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
+use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum ManualKeysError {
-    #[error(display = "could not parse keytext: {}", _0)]
-    InvalidKeytext(#[error(source)] pem::ParseError),
-    #[error(display = "no PEM data found in keytext")]
+    #[error("could not parse keytext: {0}")]
+    InvalidKeytext(#[from] pem::ParseError),
+    #[error("no PEM data found in keytext")]
     EmptyKeytext,
-    #[error(display = "no {} keys found in keyfiles or keytext", signing_alg)]
+    #[error("no {} keys found in keyfiles or keytext", signing_alg)]
     MissingKeys { signing_alg: SigningAlgorithm },
 }
 
