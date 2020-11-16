@@ -200,6 +200,9 @@ enum MailerConfig {
 }
 
 impl MailerConfig {
+    // TODO: Clippy is complaining and it is right, this is running a little out of hand.
+    // Especially the match statement has become difficult to follow.
+    #[allow(clippy::too_many_arguments)]
     fn from_options(
         smtp_server: Option<String>,
         #[allow(unused)] smtp_username: Option<String>,
@@ -596,13 +599,15 @@ impl ConfigBuilder {
     pub async fn into_store(self) -> Result<Arc<dyn StoreSender>, ConfigError> {
         let store_config =
             StoreConfig::from_options(self.redis_url, self.sqlite_db, self.memory_storage)?;
+        let fetcher = spawn_agent(FetchAgent::new()).await;
+        let rng = SecureRandom::new().await;
         let store = store_config
             .spawn_store(StoreParams {
                 session_ttl: self.session_ttl,
                 cache_ttl: self.cache_ttl,
                 limit_configs: self.limits,
-                fetcher: spawn_agent(FetchAgent::new()).await,
-                rng: SecureRandom::new().await,
+                fetcher,
+                rng,
             })
             .await;
         Ok(store)

@@ -130,16 +130,17 @@ pub async fn auth(ctx: &mut Context, email_addr: EmailAddress) -> HandlerResult 
 /// returns the resulting token to the relying party.
 pub async fn confirmation(ctx: &mut Context) -> HandlerResult {
     let mut params = ctx.form_params();
-
     let session_id = try_get_provider_param!(params, "session");
+    let code = try_get_provider_param!(params, "code")
+        .replace(char::is_whitespace, "")
+        .to_lowercase();
+
+    #[allow(clippy::match_wildcard_for_single_variants)]
     let bridge_data = match ctx.load_session(&session_id).await? {
         BridgeData::Email(bridge_data) => bridge_data,
         _ => return Err(BrokerError::ProviderInput("invalid session".to_owned())),
     };
 
-    let code = try_get_provider_param!(params, "code")
-        .replace(char::is_whitespace, "")
-        .to_lowercase();
     if code != bridge_data.code {
         return Err(BrokerError::ProviderInput("incorrect code".to_owned()));
     }

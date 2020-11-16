@@ -223,14 +223,14 @@ pub async fn auth(ctx: &mut Context, email_addr: &EmailAddress, link: &Link) -> 
 /// successful, or an error message otherwise.
 pub async fn callback(ctx: &mut Context) -> HandlerResult {
     let mut params = ctx.form_params();
-
     let session_id = try_get_provider_param!(params, "state");
+    let id_token = try_get_provider_param!(params, "id_token");
+
+    #[allow(clippy::match_wildcard_for_single_variants)]
     let bridge_data = match ctx.load_session(&session_id).await? {
         BridgeData::Oidc(bridge_data) => bridge_data,
         _ => return Err(BrokerError::ProviderInput("invalid session".to_owned())),
     };
-
-    let id_token = try_get_provider_param!(params, "id_token");
 
     // Retrieve the provider's configuration.
     let (_, key_set) = fetch_config(ctx, &bridge_data).await?;

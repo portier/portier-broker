@@ -26,7 +26,7 @@ pub fn real_ip<B>(received_from: SocketAddr, req: &Request<B>, trusted: &[IpNetw
                 .collect::<Result<_, _>>()
                 .ok()
         })
-        .unwrap_or_else(|| vec![]);
+        .unwrap_or_else(Vec::new);
 
     let mut iter = once(received_from).chain(list).peekable();
     loop {

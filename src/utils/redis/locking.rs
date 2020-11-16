@@ -79,6 +79,7 @@ impl LockClient {
         let request = self.rng.generate_async(16).await;
         let mut sub = self.pubsub.subscribe(key.to_vec()).await.fuse();
         let mut retry = interval(Duration::from_secs(2)).fuse();
+        #[allow(clippy::mut_mut)]
         loop {
             futures_util::select! {
                 _ = retry.next() => {},

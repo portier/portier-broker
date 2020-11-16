@@ -13,9 +13,18 @@ jobs:
     - name: Install Rust
       uses: actions-rs/toolchain@v1
       with:
-        toolchain: '1.41.0'
+        toolchain: '1.42.0'
         profile: minimal
         default: true
+
+    - name: Cache
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Check
       run: cargo check --locked
@@ -37,8 +46,17 @@ jobs:
       with:
         toolchain: stable
         profile: minimal
-        components: rustfmt # Removed clippy, see below.
+        components: rustfmt, clippy
         default: true
+
+    - name: Cache
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Build
       run: cargo build --locked
@@ -52,13 +70,10 @@ jobs:
     - name: Test
       run: cargo test --locked
 
-    # TODO: Clippy 0.0.212 + Rust 1.44 produces a lot of errors that originate
-    # in macros, making it generally unusable. We should add this back once the
-    # situation improves.
-    #- name: Clippy
-    #  uses: actions-rs/clippy-check@v1
-    #  with:
-    #    token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Clippy
+      uses: actions-rs/clippy-check@v1
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Rustfmt
       run: cargo fmt -- --check
@@ -121,6 +136,15 @@ jobs:
         profile: minimal
         default: true
 
+    - name: Cache
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
     - name: Build
       run: cargo build --locked
 
@@ -152,6 +176,15 @@ jobs:
         toolchain: stable
         profile: minimal
         default: true
+
+    - name: Cache
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Build
       run: cargo build --locked

@@ -100,11 +100,9 @@ impl Context {
 
     /// Parse the query string into a `HashMap`.
     pub fn query_params(&self) -> HashMap<String, String> {
-        if let Some(query) = self.uri.query() {
-            parse_form_encoded(query.as_bytes())
-        } else {
-            HashMap::new()
-        }
+        self.uri
+            .query()
+            .map_or(HashMap::new(), |query| parse_form_encoded(query.as_bytes()))
     }
 
     /// Parse the form-encoded body into a `HashMap`.
@@ -114,11 +112,9 @@ impl Context {
 
     /// Whether this request wants a JSON response.
     pub fn want_json(&self) -> bool {
-        if let Some(accept) = self.headers.get(hyper::header::ACCEPT) {
-            accept == "application/json"
-        } else {
-            false
-        }
+        self.headers
+            .get(hyper::header::ACCEPT)
+            .map_or(false, |accept| accept == "application/json")
     }
 
     /// Start a session by filling out the common part.
@@ -329,13 +325,13 @@ async fn handle_error(ctx: &Context, err: BrokerError) -> Response {
 
     // Check if we can redirect to the RP. We must have return parameters, and the RP must not have
     // opted out from receiving errors in the redirect response.
-    let can_redirect = match ctx.return_params {
+    let can_redirect = matches!(
+        ctx.return_params,
         Some(ReturnParams {
             response_errors: true,
             ..
-        }) => true,
-        _ => false,
-    };
+        })
+    );
 
     let catalog = ctx.catalog();
     match (err, can_redirect) {
