@@ -221,7 +221,7 @@ pub fn verify_jws(
     let message_len = parts[0].len() + parts[1].len() + 1;
     pub_key
         .verify(jws[..message_len].as_bytes(), &decoded[2])
-        .map_err(|_| VerifyError::BadSignature)?;
+        .map_err(|_err| VerifyError::BadSignature)?;
 
     // Return the payload.
     Ok(json::from_slice(&decoded[1]).map_err(VerifyError::InvalidPayloadJson)?)

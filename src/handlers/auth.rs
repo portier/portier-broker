@@ -80,14 +80,14 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
 
     // Parse response_mode by wrapping it a JSON Value.
     // This has minimal overhead, and saves us a separate implementation.
-    let response_mode = from_value(Value::String(response_mode)).map_err(|_| {
+    let response_mode = from_value(Value::String(response_mode)).map_err(|_err| {
         BrokerError::Input("unsupported response_mode, must be fragment or form_post".to_owned())
     })?;
 
     // NOTE: This query parameter is non-standard.
     let response_errors = response_errors
         .parse::<bool>()
-        .map_err(|_| BrokerError::Input("response_errors must be true or false".to_owned()))?;
+        .map_err(|_err| BrokerError::Input("response_errors must be true or false".to_owned()))?;
 
     // Per the OAuth2 spec, we may redirect to the RP once we have validated client_id and
     // redirect_uri. In our case, this means we make redirect_uri available to error handling.
@@ -169,9 +169,9 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
     }
 
     // Verify and normalize the email.
-    let email_addr = login_hint
-        .parse::<EmailAddress>()
-        .map_err(|_| BrokerError::Input("login_hint is not a valid email address".to_owned()))?;
+    let email_addr = login_hint.parse::<EmailAddress>().map_err(|err| {
+        BrokerError::Input(format!("login_hint is not a valid email address: {}", err))
+    })?;
 
     // Enforce rate limits.
     match ctx

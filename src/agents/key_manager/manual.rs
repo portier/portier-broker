@@ -147,9 +147,7 @@ impl Handler<SignJws> for ManualKeys {
                 .last()
                 .map(|key| key.sign_jws(&message.payload, &self.rng)),
         };
-        cx.reply(
-            maybe_jws.unwrap_or_else(|| Err(SignError::UnsupportedAlgorithm(message.signing_alg))),
-        );
+        cx.reply(maybe_jws.unwrap_or(Err(SignError::UnsupportedAlgorithm(message.signing_alg))));
     }
 }
 

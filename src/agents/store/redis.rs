@@ -40,7 +40,7 @@ impl Message for UpdateKeysLocked {
 /// Store implementation using Redis.
 pub struct RedisStore {
     /// A random unique ID for ourselves.
-    id: Arc<Vec<u8>>,
+    id: Arc<[u8]>,
     /// The connection.
     conn: RedisConn,
     /// Pubsub client.
@@ -77,7 +77,7 @@ impl RedisStore {
         } else if !url.starts_with("redis://") {
             url = format!("redis://{}", &url);
         }
-        let id = Arc::new(rng.generate_async(16).await);
+        let id = rng.generate_async(16).await.into();
         let info = url.as_str().into_connection_info()?;
         let pubsub = pubsub::connect(&info).await?;
         let conn = RedisClient::open(info)?
@@ -293,7 +293,7 @@ impl Handler<EnableRotatingKeys> for RedisStore {
                 tokio::spawn(async move {
                     loop {
                         let from_id = sub.recv().await.expect("Redis keys subscription failed");
-                        if from_id != *my_id2 {
+                        if from_id.as_slice() != my_id2.as_ref() {
                             me2.send(UpdateKeysLocked(signing_alg));
                         }
                     }
