@@ -2,10 +2,10 @@ use crate::agents::FetchUrlCached;
 use crate::config::ConfigRc;
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
-use err_derive::Error;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Error as FmtError, Formatter};
 use std::str::FromStr;
+use thiserror::Error;
 use url::Url;
 
 /// Portier webfinger relation
@@ -30,7 +30,7 @@ pub struct LinkDef {
 
 #[derive(Debug, Error)]
 pub enum ParseRelationError {
-    #[error(display = "invalid value: {}", _0)]
+    #[error("invalid value: {0}")]
     InvalidValue(String),
 }
 
@@ -67,10 +67,10 @@ serde_display!(Relation);
 
 #[derive(Debug, Error)]
 pub enum ParseLinkError {
-    #[error(display = "invalid relation: {}", _0)]
-    InvalidRelation(#[error(source)] ParseRelationError),
-    #[error(display = "invalid href: {}", _0)]
-    InvalidHref(#[error(source)] url::ParseError),
+    #[error("invalid relation: {0}")]
+    InvalidRelation(#[from] ParseRelationError),
+    #[error("invalid href: {0}")]
+    InvalidHref(#[from] url::ParseError),
 }
 
 /// Parsed and validated webfinger link

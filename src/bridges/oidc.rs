@@ -282,8 +282,8 @@ pub async fn callback(ctx: &mut Context) -> HandlerResult {
         }
         Relation::Google => {
             // Check `email` after additional Google-specific normalization.
-            let email_addr: EmailAddress = email.parse().map_err(|_| {
-                BrokerError::ProviderInput(format!("failed to parse email in {}", descr))
+            let email_addr: EmailAddress = email.parse().map_err(|err| {
+                BrokerError::ProviderInput(format!("failed to parse email in {}: {}", descr, err))
             })?;
             let google_email_addr = email_addr.normalize_google();
             let expected = data.email_addr.normalize_google();

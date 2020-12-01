@@ -345,9 +345,7 @@ impl Handler<SignJws> for RotatingKeys {
                 .as_ref()
                 .map(|set| set.current.sign_jws(&message.payload, &self.rng)),
         };
-        cx.reply(
-            maybe_jws.unwrap_or_else(|| Err(SignError::UnsupportedAlgorithm(message.signing_alg))),
-        )
+        cx.reply(maybe_jws.unwrap_or(Err(SignError::UnsupportedAlgorithm(message.signing_alg))))
     }
 }
 

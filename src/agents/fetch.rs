@@ -1,25 +1,25 @@
 use crate::utils::agent::{Agent, Context, Handler, Message};
 use crate::utils::BoxError;
 use crate::web::read_body;
-use err_derive::Error;
 use headers::{CacheControl, HeaderMapExt};
 use http::{HeaderValue, Request, StatusCode};
 use hyper::client::{Client, HttpConnector};
 use hyper::Body;
 use hyper_tls::HttpsConnector;
 use std::time::Duration;
+use thiserror::Error;
 use url::Url;
 
 #[derive(Debug, Error)]
 pub enum FetchError {
-    #[error(display = "HTTP request failed: {}", _0)]
-    Hyper(#[error(source)] hyper::Error),
-    #[error(display = "unexpected HTTP status code: {}", _0)]
+    #[error("HTTP request failed: {0}")]
+    Hyper(#[from] hyper::Error),
+    #[error("unexpected HTTP status code: {0}")]
     BadStatus(StatusCode),
-    #[error(display = "could not read HTTP response body: {}", _0)]
+    #[error("could not read HTTP response body: {0}")]
     Read(BoxError),
-    #[error(display = "invalid UTF-8 in HTTP response body: {}", _0)]
-    Utf8(#[error(source)] std::string::FromUtf8Error),
+    #[error("invalid UTF-8 in HTTP response body: {0}")]
+    Utf8(#[from] std::string::FromUtf8Error),
 }
 
 /// The result of fetching a URL.

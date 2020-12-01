@@ -4,7 +4,6 @@ use crate::utils::{
     pem::{self, ParsedKeyPair},
     SecureRandom,
 };
-use err_derive::Error;
 use ring::{
     digest,
     io::Positive,
@@ -13,12 +12,13 @@ use ring::{
 use serde_json::{json, Value as JsonValue};
 use std::ffi::OsString;
 use std::process::{Command, Stdio};
+use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum SignError {
-    #[error(display = "unsupported signing algorithm {}", _0)]
+    #[error("unsupported signing algorithm {0}")]
     UnsupportedAlgorithm(SigningAlgorithm),
-    #[error(display = "unspecified signing error")]
+    #[error("unspecified signing error")]
     Unspecified,
 }
 

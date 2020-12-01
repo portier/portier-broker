@@ -58,14 +58,12 @@ impl Handler<SendMail> for MailgunMailer {
         let future = self.fetcher.send(FetchUrl { request });
         cx.reply_later(async move {
             match future.await {
-                Ok(_) => {
-                    return true;
-                }
+                Ok(_) => true,
                 Err(err) => {
                     log::error!("Mailgun request failed: {}", err);
-                    return false;
+                    false
                 }
-            };
+            }
         });
     }
 }
