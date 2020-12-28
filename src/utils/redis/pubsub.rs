@@ -282,7 +282,12 @@ pub async fn connect(info: &ConnectionInfo) -> RedisResult<Subscriber> {
     let mut tx = WriteHalf(tx);
 
     if let Some(ref passwd) = info.passwd {
-        tx.write(&[b"AUTH", passwd.as_bytes()]).await?;
+        if let Some(ref username) = info.username {
+            tx.write(&[b"AUTH", username.as_bytes(), passwd.as_bytes()])
+                .await?;
+        } else {
+            tx.write(&[b"AUTH", passwd.as_bytes()]).await?;
+        }
         match rx.read().await {
             Ok(Value::Okay) => (),
             _ => {
