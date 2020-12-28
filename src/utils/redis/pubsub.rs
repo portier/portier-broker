@@ -19,7 +19,8 @@ struct ReadHalf(io::BufReader<Box<dyn io::AsyncRead + Unpin + Send>>);
 impl ReadHalf {
     /// Read a value from Redis.
     async fn read(&mut self) -> RedisResult<Value> {
-        redis::parse_redis_value_async(&mut self.0).await
+        let mut decoder = combine::stream::Decoder::new();
+        redis::parse_redis_value_async(&mut decoder, &mut self.0).await
     }
 }
 
@@ -252,6 +253,10 @@ pub async fn connect(info: &ConnectionInfo) -> RedisResult<Subscriber> {
 
             let (rx, tx) = io::split(TcpStream::connect(&socket_addr).await?);
             (Box::new(rx), Box::new(tx))
+        }
+
+        ConnectionAddr::TcpTls { .. } => {
+            return Err(RedisError::from((ErrorKind::InvalidClientConfig, "TLS connections not yet supported")))
         }
 
         #[cfg(unix)]
