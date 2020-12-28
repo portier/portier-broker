@@ -256,7 +256,10 @@ pub async fn connect(info: &ConnectionInfo) -> RedisResult<Subscriber> {
         }
 
         ConnectionAddr::TcpTls { .. } => {
-            return Err(RedisError::from((ErrorKind::InvalidClientConfig, "TLS connections not yet supported")))
+            return Err(RedisError::from((
+                ErrorKind::InvalidClientConfig,
+                "TLS connections not yet supported",
+            )))
         }
 
         #[cfg(unix)]
