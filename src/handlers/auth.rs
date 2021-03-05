@@ -137,7 +137,7 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
         })?;
 
     let login_hint = try_get_input_param!(params, "login_hint", "".to_string());
-    if login_hint == "" && !ctx.want_json() {
+    if login_hint.is_empty() && !ctx.want_json() {
         let display_origin = redirect_uri_.origin().unicode_serialization();
 
         let catalog = ctx.catalog();
