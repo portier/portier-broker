@@ -57,13 +57,13 @@ impl FromStr for EmailAddress {
         let local_end = input.rfind('@').ok_or(ParseEmailError::NoSeparator)?;
         // Transform the local part to lowercase
         let local = input[..local_end].to_lowercase();
-        if local == "" {
+        if local.is_empty() {
             return Err(ParseEmailError::EmptyLocal);
         }
         // Verify and normalize the domain
         let domain =
             idna::domain_to_ascii(&input[local_end + 1..]).map_err(ParseEmailError::InvalidIdna)?;
-        if domain == "" {
+        if domain.is_empty() {
             return Err(ParseEmailError::EmptyDomain);
         }
         if domain.find(is_invalid_domain_char).is_some() {

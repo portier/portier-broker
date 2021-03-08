@@ -30,7 +30,10 @@ export default ({ mailbox }: { mailbox: Mailbox }): Broker => {
       env.BROKER_MEMORY_STORAGE = "true";
       break;
     case "redis":
-      env.BROKER_REDIS_URL = "redis://localhost/0";
+      // TODO: The Redis client does not try all addresses for `localhost`, and
+      // Docker only does IPv4 port forwards, so `localhost` fails trying IPv6
+      // first on GitHub Actions. For now, we force IPv4 here.
+      env.BROKER_REDIS_URL = "redis://127.0.0.1/0";
       break;
     case "sqlite":
       const id = String(Math.random()).slice(2);

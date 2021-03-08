@@ -95,7 +95,7 @@ async fn conn_loop(mut rx: ReadHalf, mut tx: WriteHalf, mut cmd: mpsc::Receiver<
                     Some(cmd) => Poll::Ready(LoopEvent::Cmd(cmd)),
                     None => Poll::Ready(LoopEvent::CmdClosed),
                 }
-            } else if let Poll::Ready(_) = interval.as_mut().poll_next(cx) {
+            } else if interval.as_mut().poll_next(cx).is_ready() {
                 Poll::Ready(LoopEvent::Interval)
             } else if let Poll::Ready(res) = read_fut.as_mut().poll(cx) {
                 Poll::Ready(LoopEvent::Read(res))
@@ -114,7 +114,7 @@ async fn conn_loop(mut rx: ReadHalf, mut tx: WriteHalf, mut cmd: mpsc::Receiver<
                     if let Some(ref mut pending) = sub.pending {
                         pending.push(reply);
                     } else {
-                        let _ = reply.send(sub.tx.subscribe());
+                        let _ignored = reply.send(sub.tx.subscribe());
                     }
                 }
                 Entry::Vacant(entry) => {
@@ -180,7 +180,7 @@ async fn conn_loop(mut rx: ReadHalf, mut tx: WriteHalf, mut cmd: mpsc::Receiver<
                         Some(&Value::Data(ref data)),
                     ) if ev == b"message" => {
                         if let Some(ref sub) = subs.get(&chan[..]) {
-                            let _ = sub.tx.send(data.to_vec());
+                            let _ignored = sub.tx.send(data.to_vec());
                         }
                     }
                     // Handle subscription confirmation by sending out pending replies.
@@ -188,7 +188,7 @@ async fn conn_loop(mut rx: ReadHalf, mut tx: WriteHalf, mut cmd: mpsc::Receiver<
                         if let Some(ref mut sub) = subs.get_mut(&chan[..]) {
                             if let Some(pending) = sub.pending.take() {
                                 for reply in pending {
-                                    let _ = reply.send(sub.tx.subscribe());
+                                    let _ignored = reply.send(sub.tx.subscribe());
                                 }
                             }
                         }

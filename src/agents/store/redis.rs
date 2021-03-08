@@ -259,7 +259,7 @@ impl Handler<DecrLimits> for RedisStore {
             })
             .collect();
         cx.reply_later(async move {
-            let _: Vec<()> = future::try_join_all(keys.into_iter().map(|key| {
+            let _unused: Vec<()> = future::try_join_all(keys.into_iter().map(|key| {
                 let mut conn = conn.clone();
                 let script = script.clone();
                 async move {

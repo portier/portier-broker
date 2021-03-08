@@ -95,9 +95,8 @@ impl ManualKeys {
             let mut key_pairs = pem::parse_key_pairs(keytext.as_bytes())?;
             if key_pairs.is_empty() {
                 return Err(ManualKeysError::EmptyKeytext);
-            } else {
-                parsed.append(&mut key_pairs);
             }
+            parsed.append(&mut key_pairs);
         }
 
         let mut ed25519_keys = vec![];
