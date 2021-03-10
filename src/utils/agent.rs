@@ -141,7 +141,7 @@ pub async fn spawn_agent<A: Agent>(agent: A) -> Addr<A> {
     log::trace!("Starting agent {:?}", type_name::<A>());
     let (addr, rx) = Addr::new();
     let (cx, reply_fut) = Context::new(&addr);
-    let mut tx = addr.tx.clone();
+    let tx = addr.tx.clone();
     tokio::spawn(async move {
         let send_fut = tx.send(Box::new(move |agent: &mut A| {
             agent.started(cx);
@@ -196,7 +196,7 @@ impl<A> Addr<A> {
             type_name::<A>()
         );
         let (cx, reply_fut) = Context::new(self);
-        let mut tx = self.tx.clone();
+        let tx = self.tx.clone();
         tokio::spawn(async move {
             let send_fut = tx.send(Box::new(move |agent: &mut A| {
                 agent.handle(message, cx);

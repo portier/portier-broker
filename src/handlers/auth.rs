@@ -223,12 +223,9 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
     };
 
     // Apply a timeout to discovery.
-    match future::select(
-        tokio::time::delay_for(Duration::from_secs(5)),
-        Box::pin(discovery_future),
-    )
-    .await
-    {
+    let sleep = tokio::time::sleep(Duration::from_secs(5));
+    tokio::pin!(sleep);
+    match future::select(sleep, Box::pin(discovery_future)).await {
         Either::Left((_, _f)) => {
             // Timeout causes fall back to email loop auth.
             info!("discovery timed out for {}", email_addr);

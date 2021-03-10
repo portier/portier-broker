@@ -8,7 +8,6 @@ use std::pin::Pin;
 use std::task::Poll;
 use tokio::io::{self, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tokio::stream::Stream;
 use tokio::sync::{broadcast, mpsc, oneshot};
 
 #[cfg(unix)]
@@ -95,7 +94,7 @@ async fn conn_loop(mut rx: ReadHalf, mut tx: WriteHalf, mut cmd: mpsc::Receiver<
                     Some(cmd) => Poll::Ready(LoopEvent::Cmd(cmd)),
                     None => Poll::Ready(LoopEvent::CmdClosed),
                 }
-            } else if interval.as_mut().poll_next(cx).is_ready() {
+            } else if interval.as_mut().poll_tick(cx).is_ready() {
                 Poll::Ready(LoopEvent::Interval)
             } else if let Poll::Ready(res) = read_fut.as_mut().poll(cx) {
                 Poll::Ready(LoopEvent::Read(res))
