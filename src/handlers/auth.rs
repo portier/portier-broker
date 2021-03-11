@@ -7,7 +7,6 @@ use crate::error::BrokerError;
 use crate::validation::parse_redirect_uri;
 use crate::web::{html_response, json_response, Context, HandlerResult, ReturnParams};
 use crate::webfinger::{self, Relation};
-use futures_util::future::{self, Either};
 use http::Method;
 use log::info;
 use serde_json::{from_value, json, Value};
@@ -223,13 +222,8 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
     };
 
     // Apply a timeout to discovery.
-    match future::select(
-        tokio::time::delay_for(Duration::from_secs(5)),
-        Box::pin(discovery_future),
-    )
-    .await
-    {
-        Either::Left((_, _f)) => {
+    match tokio::time::timeout(Duration::from_secs(5), discovery_future).await {
+        Err(_) => {
             // Timeout causes fall back to email loop auth.
             info!("discovery timed out for {}", email_addr);
 
@@ -248,16 +242,15 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
             });
             */
         }
-        Either::Right((Ok(v), _)) => {
+        Ok(Ok(v)) => {
             // Discovery succeeded, simply return the response.
             return Ok(v);
         }
-        Either::Right((Err(e @ BrokerError::Provider(_)), _))
-        | Either::Right((Err(e @ BrokerError::ProviderCancelled), _)) => {
+        Ok(Err(e @ BrokerError::Provider(_))) | Ok(Err(e @ BrokerError::ProviderCancelled)) => {
             // Provider errors cause fallback to email loop auth.
             e.log(None).await;
         }
-        Either::Right((Err(e), _)) => {
+        Ok(Err(e)) => {
             // Other errors during discovery are bubbled.
             return Err(e);
         }

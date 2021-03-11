@@ -1,12 +1,9 @@
-use futures_util::future::poll_fn;
+use futures_util::future::{self, Either, FutureExt};
 use std::collections::HashMap;
-use std::future::Future;
 use std::hash::Hash;
-use std::pin::Pin;
-use std::task::Poll;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::mpsc;
-use tokio::time::{delay_until, Delay, Instant as TokioInstant};
+use tokio::time::{sleep_until, Duration as TokioDuration, Instant as TokioInstant};
 
 /// Trait for converting various types to a timer deadline.
 pub trait IntoDeadline {
@@ -39,12 +36,6 @@ impl IntoDeadline for SystemTime {
     }
 }
 
-enum Event<K> {
-    Update((K, TokioInstant)),
-    Timer,
-    Cancelled,
-}
-
 /// Task that runs a set of timers.
 #[derive(Clone)]
 pub struct DelayQueueTask<K: Clone + Eq + Hash + Send + 'static> {
@@ -62,48 +53,38 @@ impl<K: Clone + Eq + Hash + Send + 'static> DelayQueueTask<K> {
     {
         let (tx, mut rx) = mpsc::channel(8);
         tokio::spawn(async move {
+            // Arbitrary sleep duration to use while idle.
+            let idle_wait = TokioDuration::new(86400 * 365, 0);
+            let mut deadline = TokioInstant::now() + idle_wait;
             let mut items = HashMap::<K, TokioInstant>::new();
-            let mut delay: Option<Delay> = None;
             loop {
-                match poll_fn(|cx| match rx.poll_recv(cx) {
-                    Poll::Ready(Some(update)) => Poll::Ready(Event::Update(update)),
-                    Poll::Ready(None) => Poll::Ready(Event::Cancelled),
-                    Poll::Pending => match delay
-                        .as_mut()
-                        .map_or(Poll::Pending, |delay| Delay::poll(Pin::new(delay), cx))
-                    {
-                        Poll::Ready(_) => Poll::Ready(Event::Timer),
-                        Poll::Pending => Poll::Pending,
-                    },
-                })
-                .await
-                {
-                    Event::Update((key, deadline)) => {
+                let recv = rx.recv().fuse();
+                let sleep = sleep_until(deadline).fuse();
+                tokio::pin!(recv, sleep);
+                match future::select(recv, sleep).await {
+                    Either::Left((Some((key, item_deadline)), _)) => {
                         items.insert(key, deadline);
-                        delay = delay
-                            .filter(|delay| delay.deadline() < deadline)
-                            .or_else(|| Some(delay_until(deadline)));
+                        if item_deadline < deadline {
+                            deadline = item_deadline
+                        }
                     }
-                    Event::Timer => {
+                    Either::Left((None, _)) => break,
+                    Either::Right(_) => {
                         let now = TokioInstant::now();
-                        let mut min_deadline: Option<TokioInstant> = None;
                         let mut expired_key = None;
-                        for (key, deadline) in &items {
-                            if expired_key.is_none() && *deadline <= now {
+                        deadline = now + idle_wait;
+                        for (key, item_deadline) in &items {
+                            if expired_key.is_none() && *item_deadline <= now {
                                 expired_key = Some(key.clone());
-                            } else {
-                                min_deadline = min_deadline
-                                    .filter(|value| value < deadline)
-                                    .or_else(|| Some(*deadline))
+                            } else if *item_deadline < deadline {
+                                deadline = *item_deadline;
                             }
                         }
-                        delay = min_deadline.map(delay_until);
                         if let Some(key) = expired_key {
                             items.remove(&key);
                             handler(key);
                         }
                     }
-                    Event::Cancelled => break,
                 }
             }
         });
