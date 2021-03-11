@@ -50,5 +50,5 @@ git commit -m "Version $1" Cargo.toml Cargo.lock
 git push
 
 echo
-echo "Create the release at: https://github.com/portier/portier-broker/releases/new?tag=v$1"
+echo "Create the release at: https://github.com/portier/portier-broker/releases/new?tag=v$1&title=v$1"
 echo "GitHub Actions will then build and attach files automatically."
