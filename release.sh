@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Script to automate creating a (draft) release.
+# Script to automate our release process.
 #
 # After running this script, manually add release notes and publish the
 # release. CI will then make release builds and attach them automatically.
@@ -15,6 +15,10 @@ if [ $# -ne 1 ]; then
 fi
 
 # Check if git tree is clean.
+if [ "$(git rev-parse --abbrev-ref HEAD)" != "master" ]; then
+  echo "Must be on the master branch."
+  exit 1
+fi
 if [ ! -z "$(git status --porcelain)" ]; then
   echo "Working directory is not clean."
   exit 1
@@ -25,14 +29,12 @@ echo "About to create a release $1, with recent commits:"
 echo
 git log --oneline --max-count 10 | cat
 echo
+echo "Will create and push a commit updating the Cargo version."
 read -p "Continue? (y/n)" CONT
 if [ "$CONT" != "y" ]; then
   echo "Cancelled."
   exit 1
 fi
-
-# Echo commands from here.
-set -x
 
 # Update the version in Cargo.toml.
 #
@@ -47,5 +49,6 @@ cargo check
 git commit -m "Version $1" Cargo.toml Cargo.lock
 git push
 
-# Create a draft release on GitHub.
-gh release create "v$1" --draft --title "v$1"
+echo
+echo "Create the release at: https://github.com/portier/portier-broker/releases/new?tag=v$1"
+echo "GitHub Actions will then build and attach files automatically."
