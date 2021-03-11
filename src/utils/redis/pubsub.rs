@@ -13,18 +13,27 @@ use tokio::sync::{broadcast, mpsc, oneshot};
 #[cfg(unix)]
 use tokio::net::UnixStream;
 
+type Decoder = combine::stream::Decoder<
+    combine::parser::combinator::AnySendSyncPartialState,
+    combine::stream::PointerOffset<[u8]>,
+>;
+
 /// Read half of a Redis pubsub connection.
-struct ReadHalf(io::BufReader<Box<dyn io::AsyncRead + Unpin + Send>>);
+struct ReadHalf {
+    inner: io::BufReader<Box<dyn io::AsyncRead + Unpin + Send>>,
+    decoder: Decoder,
+}
 impl ReadHalf {
     /// Read a value from Redis.
     async fn read(&mut self) -> RedisResult<Value> {
-        let mut decoder = combine::stream::Decoder::new();
-        redis::parse_redis_value_async(&mut decoder, &mut self.0).await
+        redis::parse_redis_value_async(&mut self.decoder, &mut self.inner).await
     }
 }
 
 /// Write half of a Redis pubsub connection.
-struct WriteHalf(Box<dyn io::AsyncWrite + Unpin + Send>);
+struct WriteHalf {
+    inner: Box<dyn io::AsyncWrite + Unpin + Send>,
+}
 impl WriteHalf {
     /// Write a command on the Redis connection.
     async fn write(&mut self, cmd: &[&[u8]]) -> IoResult<()> {
@@ -34,7 +43,7 @@ impl WriteHalf {
             data.extend_from_slice(part);
             data.extend_from_slice(b"\r\n");
         }
-        self.0.write_all(&data).await
+        self.inner.write_all(&data).await
     }
 }
 
@@ -277,8 +286,11 @@ pub async fn connect(info: &ConnectionInfo) -> RedisResult<Subscriber> {
         }
     };
 
-    let mut rx = ReadHalf(io::BufReader::new(rx));
-    let mut tx = WriteHalf(tx);
+    let mut rx = ReadHalf {
+        inner: io::BufReader::new(rx),
+        decoder: Decoder::new(),
+    };
+    let mut tx = WriteHalf { inner: tx };
 
     if let Some(ref passwd) = info.passwd {
         if let Some(ref username) = info.username {
