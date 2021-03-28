@@ -468,7 +468,6 @@ const TLDS_LIST: &[&str] = &[
     "frontier",
     "ftr",
     "fujitsu",
-    "fujixerox",
     "fun",
     "fund",
     "furniture",
