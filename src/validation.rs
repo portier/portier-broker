@@ -92,10 +92,10 @@ mod tests {
             "http://example.com:8080/path?foo=bar",
         ] {
             if let Err(err) = parse_redirect_uri(uri, "input") {
-                panic!(format!(
+                panic!(
                     "unexpectedly rejected uri: {}. Reported: {}",
                     uri, err
-                ))
+                )
             }
         }
     }
@@ -137,7 +137,7 @@ mod tests {
             "http://»",
         ] {
             if parse_redirect_uri(uri, "input").is_ok() {
-                panic!(format!("did not reject uri: {}", uri))
+                panic!("did not reject uri: {}", uri)
             }
         }
     }
@@ -167,7 +167,7 @@ mod tests {
         ] {
             let uri = uri.parse().expect("could not parse a test uri");
             if parse_oidc_href(&uri).is_none() {
-                panic!(format!("unexpectedly rejected uri: {}", uri))
+                panic!("unexpectedly rejected uri: {}", uri)
             }
         }
     }
@@ -190,7 +190,7 @@ mod tests {
             println!("{}", uri);
             let uri = uri.parse().expect("could not parse a test uri");
             if parse_oidc_href(&uri).is_some() {
-                panic!(format!("did not reject uri: {}", uri))
+                panic!("did not reject uri: {}", uri)
             }
         }
     }

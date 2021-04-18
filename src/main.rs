@@ -111,7 +111,7 @@ async fn start_server(builder: ConfigBuilder) {
         builder
             .done()
             .await
-            .unwrap_or_else(|err| panic!(format!("failed to build configuration: {}", err))),
+            .unwrap_or_else(|err| panic!("failed to build configuration: {}", err)),
     );
 
     // TODO: Add unix socket support.
@@ -183,7 +183,7 @@ async fn import_key(builder: ConfigBuilder, file: &Path) {
     let store = builder
         .into_store()
         .await
-        .unwrap_or_else(|err| panic!(format!("failed to build configuration: {}", err)));
+        .unwrap_or_else(|err| panic!("failed to build configuration: {}", err));
 
     let signing_alg = match key {
         ParsedKeyPair::Ed25519(_) => SigningAlgorithm::EdDsa,
