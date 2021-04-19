@@ -224,7 +224,7 @@ pub fn verify_jws(
         .map_err(|_err| VerifyError::BadSignature)?;
 
     // Return the payload.
-    Ok(json::from_slice(&decoded[1]).map_err(VerifyError::InvalidPayloadJson)?)
+    json::from_slice(&decoded[1]).map_err(VerifyError::InvalidPayloadJson)
 }
 
 /// Helper method to create a JWT for a given email address and audience.
