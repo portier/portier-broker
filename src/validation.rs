@@ -92,10 +92,7 @@ mod tests {
             "http://example.com:8080/path?foo=bar",
         ] {
             if let Err(err) = parse_redirect_uri(uri, "input") {
-                panic!(
-                    "unexpectedly rejected uri: {}. Reported: {}",
-                    uri, err
-                )
+                panic!("unexpectedly rejected uri: {}. Reported: {}", uri, err)
             }
         }
     }
