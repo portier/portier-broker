@@ -1,0 +1,122 @@
+info:
+  title: Portier Broker Service
+  author: https://github.com/portier
+
+required:
+- region
+- hostname
+- website_hostname
+- from_address
+- smtp_hostname
+- smtp_username
+- smtp_password
+
+properties:
+  region:
+    type: string
+    description: >
+      Region (https://cloud.google.com/run/docs/locations) to deploy the service to.
+
+  hostname:
+    type: string
+    description: >
+      Constructs a value for config.toml:public_url using the template 'http://[hostname]'
+
+  website_hostname:
+    type: string
+    description: >
+      Organisation website hostname we redirect unknown requests to
+
+  website_path:
+    type: string
+    description: >
+      Organisation website path we redirect unknown requests to
+    default: /
+
+  data_url:
+    type: string
+    description: >
+      URL to .tar.gz to provide custom {lang,res,tmpl} contents, see Dockerfile for details.
+      This is publically accessible over HTTP so avoid including sensitive data in it and/or use a UUID in the path of the URL.
+
+  allowed_origins:
+    type: array
+    description: >
+      Used to construct config.toml:allowed_origins
+
+  allowed_origins_file:
+    type: string
+    description: >
+      Used to construct config.toml:allowed_origins (value is prepended with "@/opt/portier-broker/")
+
+  allowed_domains:
+    type: array
+    description: >
+      Used to construct config.toml:allowed_domains
+
+  allowed_domains_file:
+    type: string
+    description: >
+      Used to construct config.toml:allowed_domains (value is prepended with "@/opt/portier-broker/")
+
+  blocked_domains:
+    type: array
+    description: >
+      Used to construct config.toml:blocked_domains
+
+  blocked_domains_file:
+    type: string
+    description: >
+      Used to construct config.toml:blocked_domains (value is prepended with "@/opt/portier-broker/")
+
+  resolver:
+    type: string
+    description: >
+      Used to populate config.toml:verify_with_resolver (also sets verify_public_ip to true)
+    default: 169.254.169.254:53
+
+  from_name:
+    type: string
+    description: >
+      Used to populate config.toml:from_name
+    default: Portier
+
+  from_address:
+    type: string
+    description: >
+      Used to populate config.toml:from_address (eg. 'noreply@example.com')
+
+  smtp_hostname:
+    type: string
+    description: >
+      Hostname for SMTP server
+
+  smtp_port:
+    type: integer
+    description: >
+      Port for SMTP server
+    default: 25
+
+  smtp_username:
+    type: string
+    description: >
+      Username for SMTP server
+
+  smtp_password:
+    type: string
+    description: >
+      Password for SMTP server
+
+  instances_min:
+    type: integer
+    description: >
+      Minimum number of instances to retain whilst idle. Recommended one (1) is used
+      as it will hide the cold-start latency but comes at a cost hence why the default
+      is set to zero (0)
+    default: 0
+
+  instances_max:
+    type: integer
+    description: >
+      Maximum number of instances to run
+    default: 10

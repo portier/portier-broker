@@ -1,0 +1,15 @@
+imports:
+- path: portier.jinja
+
+resources:
+- name: portier
+  type: portier.jinja
+  properties:
+    region: europe-west4
+    hostname: auth.example.com
+    website_hostname: example.com
+    from_address: noreply@example.com
+    smtp_hostname: smtp.sendgrid.net
+    smtp_port: 587
+    smtp_username: apikey
+    smtp_password: SG.1234abcd...
