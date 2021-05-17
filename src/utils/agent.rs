@@ -51,7 +51,7 @@ impl<A, M: Message> Context<A, M> {
 
     /// Send a reply to the message.
     pub fn reply(self, reply: M::Reply) {
-        let _ = self.tx.send(reply);
+        let _res = self.tx.send(reply);
     }
 
     /// Execute the function and send the return value as the reply.
@@ -63,7 +63,7 @@ impl<A, M: Message> Context<A, M> {
     where
         F: FnOnce() -> M::Reply,
     {
-        let _ = self.tx.send(f());
+        let _res = self.tx.send(f());
     }
 
     /// Spawn an async task that returns a reply later.
@@ -73,7 +73,7 @@ impl<A, M: Message> Context<A, M> {
     {
         let Context { tx, .. } = self;
         tokio::spawn(async move {
-            let _ = tx.send(f.await);
+            let _res = tx.send(f.await);
         });
     }
 

@@ -138,7 +138,7 @@ impl Agent for RedisStore {
             interval.tick().await;
             loop {
                 interval.tick().await;
-                let _: String = ::redis::cmd("PING")
+                let _res: String = ::redis::cmd("PING")
                     .query_async(&mut conn)
                     .await
                     .expect("Redis ping failed");

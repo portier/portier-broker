@@ -188,7 +188,7 @@ async fn conn_loop(mut rx: ReadHalf, mut tx: WriteHalf, mut cmd: mpsc::Receiver<
                         Some(&Value::Data(ref data)),
                     ) if ev == b"message" => {
                         if let Some(ref sub) = subs.get(&chan[..]) {
-                            let _ignored = sub.tx.send(data.to_vec());
+                            let _ignored = sub.tx.send(data.clone());
                         }
                     }
                     // Handle subscription confirmation by sending out pending replies.
