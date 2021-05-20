@@ -49,7 +49,7 @@ impl std::str::FromStr for EmailAddress {
     type Err = ParseEmailError;
 
     /// Parse and normalize an email address.
-    /// <https://github.com/portier/portier.github.io/blob/master/specs/Email-Normalization.md>
+    /// <https://github.com/portier/portier.github.io/blob/main/specs/Email-Normalization.md>
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         let local_end = input.rfind('@').ok_or(ParseEmailError::NoSeparator)?;
         // Transform the local part to lowercase

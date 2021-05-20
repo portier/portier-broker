@@ -46,7 +46,7 @@ Environment=BROKER_SQLITE_DB=/var/lib/portier-broker/db.sqlite3
 # may simply comment them.
 #
 # This list of options is based on the portablectl strict profile:
-# https://github.com/systemd/systemd/blob/master/src/portable/profile/strict/service.conf
+# https://github.com/systemd/systemd/blob/main/src/portable/profile/strict/service.conf
 TemporaryFileSystem=/run
 RemoveIPC=yes
 CapabilityBoundingSet=

@@ -88,12 +88,12 @@ generate_rsa_command = ["openssl", "genrsa", "2048"]
 # persistent file storage. This is common with cloud hosting, like Heroku.
 
 # Setting `sqlite_db` enables SQLite storage. Please also read:
-# https://github.com/portier/portier-broker/blob/master/docs/storage/sqlite.md
+# https://github.com/portier/portier-broker/blob/main/docs/storage/sqlite.md
 
 #sqlite_db = "/var/lib/portier-broker/db.sqlite3"
 
 # Setting `redis_url` enables Redis storage. Please also read:
-# https://github.com/portier/portier-broker/blob/master/docs/storage/redis.md
+# https://github.com/portier/portier-broker/blob/main/docs/storage/redis.md
 
 #redis_url = "redis://localhost/0"
 

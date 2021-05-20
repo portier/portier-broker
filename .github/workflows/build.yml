@@ -1,6 +1,10 @@
 name: Build
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
   toolchain-compat:
@@ -35,7 +39,7 @@ jobs:
       redis:
         image: redis:latest
         ports:
-          - 6379:6379
+        - 6379:6379
     steps:
 
     - name: Checkout

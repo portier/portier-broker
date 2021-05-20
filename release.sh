@@ -15,8 +15,8 @@ if [ $# -ne 1 ]; then
 fi
 
 # Check if git tree is clean.
-if [ "$(git rev-parse --abbrev-ref HEAD)" != "master" ]; then
-  echo "Must be on the master branch."
+if [ "$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then
+  echo "Must be on the main branch."
   exit 1
 fi
 if [ ! -z "$(git status --porcelain)" ]; then

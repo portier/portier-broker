@@ -67,4 +67,4 @@ cargo test
 Also included is an end-to-end test, in `tests/e2e`. See [README.md] in that
 directory for instructions on how to run it.
 
-[readme.md]: https://github.com/portier/portier-broker/blob/master/tests/e2e/README.md
+[readme.md]: ../tests/e2e/README.md
