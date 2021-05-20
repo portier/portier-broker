@@ -1,4 +1,5 @@
 use super::{ConfigBuilder, LegacyLimitPerEmail, LimitConfig};
+use crate::config::StringList;
 use crate::crypto::SigningAlgorithm;
 use crate::webfinger::Link;
 use serde::Deserialize;
@@ -13,8 +14,16 @@ pub struct TomlConfig {
     listen_ip: Option<String>,
     listen_port: Option<u16>,
     public_url: Option<String>,
-    allowed_origins: Option<Vec<String>>,
     data_dir: Option<String>,
+
+    allowed_origins: Option<StringList>,
+    #[serde(default)]
+    allowed_domains: StringList,
+    #[serde(default)]
+    blocked_domains: StringList,
+    verify_with_resolver: Option<String>,
+    verify_public_ip: Option<bool>,
+    allowed_domains_only: Option<bool>,
 
     static_ttl: Option<u64>,
     discovery_ttl: Option<u64>,
@@ -143,7 +152,7 @@ impl TomlConfig {
                 parsed.public_url = table.public_url.clone();
             }
             if parsed.allowed_origins.is_none() {
-                parsed.allowed_origins = table.allowed_origins.clone();
+                parsed.allowed_origins = table.allowed_origins.clone().map(|list| list.into());
             }
         }
 
@@ -233,11 +242,54 @@ impl TomlConfig {
         if let Some(val) = parsed.public_url {
             builder.public_url = Some(val);
         }
-        if let Some(val) = parsed.allowed_origins {
-            builder.allowed_origins = Some(val)
-        };
         if let Some(val) = parsed.data_dir {
             builder.data_dir = val;
+        }
+
+        if let Some(val) = parsed.allowed_origins {
+            let list = builder.allowed_origins.get_or_insert(vec![]);
+            for (source, res) in val.iter_values() {
+                match res {
+                    Ok(data) => list.push(data.into_owned()),
+                    Err(err) => panic!("IO error in allowed_origins entry {}: {}", source, err),
+                }
+            }
+        };
+        for (source, res) in parsed.allowed_domains.iter_values() {
+            let data = match res {
+                Ok(data) => data,
+                Err(err) => panic!("IO error in allowed_domains entry {}: {}", source, err),
+            };
+            if let Err(err) = builder.domain_validator.add_allowed_domain(data.as_ref()) {
+                panic!(
+                    "Invalid allowed_domains entry {}: '{}': {}",
+                    source, data, err
+                );
+            }
+        }
+        for (source, res) in parsed.blocked_domains.iter_values() {
+            let data = match res {
+                Ok(data) => data,
+                Err(err) => panic!("IO error in blocked_domains entry {}: {}", source, err),
+            };
+            if let Err(err) = builder.domain_validator.add_blocked_domain(data.as_ref()) {
+                panic!(
+                    "Invalid blocked_domains entry {}: '{}': {}",
+                    source, data, err
+                );
+            }
+        }
+        if let Some(val) = parsed.verify_with_resolver {
+            builder
+                .domain_validator
+                .set_resolver(Some(val.as_str()).filter(|s| !s.is_empty()))
+                .expect("Invalid verify_with_resolver value");
+        }
+        if let Some(val) = parsed.verify_public_ip {
+            builder.domain_validator.verify_public_ip = val;
+        }
+        if let Some(val) = parsed.allowed_domains_only {
+            builder.domain_validator.allowed_domains_only = val;
         }
 
         if let Some(val) = parsed.static_ttl {

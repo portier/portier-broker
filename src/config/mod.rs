@@ -1,10 +1,12 @@
 mod env;
 mod i18n;
 mod limits;
+mod string_list;
 mod templates;
 mod toml;
 
-pub use limits::{LegacyLimitPerEmail, LimitConfig, LimitInput};
+pub use limits::*;
+pub use string_list::*;
 
 use self::env::EnvConfig;
 use self::i18n::I18n;
@@ -19,7 +21,7 @@ use crate::crypto::SigningAlgorithm;
 use crate::email_address::EmailAddress;
 use crate::utils::{
     agent::{spawn_agent, Addr, Sender},
-    SecureRandom,
+    DomainValidator, SecureRandom,
 };
 use crate::webfinger::{Link, ParseLinkError, Relation};
 use ipnetwork::IpNetwork;
@@ -63,6 +65,7 @@ pub struct Config {
     pub public_url: String,
     pub trusted_proxies: Vec<IpNetwork>,
     pub allowed_origins: Option<Vec<String>>,
+    pub domain_validator: DomainValidator,
 
     pub static_ttl: Duration,
     pub discovery_ttl: Duration,
@@ -336,6 +339,7 @@ pub struct ConfigBuilder {
     pub public_url: Option<String>,
     pub trusted_proxies: Vec<IpNetwork>,
     pub allowed_origins: Option<Vec<String>>,
+    pub domain_validator: DomainValidator,
     pub data_dir: String,
 
     pub static_ttl: Duration,
@@ -387,6 +391,7 @@ impl ConfigBuilder {
                 .map(|v| v.parse().unwrap())
                 .collect(),
             allowed_origins: None,
+            domain_validator: DomainValidator::new(),
             data_dir: String::new(),
 
             static_ttl: Duration::from_secs(604_800),
@@ -580,6 +585,7 @@ impl ConfigBuilder {
             public_url: self.public_url.expect("no public url configured"),
             trusted_proxies: self.trusted_proxies,
             allowed_origins: self.allowed_origins,
+            domain_validator: self.domain_validator,
 
             static_ttl: self.static_ttl,
             discovery_ttl: self.discovery_ttl,

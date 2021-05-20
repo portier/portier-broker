@@ -15,7 +15,7 @@ impl I18n {
         let catalogs = SUPPORTED_LANGUAGES
             .iter()
             .map(|lang| {
-                let mut path = data_dir.to_path_buf();
+                let mut path = data_dir.clone();
                 path.push("lang");
                 path.push(lang);
                 path.set_extension("mo");

@@ -4,6 +4,7 @@ use crate::config::LimitInput;
 use crate::crypto::SigningAlgorithm;
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
+use crate::utils::DomainValidationError;
 use crate::validation::parse_redirect_uri;
 use crate::web::{html_response, json_response, Context, HandlerResult, ReturnParams};
 use crate::webfinger::{self, Relation};
@@ -171,6 +172,17 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
     let email_addr = login_hint.parse::<EmailAddress>().map_err(|err| {
         BrokerError::Input(format!("login_hint is not a valid email address: {}", err))
     })?;
+
+    // Verify the email domain.
+    if let Err(err) = ctx.app.domain_validator.validate(email_addr.domain()).await {
+        return Err(BrokerError::Input(
+            match err {
+                DomainValidationError::Blocked => "the domain of the email address is blocked",
+                _ => "the domain of the email address is invalid",
+            }
+            .to_owned(),
+        ));
+    }
 
     // Enforce rate limits.
     match ctx

@@ -56,12 +56,6 @@ public_url = "" # Required
 #
 trusted_proxies = ["127.0.0.0/8", "::1"]
 
-# Whitelist of origins that are allowed to use this broker. If left unset, the
-# broker will allow any Relying Party to use it. (Note that an empty list here
-# has different meaning than leaving it unset.)
-
-#allowed_origins = ["https://example.com"]
-
 # The 'From' name and address used by Portier to send emails.
 
 from_name = "Portier"
@@ -145,6 +139,65 @@ generate_rsa_command = ["openssl", "genrsa", "2048"]
 #mailgun_token = ""
 #mailgun_api = "https://api.mailgun.net/v3"
 #mailgun_domain = ""
+
+################################################################
+# Access control
+
+# List of (exact) website origins that are allowed to use this broker. If left
+# unset, the broker will allow any Relying Party to use it. (Note that this is
+# different from an empty list, which would deny all instead.)
+#
+# Entries may also be files, by specifying a path prefixed with `@`. These
+# files must contain one value per line, but may contain empty lines or
+# comments starting with `#`.
+#
+# Note that files are only loaded once during startup, and the broker must be
+# restarted after updating them.
+
+#allowed_origins = ["https://example.com"]
+
+# List of (exact) email domains that are explicitely allowed to use this
+# broker. Domains in this list bypass the `blocked_domains` and
+# `verify_with_resolver` checks.
+#
+# Similar to `allowed_origins`, this list may also contain files.
+
+allowed_domains = []
+
+# List of (exact) email domains that are explicitely blocked from using this
+# broker. Domains in this list are rejected before the `verify_with_resolver`
+# check. Note that `allowed_domains` is checked first, and domains that appear
+# in both will not be rejected.
+#
+# Similar to `allowed_origins`, this list may also contain files.
+
+blocked_domains = []
+
+# A DNS server used to verify email domains. If set, the domain must have an
+# MX, A or AAAA record, or it will be rejected.
+#
+# Leaving this unset means no DNS check is performed at all. Using the host OS
+# resolver is unfortunately not possible, because it is not designed for the
+# amount of requests the broker may want need to make.
+#
+# This example lists the Cloudflare public DNS resolver. If your broker is
+# public or may otherwise see a decent amount of traffic, consider running your
+# own caching resolver instead (even if it just forwards to Cloudflare or
+# similar), because the broker itself does not do any DNS caching. Popular
+# options for this are Unbound, BIND, or dnsmasq.
+
+#verify_with_resolver = "1.1.1.1:53"
+
+# If both this and `verify_with_resolver` are set, the DNS check will ignoreIP
+# addresses that are not in the public address space. (For example, domains
+# that resolve only to local network addresses will be rejected.)
+
+verify_public_ip = true
+
+# Set this flag to true to treat any email domain not in `allowed_domains` as
+# blocked. This effectively disables other checks. Useful for private brokers.
+
+allowed_domains_only = false
 
 ################################################################
 # Advanced settings

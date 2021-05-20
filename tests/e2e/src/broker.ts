@@ -23,6 +23,7 @@ export default ({ mailbox }: { mailbox: Mailbox }): Broker => {
     BROKER_PUBLIC_URL: "http://localhost:44133",
     BROKER_FROM_ADDRESS: "portier@example.com",
     BROKER_LIMITS: "100000/s",
+    BROKER_ALLOWED_DOMAINS: "example.com"
   };
 
   switch (TEST_STORE) {

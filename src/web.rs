@@ -481,7 +481,7 @@ pub fn return_to_relier(ctx: &Context, params: &[(&str, &str)]) -> Response {
             redirect_uri.set_fragment(Some(&fragment));
 
             let mut res = empty_response(StatusCode::SEE_OTHER);
-            res.header(hyper::header::LOCATION, redirect_uri.into_string());
+            res.header(hyper::header::LOCATION, String::from(redirect_uri));
             res
         }
         // Render a form that submits a POST request.
