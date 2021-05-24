@@ -57,7 +57,7 @@ features = ["full"]
 
 [dependencies.lettre]
 optional = true
-version = "0.9.3"
+version = "0.9.6"
 default-features = false
 
 [dependencies.lettre_email]
