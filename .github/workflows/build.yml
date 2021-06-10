@@ -28,7 +28,7 @@ jobs:
           ~/.cargo/registry
           ~/.cargo/git
           target
-        key: v1-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Check
       run: cargo check --locked
@@ -60,7 +60,7 @@ jobs:
           ~/.cargo/registry
           ~/.cargo/git
           target
-        key: v1-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Build
       run: cargo build --locked
@@ -153,7 +153,7 @@ jobs:
           ~/.cargo/registry
           ~/.cargo/git
           target
-        key: v2-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Build
       run: cargo build --locked

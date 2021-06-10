@@ -4,29 +4,72 @@ on:
   release:
     types: [created]
 
+defaults:
+  run:
+    shell: bash
+
 env:
+  tag_name: ${{ github.event.release.tag_name }}
   package_resources: >-
     README.md LICENSE-APACHE LICENSE-MIT
     docs lang res tmpl
     config.toml.dist
 
 jobs:
-  release:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
+  release-linux:
+    runs-on: ubuntu-latest
+    container: "debian:bullseye"
+    env:
 
-    # Workaround for: https://github.com/actions/cache/issues/403
-    - name: Install GNU tar
-      if: runner.os == 'macOS'
-      run: |
-        brew install gnu-tar
-        echo PATH="/usr/local/opt/gnu-tar/libexec/gnubin:$PATH" >> $GITHUB_ENV
+      # NOTE: Packages are named after the first component of the target
+      # triple, so these must be unique.
+      # NOTE: On Linux, we are limited mostly by arch support in Ring.
+      build_targets: |
+        aarch64-unknown-linux-gnu
+        arm-unknown-linux-gnueabihf
+        armv7-unknown-linux-gnueabihf
+        i686-unknown-linux-gnu
+        x86_64-unknown-linux-gnu
+
+    steps:
 
     - name: Checkout
       uses: actions/checkout@v2
+
+    # Docker Debian images clear APT cache after every operation.
+    # This disables those settings, so GitHub can use the cache.
+    - name: Prepare APT cache
+      run: |
+        rm /etc/apt/apt.conf.d/docker-clean
+
+    - name: APT cache
+      uses: actions/cache@v2
+      with:
+        path: |
+          /var/cache/apt/
+          /var/lib/apt/lists/
+        key: debian-bullseye-apt
+
+    - name: Prepare cross
+      uses: ./.github/actions/prep-linux-cross
+      with:
+        targets: ${{ env.build_targets }}
+        packages: libssl-dev
+
+    # The previous step already did `apt-get update`, so install only.
+    # - curl & ca-certificates are used for installing Rust and GitHub CLI.
+    # - git is a dependency of GitHub CLI.
+    - name: Add packages
+      run: |
+        apt-get install -y --no-install-recommends \
+          curl ca-certificates \
+          git
+
+    - name: Install GitHub CLI
+      run: |
+        curl -Lo gh.deb https://github.com/cli/cli/releases/download/v1.11.0/gh_1.11.0_linux_amd64.deb
+        dpkg -i gh.deb
+        rm gh.deb
 
     - name: Install Rust
       uses: actions-rs/toolchain@v1
@@ -35,6 +78,10 @@ jobs:
         profile: minimal
         default: true
 
+    - name: Add targets
+      run: |
+        rustup target add $build_targets
+
     - name: Cache
       uses: actions/cache@v2
       with:
@@ -42,39 +89,117 @@ jobs:
           ~/.cargo/registry
           ~/.cargo/git
           target
-        key: v2-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Build
-      run: cargo build --release --locked
+      run: |
+        source /tmp/prep_cross.sh  # Written by prep-linux-cross
+        for target in $build_targets; do
+          echo "-- Building for $target"
+          prep_cross $target
+          cargo build --release --locked --target $target
+        done
 
     - name: Package
-      id: package
       run: |
-        broker_executable="./target/release/portier-broker"
-        tag_name="${{ github.event.release.tag_name }}"
-        basename="Portier-Broker-$tag_name-$(uname -s)-$(uname -m)"
-        filename="$basename.tgz"
+        mkdir release-packages
+        for target in $build_targets; do
+          echo "-- Packaging for $target"
+          broker_executable="./target/$target/release/portier-broker"
+          basename="Portier-Broker-$tag_name-Linux-${target/-*/}"
 
-        mkdir $basename
-        mv $broker_executable $basename/
-        mv $package_resources $basename/
-        tar -czf $filename $basename
-
-        echo "##[set-output name=filename]$filename"
-        echo "##[set-output name=content_type]application/gzip"
+          mkdir $basename
+          cp $broker_executable $basename/
+          cp -r $package_resources $basename/
+          tar -czf "release-packages/$basename.tgz" $basename
+        done
 
     - name: Upload
-      uses: actions/upload-release-asset@v1.0.2
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release upload "$tag_name" release-packages/*
+
+  release-macos:
+    runs-on: macos-latest
+    env:
+
+      # NOTE: Packages are named after the first component of the triple, so
+      # these must be unique.
+      build_targets: |
+        aarch64-apple-darwin
+        x86_64-apple-darwin
+
+    steps:
+
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    # Workaround for: https://github.com/actions/virtual-environments/issues/2557#issuecomment-769611326
+    - name: Configure Xcode
+      run: |
+        sudo xcode-select -s /Applications/Xcode_12.4.app
+        sudo rm -Rf /Library/Developer/CommandLineTools/SDKs/*
+
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
       with:
-        upload_url: ${{ github.event.release.upload_url }}
-        asset_path: ./${{ steps.package.outputs.filename }}
-        asset_name: ${{ steps.package.outputs.filename }}
-        asset_content_type: ${{ steps.package.outputs.content_type }}
+        toolchain: stable
+        profile: minimal
+        default: true
+
+    - name: Add targets
+      run: |
+        rustup target add $build_targets
+
+    - name: Cache
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Build
+      run: |
+        for target in $build_targets; do
+          echo "-- Building for $target"
+          cargo build --release --locked --target $target
+        done
+
+    - name: Package
+      run: |
+        rm -fr docs/systemd  # Linux-specific
+
+        mkdir release-packages
+        for target in $build_targets; do
+          echo "-- Packaging for $target"
+          broker_executable="./target/$target/release/portier-broker"
+          basename="Portier-Broker-$tag_name-Darwin-${target/-*/}"
+
+          mkdir $basename
+          cp $broker_executable $basename/
+          cp -r $package_resources $basename/
+          tar -czf "release-packages/$basename.tgz" $basename
+        done
+
+    - name: Upload
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release upload "$tag_name" release-packages/*
 
   release-windows:
     runs-on: windows-latest
+    env:
+
+      # NOTE: Packages are named after the first component of the triple, so
+      # these must be unique.
+      build_targets: |
+        i686-pc-windows-msvc
+        x86_64-pc-windows-msvc
+
     steps:
 
     - name: Checkout
@@ -87,6 +212,10 @@ jobs:
         profile: minimal
         default: true
 
+    - name: Add targets
+      run: |
+        rustup target add $build_targets
+
     - name: Cache
       uses: actions/cache@v2
       with:
@@ -94,33 +223,33 @@ jobs:
           ~/.cargo/registry
           ~/.cargo/git
           target
-        key: v1-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Build
-      run: cargo build --release --locked
+      run: |
+        for target in $build_targets; do
+          echo "-- Building for $target"
+          cargo build --release --locked --target $target
+        done
 
     - name: Package
-      id: package
       run: |
-        $broker_executable="./target/release/portier-broker.exe"
-        $tag_name="${{ github.event.release.tag_name }}"
-        $basename="Portier-Broker-$tag_name-Windows-x86_64"
-        $filename="$basename.zip"
+        rm -fr docs/systemd  # Linux-specific
 
-        mkdir $basename
-        mv $broker_executable $basename/
-        mv $env:package_resources.split() $basename/
-        7z a -tzip $filename $basename
+        mkdir release-packages
+        for target in $build_targets; do
+          echo "-- Packaging for $target"
+          broker_executable="./target/$target/release/portier-broker.exe"
+          basename="Portier-Broker-$tag_name-Windows-${target/-*/}"
 
-        echo "##[set-output name=filename]$filename"
-        echo "##[set-output name=content_type]application/zip"
+          mkdir $basename
+          cp $broker_executable $basename/
+          cp -r $package_resources $basename/
+          7z a -tzip "release-packages/$basename.zip" $basename
+        done
 
     - name: Upload
-      uses: actions/upload-release-asset@v1.0.2
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ github.event.release.upload_url }}
-        asset_path: ./${{ steps.package.outputs.filename }}
-        asset_name: ${{ steps.package.outputs.filename }}
-        asset_content_type: ${{ steps.package.outputs.content_type }}
+      run: |
+        gh release upload "$tag_name" release-packages/*
