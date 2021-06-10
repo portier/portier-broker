@@ -9,7 +9,7 @@
 FROM rust:1-bullseye AS build
 WORKDIR /build
 COPY . .
-RUN cargo build --release
+RUN cargo build --release --locked
 
 # Stage 2: Prepare data files.
 FROM alpine AS data
