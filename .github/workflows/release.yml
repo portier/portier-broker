@@ -189,6 +189,7 @@ jobs:
         basename="Portier-Broker-${tag_name}-Darwin"
         mkdir $basename
         lipo -create -output $basename/portier-broker ./target/*/release/portier-broker
+        codesign --force -s - $basename/portier-broker
         cp -r $package_resources $basename/
         tar -czf "release-packages/$basename.tgz" $basename
 
