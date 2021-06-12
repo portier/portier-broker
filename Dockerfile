@@ -27,8 +27,10 @@ fi
 # Don't keep translation source files.
 RUN rm -f ./lang/*.po
 
-# Stage 3: Prepare a final image from a plain Debian base.
-FROM debian:bullseye AS out
+# Stage 3: Prepare the base Debian system.
+# This stage is separate, because release images only use this,
+# then copy in the release tarball as a layer on top.
+FROM debian:bullseye AS base
 # Add a user and group first to make sure their IDs get assigned consistently,
 # regardless of whatever dependencies get added.
 RUN set -x \
@@ -41,12 +43,14 @@ RUN set -x \
     openssl \
     ca-certificates \
   && rm -rf /var/lib/apt/lists/*
-# Copy in the build and data files.
-COPY --from=build /build/target/release/portier-broker /opt/portier-broker/
-COPY --from=data /data /opt/portier-broker
 # Set image settings.
 WORKDIR /opt/portier-broker
 ENTRYPOINT ["/opt/portier-broker/portier-broker"]
 USER portier-broker
 ENV BROKER_LISTEN_IP=::
 EXPOSE 3333
+
+# Stage 4: Copy in the build and data files.
+FROM base AS out
+COPY --from=build /build/target/release/portier-broker /opt/portier-broker/
+COPY --from=data /data /opt/portier-broker

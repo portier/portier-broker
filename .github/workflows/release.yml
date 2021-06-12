@@ -33,9 +33,6 @@ jobs:
 
     steps:
 
-    - name: Checkout
-      uses: actions/checkout@v2
-
     # Docker Debian images clear APT cache after every operation.
     # This disables those settings, so GitHub can use the cache.
     - name: Prepare APT cache
@@ -50,20 +47,23 @@ jobs:
           /var/lib/apt/lists/
         key: debian-bullseye-apt
 
+    # - curl & ca-certificates are used for installing Rust and GitHub CLI.
+    # - git is a dependency of actions/checkout and GitHub CLI.
+    - name: Add packages
+      run: |
+        apt-get update -y
+        apt-get install -y --no-install-recommends \
+          curl ca-certificates \
+          git
+
+    - name: Checkout
+      uses: actions/checkout@v2
+
     - name: Prepare cross
       uses: ./.github/actions/prep-linux-cross
       with:
         targets: ${{ env.build_targets }}
         packages: libssl-dev
-
-    # The previous step already did `apt-get update`, so install only.
-    # - curl & ca-certificates are used for installing Rust and GitHub CLI.
-    # - git is a dependency of GitHub CLI.
-    - name: Add packages
-      run: |
-        apt-get install -y --no-install-recommends \
-          curl ca-certificates \
-          git
 
     - name: Install GitHub CLI
       run: |
@@ -95,23 +95,32 @@ jobs:
       run: |
         source /tmp/prep_cross.sh  # Written by prep-linux-cross
         for target in $build_targets; do
-          echo "-- Building for $target"
+          echo "::group::Building for $target"
           prep_cross $target
-          cargo build --release --locked --target $target
+          if ! cargo build --release --locked --target $target; then
+            echo "::warning::Build for $target failed"
+          fi
+          echo "::endgroup::"
         done
 
     - name: Package
       run: |
         mkdir release-packages
         for target in $build_targets; do
-          echo "-- Packaging for $target"
           broker_executable="./target/$target/release/portier-broker"
-          basename="Portier-Broker-$tag_name-Linux-${target/-*/}"
+          if [ ! -f "$broker_executable" ]; then
+            continue
+          fi
+
+          echo "::group::Packaging for $target"
+          basename="Portier-Broker-${tag_name}-Linux-${target/-*/}"
 
           mkdir $basename
           cp $broker_executable $basename/
           cp -r $package_resources $basename/
           tar -czf "release-packages/$basename.tgz" $basename
+
+          echo "::endgroup::"
         done
 
     - name: Upload
@@ -164,8 +173,11 @@ jobs:
     - name: Build
       run: |
         for target in $build_targets; do
-          echo "-- Building for $target"
-          cargo build --release --locked --target $target
+          echo "::group::Building for $target"
+          if ! cargo build --release --locked --target $target; then
+            echo "::warning::Build for $target failed"
+          fi
+          echo "::endgroup::"
         done
 
     - name: Package
@@ -174,14 +186,20 @@ jobs:
 
         mkdir release-packages
         for target in $build_targets; do
-          echo "-- Packaging for $target"
           broker_executable="./target/$target/release/portier-broker"
-          basename="Portier-Broker-$tag_name-Darwin-${target/-*/}"
+          if [ ! -f "$broker_executable" ]; then
+            continue
+          fi
+
+          echo "::group::Packaging for $target"
+          basename="Portier-Broker-${tag_name}-Darwin-${target/-*/}"
 
           mkdir $basename
           cp $broker_executable $basename/
           cp -r $package_resources $basename/
           tar -czf "release-packages/$basename.tgz" $basename
+
+          echo "::endgroup::"
         done
 
     - name: Upload
@@ -228,8 +246,11 @@ jobs:
     - name: Build
       run: |
         for target in $build_targets; do
-          echo "-- Building for $target"
-          cargo build --release --locked --target $target
+          echo "::group::Building for $target"
+          if ! cargo build --release --locked --target $target; then
+            echo "::warning::Build for $target failed"
+          fi
+          echo "::endgroup::"
         done
 
     - name: Package
@@ -238,14 +259,20 @@ jobs:
 
         mkdir release-packages
         for target in $build_targets; do
-          echo "-- Packaging for $target"
           broker_executable="./target/$target/release/portier-broker.exe"
-          basename="Portier-Broker-$tag_name-Windows-${target/-*/}"
+          if [ ! -f "$broker_executable" ]; then
+            continue
+          fi
+
+          echo "::group::Packaging for $target"
+          basename="Portier-Broker-${tag_name}-Windows-${target/-*/}"
 
           mkdir $basename
           cp $broker_executable $basename/
           cp -r $package_resources $basename/
           7z a -tzip "release-packages/$basename.zip" $basename
+
+          echo "::endgroup::"
         done
 
     - name: Upload
@@ -253,3 +280,94 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         gh release upload "$tag_name" release-packages/*
+
+  release-linux-docker:
+    needs: release-linux
+    runs-on: ubuntu-latest
+    services:
+      # Scratch registry for building multiarch images.
+      registry:
+        image: registry:2
+        ports:
+          - 5000:5000
+    env:
+      scratch_repo: "localhost:5000/scratch"
+    steps:
+
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v1
+      with:
+        platforms: arm,arm64
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+      with:
+        # Need network=host for the builder to contact our scratch registry.
+        driver: docker-container
+        driver-opts: network=host
+
+    - name: Build
+      run: |
+        # Map Docker arch to package name
+        declare -A build_targets
+        build_targets['386']='i686'
+        build_targets['amd64']='x86_64'
+        build_targets['arm/v6']='arm'
+        build_targets['arm/v7']='armv7'
+        build_targets['arm64/v8']='aarch64'
+
+        declare -a scratch_tags
+        for docker_arch in "${!build_targets[@]}"; do
+          pkg_arch="${build_targets[$docker_arch]}"
+
+          # This download may fail if the release build failed for this
+          # platform. Continue without the platform, in that case.
+          echo "::group::Downloading package for $pkg_arch"
+          basename="Portier-Broker-${tag_name}-Linux-${pkg_arch}"
+          if ! wget "https://github.com/portier/portier-broker/releases/download/${tag_name}/${basename}.tgz"; then
+            echo "::endgroup::"
+            continue
+          fi
+          tar -xzf $basename.tgz
+
+          echo "::endgroup::"
+          echo "::group::Building image for $docker_arch"
+
+          # Reuse the Dockerfile base system, but copy in the release instead
+          # of rebuilding. This ensures we use the same binaries everywhere.
+          cp Dockerfile Dockerfile-release
+          echo "FROM base AS release" >> Dockerfile-release
+          echo "COPY ./$basename /opt/portier-broker" >> Dockerfile-release
+
+          scratch_tag="$scratch_repo:$pkg_arch"
+          docker buildx build \
+            --platform linux/$docker_arch \
+            --push --tag "$scratch_tag" \
+            -f Dockerfile-release .
+
+          scratch_tags+=( "$scratch_tag" )
+          echo "::endgroup::"
+        done
+
+        # Create a combined 'latest' tag with the multiarch image list.
+        docker buildx imagetools create -t "$scratch_repo" "${scratch_tags[@]}"
+
+    - name: Upload
+      env:
+        SKOPEO_AUTH: ${{ secrets.SKOPEO_AUTH }}
+      run: |
+        mkdir -p "${HOME}/.config/containers"
+        echo "${SKOPEO_AUTH}" > "${HOME}/.config/containers/auth.json"
+
+        skopeo --insecure-policy copy --all --src-tls-verify=false \
+          "docker://$scratch_repo" \
+          "docker://portier/broker:$tag_name"
+
+        if ! grep -q "test" <<< "$tag_name"; then
+          skopeo copy --all \
+            "docker://portier/broker:$tag_name" \
+            "docker://portier/broker:latest"
+        fi
