@@ -47,7 +47,7 @@ thiserror = "1.0.25"
 toml = "0.5.6"
 
 [dependencies.combine]
-version = "4.5"
+version = "4.6"
 default-features = false
 features = ["std"]
 
