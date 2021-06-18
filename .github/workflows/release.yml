@@ -24,10 +24,10 @@ jobs:
       # NOTE: Packages are named after the first component of the target
       # triple, so these must be unique.
       # NOTE: On Linux, we are limited mostly by arch support in Ring.
+      # TODO: Add 32-bit ARM. Not sure whether we need hardfloat builds or not,
+      # and how to communicate this in our releases. Also need Docker images.
       build_targets: |
         aarch64-unknown-linux-gnu
-        arm-unknown-linux-gnueabihf
-        armv7-unknown-linux-gnueabihf
         i686-unknown-linux-gnu
         x86_64-unknown-linux-gnu
 
@@ -291,7 +291,7 @@ jobs:
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v1
       with:
-        platforms: arm,arm64
+        platforms: arm64
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v1
@@ -306,8 +306,6 @@ jobs:
         declare -A build_targets
         build_targets['386']='i686'
         build_targets['amd64']='x86_64'
-        build_targets['arm/v6']='arm'
-        build_targets['arm/v7']='armv7'
         build_targets['arm64/v8']='aarch64'
 
         declare -a scratch_tags
