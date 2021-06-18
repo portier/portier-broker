@@ -164,7 +164,7 @@ impl RotatingKeys {
         RotatingKeys {
             store,
             keys_ttl,
-            signing_algs: signing_algs.iter().cloned().collect(),
+            signing_algs: signing_algs.iter().copied().collect(),
             generate_rsa_command,
             rng,
             ed25519_keys: None,
