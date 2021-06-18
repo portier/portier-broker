@@ -28,30 +28,30 @@ impl BrokerError {
     /// Log this error at the appropriate log level.
     /// If `rng` is set, internal errors return a reference number for the error.
     pub async fn log(&self, rng: Option<&SecureRandom>) -> Option<String> {
-        match *self {
+        match self {
             // User errors only at debug level.
-            ref err @ BrokerError::Input(_)
-            | ref err @ BrokerError::ProviderInput(_)
-            | ref err @ BrokerError::RateLimited
-            | ref err @ BrokerError::SessionExpired
-            | ref err @ BrokerError::ProviderCancelled => {
-                debug!("{}", err);
+            BrokerError::Input(_)
+            | BrokerError::ProviderInput(_)
+            | BrokerError::RateLimited
+            | BrokerError::SessionExpired
+            | BrokerError::ProviderCancelled => {
+                debug!("{}", self);
                 None
             }
             // Provider errors can be noteworthy, especially when
             // the issue is network related.
-            ref err @ BrokerError::Provider(_) => {
-                info!("{}", err);
+            BrokerError::Provider(_) => {
+                info!("{}", self);
                 None
             }
             // Internal errors should ring alarm bells.
-            ref err @ BrokerError::Internal(_) => {
+            BrokerError::Internal(_) => {
                 if let Some(rng) = rng {
                     let reference = random_zbase32(6, rng).await;
-                    error!("[REF:{}] {}", reference, err);
+                    error!("[REF:{}] {}", reference, self);
                     Some(reference)
                 } else {
-                    error!("{}", err);
+                    error!("{}", self);
                     None
                 }
             }
