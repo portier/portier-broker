@@ -133,8 +133,6 @@ jobs:
     runs-on: macos-latest
     env:
 
-      # NOTE: Packages are named after the first component of the triple, so
-      # these must be unique.
       build_targets: |
         aarch64-apple-darwin
         x86_64-apple-darwin
