@@ -2,7 +2,7 @@ use crate::agents::*;
 use crate::config::LimitConfig;
 use crate::crypto::SigningAlgorithm;
 use crate::utils::{agent::*, unix_timestamp};
-use ::rusqlite::{Connection, Error as SqlError, OptionalExtension, ToSql, NO_PARAMS};
+use ::rusqlite::{Connection, Error as SqlError, OptionalExtension, ToSql};
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio::task::spawn_blocking;
@@ -90,15 +90,15 @@ impl RusqliteStore {
     fn verify_app_id(conn: &Connection) -> Result<(), SqlError> {
         // If this is 0, assume the file was just now created.
         let schema_version: u32 =
-            conn.query_row("SELECT * FROM pragma_schema_version()", NO_PARAMS, |row| {
+            conn.query_row("SELECT * FROM pragma_schema_version()", [], |row| {
                 row.get(0)
             })?;
         if schema_version == 0 {
             // Note: can't use parameter binding in pragma.
-            conn.execute(&format!("PRAGMA application_id = {}", APP_ID), NO_PARAMS)?;
+            conn.execute(&format!("PRAGMA application_id = {}", APP_ID), [])?;
         } else {
             let app_id: u32 =
-                conn.query_row("SELECT * FROM pragma_application_id()", NO_PARAMS, |row| {
+                conn.query_row("SELECT * FROM pragma_application_id()", [], |row| {
                     row.get(0)
                 })?;
             if app_id != APP_ID {
@@ -113,9 +113,7 @@ impl RusqliteStore {
 
     fn verify_schema(conn: &Connection) -> Result<(), SqlError> {
         let user_version: u32 =
-            conn.query_row("SELECT * FROM pragma_user_version()", NO_PARAMS, |row| {
-                row.get(0)
-            })?;
+            conn.query_row("SELECT * FROM pragma_user_version()", [], |row| row.get(0))?;
         match user_version {
             0 => Self::init_schema(conn),
             1 => Ok(()),
@@ -199,13 +197,13 @@ impl Handler<Gc> for RusqliteStore {
     fn handle(&mut self, _message: Gc, cx: Context<Self, Gc>) {
         let now = unix_timestamp() as i64;
         self.conn
-            .execute("DELETE FROM sessions WHERE expires <= ?1", &[now])
+            .execute("DELETE FROM sessions WHERE expires <= ?1", [now])
             .expect("session cleanup failed");
         self.conn
-            .execute("DELETE FROM cache_entries WHERE expires <= ?1", &[now])
+            .execute("DELETE FROM cache_entries WHERE expires <= ?1", [now])
             .expect("cache cleanup failed");
         self.conn
-            .execute("DELETE FROM rate_limits WHERE expires <= ?1", &[now])
+            .execute("DELETE FROM rate_limits WHERE expires <= ?1", [now])
             .expect("rate limits cleanup failed");
         cx.reply(())
     }
