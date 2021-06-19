@@ -4,29 +4,72 @@ on:
   release:
     types: [created]
 
+defaults:
+  run:
+    shell: bash
+
 env:
+  tag_name: ${{ github.event.release.tag_name }}
   package_resources: >-
     README.md LICENSE-APACHE LICENSE-MIT
     docs lang res tmpl
     config.toml.dist
 
 jobs:
-  release:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+  release-linux:
+    runs-on: ubuntu-latest
+    container: "debian:bullseye"
+    env:
+
+      # NOTE: Packages are named after the first component of the target
+      # triple, so these must be unique.
+      # NOTE: On Linux, we are limited mostly by arch support in Ring.
+      # TODO: Add 32-bit ARM. Not sure whether we need hardfloat builds or not,
+      # and how to communicate this in our releases. Also need Docker images.
+      build_targets: |
+        aarch64-unknown-linux-gnu
+        i686-unknown-linux-gnu
+        x86_64-unknown-linux-gnu
+
     steps:
 
-    # Workaround for: https://github.com/actions/cache/issues/403
-    - name: Install GNU tar
-      if: runner.os == 'macOS'
+    # Docker Debian images clear APT cache after every operation.
+    # This disables those settings, so GitHub can use the cache.
+    - name: Prepare APT cache
       run: |
-        brew install gnu-tar
-        echo PATH="/usr/local/opt/gnu-tar/libexec/gnubin:$PATH" >> $GITHUB_ENV
+        rm /etc/apt/apt.conf.d/docker-clean
+
+    - name: APT cache
+      uses: actions/cache@v2
+      with:
+        path: |
+          /var/cache/apt/
+          /var/lib/apt/lists/
+        key: debian-bullseye-apt
+
+    # - curl & ca-certificates are used for installing Rust and GitHub CLI.
+    # - git is a dependency of actions/checkout and GitHub CLI.
+    - name: Add packages
+      run: |
+        apt-get update -y
+        apt-get install -y --no-install-recommends \
+          curl ca-certificates \
+          git
 
     - name: Checkout
       uses: actions/checkout@v2
+
+    - name: Prepare cross
+      uses: ./.github/actions/prep-linux-cross
+      with:
+        targets: ${{ env.build_targets }}
+        packages: libssl-dev
+
+    - name: Install GitHub CLI
+      run: |
+        curl -Lo gh.deb https://github.com/cli/cli/releases/download/v1.11.0/gh_1.11.0_linux_amd64.deb
+        dpkg -i gh.deb
+        rm gh.deb
 
     - name: Install Rust
       uses: actions-rs/toolchain@v1
@@ -35,6 +78,10 @@ jobs:
         profile: minimal
         default: true
 
+    - name: Add targets
+      run: |
+        rustup target add $build_targets
+
     - name: Cache
       uses: actions/cache@v2
       with:
@@ -42,39 +89,126 @@ jobs:
           ~/.cargo/registry
           ~/.cargo/git
           target
-        key: v2-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Build
-      run: cargo build --release --locked
+      run: |
+        source /tmp/prep_cross.sh  # Written by prep-linux-cross
+        for target in $build_targets; do
+          echo "::group::Building for $target"
+          prep_cross $target
+          if ! cargo build --release --locked --target $target; then
+            echo "::warning::Build for $target failed"
+          fi
+          echo "::endgroup::"
+        done
 
     - name: Package
-      id: package
       run: |
-        broker_executable="./target/release/portier-broker"
-        tag_name="${{ github.event.release.tag_name }}"
-        basename="Portier-Broker-$tag_name-$(uname -s)-$(uname -m)"
-        filename="$basename.tgz"
+        mkdir release-packages
+        for target in $build_targets; do
+          broker_executable="./target/$target/release/portier-broker"
+          if [ ! -f "$broker_executable" ]; then
+            continue
+          fi
 
-        mkdir $basename
-        mv $broker_executable $basename/
-        mv $package_resources $basename/
-        tar -czf $filename $basename
+          echo "::group::Packaging for $target"
+          basename="Portier-Broker-${tag_name}-Linux-${target/-*/}"
 
-        echo "##[set-output name=filename]$filename"
-        echo "##[set-output name=content_type]application/gzip"
+          mkdir $basename
+          cp $broker_executable $basename/
+          cp -r $package_resources $basename/
+          tar -czf "release-packages/$basename.tgz" $basename
+
+          echo "::endgroup::"
+        done
 
     - name: Upload
-      uses: actions/upload-release-asset@v1.0.2
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release upload "$tag_name" release-packages/*
+
+  release-macos:
+    runs-on: macos-latest
+    env:
+
+      # NOTE: Packages are named after the first component of the triple, so
+      # these must be unique.
+      build_targets: |
+        aarch64-apple-darwin
+        x86_64-apple-darwin
+
+    steps:
+
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    # Workaround for: https://github.com/actions/virtual-environments/issues/2557#issuecomment-769611326
+    - name: Configure Xcode
+      run: |
+        sudo xcode-select -s /Applications/Xcode_12.4.app
+        sudo rm -Rf /Library/Developer/CommandLineTools/SDKs/*
+
+    - name: Install Rust
+      uses: actions-rs/toolchain@v1
       with:
-        upload_url: ${{ github.event.release.upload_url }}
-        asset_path: ./${{ steps.package.outputs.filename }}
-        asset_name: ${{ steps.package.outputs.filename }}
-        asset_content_type: ${{ steps.package.outputs.content_type }}
+        toolchain: stable
+        profile: minimal
+        default: true
+
+    - name: Add targets
+      run: |
+        rustup target add $build_targets
+
+    - name: Cache
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Build
+      run: |
+        for target in $build_targets; do
+          echo "::group::Building for $target"
+          if ! cargo build --release --locked --target $target; then
+            echo "::warning::Build for $target failed"
+          fi
+          echo "::endgroup::"
+        done
+
+    - name: Package
+      run: |
+        rm -fr docs/systemd  # Linux-specific
+
+        mkdir release-packages
+
+        basename="Portier-Broker-${tag_name}-Darwin"
+        mkdir $basename
+        lipo -create -output $basename/portier-broker ./target/*/release/portier-broker
+        codesign --force -s - $basename/portier-broker
+        cp -r $package_resources $basename/
+        tar -czf "release-packages/$basename.tgz" $basename
+
+    - name: Upload
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release upload "$tag_name" release-packages/*
 
   release-windows:
     runs-on: windows-latest
+    env:
+
+      # NOTE: Packages are named after the first component of the triple, so
+      # these must be unique.
+      build_targets: |
+        i686-pc-windows-msvc
+        x86_64-pc-windows-msvc
+
     steps:
 
     - name: Checkout
@@ -87,6 +221,10 @@ jobs:
         profile: minimal
         default: true
 
+    - name: Add targets
+      run: |
+        rustup target add $build_targets
+
     - name: Cache
       uses: actions/cache@v2
       with:
@@ -94,33 +232,131 @@ jobs:
           ~/.cargo/registry
           ~/.cargo/git
           target
-        key: v1-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Build
-      run: cargo build --release --locked
+      run: |
+        for target in $build_targets; do
+          echo "::group::Building for $target"
+          if ! cargo build --release --locked --target $target; then
+            echo "::warning::Build for $target failed"
+          fi
+          echo "::endgroup::"
+        done
 
     - name: Package
-      id: package
       run: |
-        $broker_executable="./target/release/portier-broker.exe"
-        $tag_name="${{ github.event.release.tag_name }}"
-        $basename="Portier-Broker-$tag_name-Windows-x86_64"
-        $filename="$basename.zip"
+        rm -fr docs/systemd  # Linux-specific
 
-        mkdir $basename
-        mv $broker_executable $basename/
-        mv $env:package_resources.split() $basename/
-        7z a -tzip $filename $basename
+        mkdir release-packages
+        for target in $build_targets; do
+          broker_executable="./target/$target/release/portier-broker.exe"
+          if [ ! -f "$broker_executable" ]; then
+            continue
+          fi
 
-        echo "##[set-output name=filename]$filename"
-        echo "##[set-output name=content_type]application/zip"
+          echo "::group::Packaging for $target"
+          basename="Portier-Broker-${tag_name}-Windows-${target/-*/}"
+
+          mkdir $basename
+          cp $broker_executable $basename/
+          cp -r $package_resources $basename/
+          7z a -tzip "release-packages/$basename.zip" $basename
+
+          echo "::endgroup::"
+        done
 
     - name: Upload
-      uses: actions/upload-release-asset@v1.0.2
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        gh release upload "$tag_name" release-packages/*
+
+  release-linux-docker:
+    needs: release-linux
+    runs-on: ubuntu-latest
+    services:
+      # Scratch registry for building multiarch images.
+      registry:
+        image: registry:2
+        ports:
+          - 5000:5000
+    env:
+      scratch_repo: "localhost:5000/scratch"
+    steps:
+
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v1
       with:
-        upload_url: ${{ github.event.release.upload_url }}
-        asset_path: ./${{ steps.package.outputs.filename }}
-        asset_name: ${{ steps.package.outputs.filename }}
-        asset_content_type: ${{ steps.package.outputs.content_type }}
+        platforms: arm64
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+      with:
+        # Need network=host for the builder to contact our scratch registry.
+        driver: docker-container
+        driver-opts: network=host
+
+    - name: Build
+      run: |
+        # Map Docker arch to package name
+        declare -A build_targets
+        build_targets['386']='i686'
+        build_targets['amd64']='x86_64'
+        build_targets['arm64/v8']='aarch64'
+
+        declare -a scratch_tags
+        for docker_arch in "${!build_targets[@]}"; do
+          pkg_arch="${build_targets[$docker_arch]}"
+
+          # This download may fail if the release build failed for this
+          # platform. Continue without the platform, in that case.
+          echo "::group::Downloading package for $pkg_arch"
+          basename="Portier-Broker-${tag_name}-Linux-${pkg_arch}"
+          if ! wget "https://github.com/portier/portier-broker/releases/download/${tag_name}/${basename}.tgz"; then
+            echo "::endgroup::"
+            continue
+          fi
+          tar -xzf $basename.tgz
+
+          echo "::endgroup::"
+          echo "::group::Building image for $docker_arch"
+
+          # Reuse the Dockerfile base system, but copy in the release instead
+          # of rebuilding. This ensures we use the same binaries everywhere.
+          cp Dockerfile Dockerfile-release
+          echo "FROM base AS release" >> Dockerfile-release
+          echo "COPY ./$basename /opt/portier-broker" >> Dockerfile-release
+
+          scratch_tag="$scratch_repo:$pkg_arch"
+          docker buildx build \
+            --platform linux/$docker_arch \
+            --push --tag "$scratch_tag" \
+            -f Dockerfile-release .
+
+          scratch_tags+=( "$scratch_tag" )
+          echo "::endgroup::"
+        done
+
+        # Create a combined 'latest' tag with the multiarch image list.
+        docker buildx imagetools create -t "$scratch_repo" "${scratch_tags[@]}"
+
+    - name: Upload
+      env:
+        SKOPEO_AUTH: ${{ secrets.SKOPEO_AUTH }}
+      run: |
+        mkdir -p "${HOME}/.config/containers"
+        echo "${SKOPEO_AUTH}" > "${HOME}/.config/containers/auth.json"
+
+        skopeo --insecure-policy copy --all --src-tls-verify=false \
+          "docker://$scratch_repo" \
+          "docker://portier/broker:$tag_name"
+
+        if ! grep -q "test" <<< "$tag_name"; then
+          skopeo copy --all \
+            "docker://portier/broker:$tag_name" \
+            "docker://portier/broker:latest"
+        fi
