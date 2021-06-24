@@ -120,11 +120,13 @@ jobs:
       run: cd tests/e2e/ && TEST_MAILER=mailgun ./main.js
 
     - name: Deploy staging
-      if: github.repository == 'portier/portier-broker' && github.ref == 'refs/heads/master'
-      env:
-        SECRET: ${{ secrets.DEPLOY_WEBHOOK_SECRET }}
+      if: github.repository == 'portier/portier-broker' && github.ref == 'refs/heads/main'
       run: |
-        curl -sS -X POST -H @- https://server.portier.io/webhook <<< "Authorization: Bearer $SECRET"
+        curl -X POST \
+          -H 'Authorization: token ${{ secrets.DEPLOY_PAT }}' \
+          -H 'Accept: application/vnd.github.v3+json' \
+          https://api.github.com/repos/portier/public-infra/actions/workflows/update_testing_broker.yml/dispatches \
+          -d '{ "ref": "main" }'
 
   macos-build:
     runs-on: macos-latest
