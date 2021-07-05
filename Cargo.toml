@@ -43,7 +43,7 @@ native-tls = "0.2.4"
 percent-encoding = "2.1.0"
 ring = "0.16.15"
 serde_json = "1.0.57"
-thiserror = "1.0.25"
+thiserror = "1.0.26"
 toml = "0.5.6"
 
 [dependencies.combine]
