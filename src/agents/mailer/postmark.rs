@@ -1,6 +1,6 @@
-use crate::agents::*;
 use crate::email_address::EmailAddress;
 use crate::utils::agent::*;
+use crate::{agents::*, metrics};
 use http::Request;
 use hyper::Body;
 use serde::Deserialize;
@@ -57,7 +57,10 @@ impl Handler<SendMail> for PostmarkMailer {
             .body(Body::from(body))
             .expect("Could not build Postmark request");
 
-        let future = self.fetcher.send(FetchUrl { request });
+        let future = self.fetcher.send(FetchUrl {
+            request,
+            metric: &*metrics::AUTH_EMAIL_SEND_DURATION,
+        });
         cx.reply_later(async move {
             let data = match future.await {
                 Ok(result) => result.data,

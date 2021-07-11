@@ -1,6 +1,6 @@
-use crate::agents::*;
 use crate::email_address::EmailAddress;
 use crate::utils::agent::*;
+use crate::{agents::*, metrics};
 use lettre::{
     smtp::authentication::Credentials, ClientSecurity, ClientTlsParameters, SmtpClient,
     SmtpTransport, Transport,
@@ -53,7 +53,12 @@ impl Agent for SmtpMailer {}
 impl Handler<SendMail> for SmtpMailer {
     fn handle(&mut self, message: SendMail, cx: Context<Self, SendMail>) {
         let mail = message.into_lettre_email(&self.from_address, &self.from_name);
-        match self.transport.send(mail) {
+
+        let send_timer = metrics::AUTH_EMAIL_SEND_DURATION.start_timer();
+        let res = self.transport.send(mail);
+        send_timer.observe_duration();
+
+        match res {
             Ok(result) => {
                 if result.is_positive() {
                     cx.reply(true);

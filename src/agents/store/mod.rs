@@ -4,6 +4,7 @@ use crate::crypto::SigningAlgorithm;
 use crate::utils::agent::{Addr, Message, Sender};
 use crate::utils::BoxError;
 use crate::web::Session;
+use prometheus::Histogram;
 use std::collections::HashSet;
 use url::Url;
 
@@ -40,6 +41,8 @@ impl Message for DeleteSession {
 pub struct FetchUrlCached {
     /// The URL to fetch.
     pub url: Url,
+    /// Latency metric to use on cache miss.
+    pub metric: &'static Histogram,
 }
 impl Message for FetchUrlCached {
     type Reply = Result<String, BoxError>;

@@ -5,6 +5,9 @@ use crate::utils::agent::Message;
 use ::{lettre::SendableEmail, lettre_email::EmailBuilder};
 
 /// Message requesting a mail be sent.
+///
+/// Handlers should also time the request using `metrics::AUTH_EMAIL_SEND_DURATION`, measuring the
+/// narrowest possible section of code that makes the external call.
 pub struct SendMail {
     pub to: EmailAddress,
     pub subject: String,

@@ -26,6 +26,7 @@ pub async fn router(ctx: &mut Context) -> HandlerResult {
         // Misc endpoints
         (&Method::GET, "/") => handlers::pages::index(ctx).await,
         (&Method::GET, "/ver.txt") => handlers::pages::version(ctx).await,
+        (&Method::GET, "/metrics") => handlers::pages::metrics(ctx).await,
 
         // Lastly, fall back to trying to serve static files out of ./res/
         (&Method::GET, _) | (&Method::HEAD, _) => handlers::pages::static_(ctx).await,

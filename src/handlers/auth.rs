@@ -1,5 +1,4 @@
 use crate::agents::{GetPublicJwks, IncrAndTestLimits};
-use crate::bridges;
 use crate::config::LimitInput;
 use crate::crypto::SigningAlgorithm;
 use crate::email_address::EmailAddress;
@@ -8,6 +7,7 @@ use crate::utils::DomainValidationError;
 use crate::validation::parse_redirect_uri;
 use crate::web::{html_response, json_response, Context, HandlerResult, ReturnParams};
 use crate::webfinger::{self, Relation};
+use crate::{bridges, metrics};
 use http::Method;
 use log::info;
 use serde_json::{from_value, json, Value};
@@ -173,17 +173,6 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
         BrokerError::Input(format!("login_hint is not a valid email address: {}", err))
     })?;
 
-    // Verify the email domain.
-    if let Err(err) = ctx.app.domain_validator.validate(email_addr.domain()).await {
-        return Err(BrokerError::Input(
-            match err {
-                DomainValidationError::Blocked => "the domain of the email address is blocked",
-                _ => "the domain of the email address is invalid",
-            }
-            .to_owned(),
-        ));
-    }
-
     // Enforce rate limits.
     match ctx
         .app
@@ -198,13 +187,31 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
         .await
     {
         Ok(true) => {}
-        Ok(false) => return Err(BrokerError::RateLimited),
+        Ok(false) => {
+            metrics::AUTH_LIMITED.inc();
+            return Err(BrokerError::RateLimited);
+        }
         Err(e) => {
             return Err(BrokerError::Internal(format!(
                 "could not test rate limit: {}",
                 e
             )))
         }
+    }
+
+    // At this point, we've done all the local input verification.
+    metrics::AUTH_REQUESTS.inc();
+
+    // Verify the email domain.
+    if let Err(err) = ctx.app.domain_validator.validate(email_addr.domain()).await {
+        err.apply_metric();
+        return Err(BrokerError::Input(
+            match err {
+                DomainValidationError::Blocked => "the domain of the email address is blocked",
+                _ => "the domain of the email address is invalid",
+            }
+            .to_owned(),
+        ));
     }
 
     // Create the session with common data, but do not yet save it.
