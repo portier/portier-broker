@@ -2,6 +2,7 @@ use crate::agents::FetchUrlCached;
 use crate::config::ConfigRc;
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
+use crate::metrics;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Error as FmtError, Formatter};
 use std::str::FromStr;
@@ -120,7 +121,10 @@ pub async fn query(app: &ConfigRc, email_addr: &EmailAddress) -> Result<Vec<Link
     // Make the request.
     let descriptor = app
         .store
-        .send(FetchUrlCached { url })
+        .send(FetchUrlCached {
+            url,
+            metric: &*metrics::AUTH_WEBFINGER_DURATION,
+        })
         .await
         .map_err(|e| BrokerError::Provider(format!("webfinger request failed: {}", e)))?;
     let descriptor: DescriptorDef = serde_json::from_str(&descriptor)

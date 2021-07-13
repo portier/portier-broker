@@ -11,6 +11,8 @@ use trust_dns_resolver::{
     Name, TokioAsyncResolver,
 };
 
+use crate::metrics;
+
 /// Errors produced by `DomainValidator::validate`.
 #[derive(Debug, Error)]
 pub enum DomainValidationError {
@@ -24,6 +26,19 @@ pub enum DomainValidationError {
     NoServers,
     #[error("none of the domain mail servers have public IP addresses")]
     NoPublicIps,
+}
+
+impl DomainValidationError {
+    /// Count this error in metrics.
+    pub fn apply_metric(&self) {
+        match self {
+            Self::Invalid(_) => metrics::DOMAIN_VALIDATION_INVALID_NAME.inc(),
+            Self::Blocked => metrics::DOMAIN_VALIDATION_BLOCKED.inc(),
+            Self::NullMx => metrics::DOMAIN_VALIDATION_NULL_MX.inc(),
+            Self::NoServers => metrics::DOMAIN_VALIDATION_NO_SERVERS.inc(),
+            Self::NoPublicIps => metrics::DOMAIN_VALIDATION_NO_PUBLIC_IPS.inc(),
+        }
+    }
 }
 
 /// Validates domains based on some configuration.

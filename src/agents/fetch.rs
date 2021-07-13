@@ -6,6 +6,7 @@ use http::{HeaderValue, Request, StatusCode};
 use hyper::client::{Client, HttpConnector};
 use hyper::Body;
 use hyper_tls::HttpsConnector;
+use prometheus::Histogram;
 use std::time::Duration;
 use thiserror::Error;
 use url::Url;
@@ -34,13 +35,15 @@ pub struct FetchUrlResult {
 pub struct FetchUrl {
     /// The request to make.
     pub request: Request<Body>,
+    /// Latency metric to use.
+    pub metric: &'static Histogram,
 }
 impl Message for FetchUrl {
     type Reply = Result<FetchUrlResult, FetchError>;
 }
 impl FetchUrl {
     /// Create a simple GET request message.
-    pub fn get(url: &Url) -> Self {
+    pub fn get(url: &Url, metric: &'static Histogram) -> Self {
         let hyper_uri: hyper::Uri = url
             .as_str()
             .parse()
@@ -48,7 +51,7 @@ impl FetchUrl {
         let request = Request::get(hyper_uri)
             .body(Body::empty())
             .expect("could not build GET request");
-        FetchUrl { request }
+        FetchUrl { request, metric }
     }
 }
 
@@ -77,12 +80,18 @@ impl Handler<FetchUrl> for FetchAgent {
             .headers_mut()
             .insert("User-Agent", self.user_agent.clone());
 
+        let timer = message.metric.start_timer();
         let future = self.client.request(message.request);
         cx.reply_later(async {
-            let res = future.await?;
+            let mut res = future.await?;
             if !res.status().is_success() {
                 return Err(FetchError::BadStatus(res.status()));
             }
+
+            let chunk = read_body(res.body_mut()).await.map_err(FetchError::Read)?;
+            timer.observe_duration();
+
+            let data = String::from_utf8(chunk.to_vec())?;
 
             // Grab the max-age directive from the Cache-Control header.
             let max_age = res
@@ -91,8 +100,6 @@ impl Handler<FetchUrl> for FetchAgent {
                 .and_then(|header: CacheControl| header.max_age())
                 .unwrap_or_else(|| Duration::from_secs(0));
 
-            let chunk = read_body(res.into_body()).await.map_err(FetchError::Read)?;
-            let data = String::from_utf8(chunk.to_vec())?;
             Ok(FetchUrlResult { data, max_age })
         });
     }

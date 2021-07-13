@@ -4,9 +4,9 @@ use crate::crypto::{self, SigningAlgorithm};
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
 use crate::utils::{http::ResponseExt, unix_timestamp};
-use crate::validation;
 use crate::web::{empty_response, json_response, Context, HandlerResult};
 use crate::webfinger::{Link, Relation};
+use crate::{metrics, validation};
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -93,6 +93,7 @@ pub async fn auth(ctx: &mut Context, email_addr: &EmailAddress, link: &Link) -> 
     })?;
     let mut bridge_data = match link.rel {
         Relation::Portier => {
+            metrics::AUTH_OIDC_REQUESTS_PORTIER.inc();
             #[cfg(not(feature = "insecure"))]
             {
                 if link.href.scheme() != "https" {
@@ -112,6 +113,7 @@ pub async fn auth(ctx: &mut Context, email_addr: &EmailAddress, link: &Link) -> 
         }
         // Delegate to the OpenID Connect bridge for Google, if configured.
         Relation::Google => {
+            metrics::AUTH_OIDC_REQUESTS_GOOGLE.inc();
             let client_id = ctx
                 .app
                 .google_client_id
@@ -292,6 +294,7 @@ pub async fn callback(ctx: &mut Context) -> HandlerResult {
     }
 
     // Everything is okay. Build a new identity token and send it to the relying party.
+    metrics::AUTH_OIDC_COMPLETED.inc();
     complete_auth(ctx).await
 }
 
@@ -307,7 +310,10 @@ async fn fetch_config(
     let provider_config = ctx
         .app
         .store
-        .send(FetchUrlCached { url: config_url })
+        .send(FetchUrlCached {
+            url: config_url,
+            metric: &*metrics::AUTH_OIDC_FETCH_CONFIG_DURATION,
+        })
         .await
         .map_err(|e| {
             BrokerError::Provider(format!(
@@ -344,6 +350,7 @@ async fn fetch_config(
         .store
         .send(FetchUrlCached {
             url: provider_config.jwks_uri.clone(),
+            metric: &*metrics::AUTH_OIDC_FETCH_JWKS_DURATION,
         })
         .await
         .map_err(|e| {

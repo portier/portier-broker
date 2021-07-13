@@ -3,6 +3,7 @@ use crate::bridges::{complete_auth, BridgeData};
 use crate::crypto::random_zbase32;
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
+use crate::metrics;
 use crate::web::{html_response, json_response, Context, HandlerResult};
 use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
 use serde::{Deserialize, Serialize};
@@ -26,6 +27,8 @@ pub struct EmailBridgeData {
 /// A form is rendered as an alternative way to confirm, without following the link. Submitting the
 /// form results in the same callback as the email link.
 pub async fn auth(ctx: &mut Context, email_addr: EmailAddress) -> HandlerResult {
+    metrics::AUTH_EMAIL_REQUESTS.inc();
+
     // Generate a 12-character one-time pad.
     let code = random_zbase32(12, &ctx.app.rng).await;
     // For display, we split it in two groups of 6.
@@ -142,8 +145,10 @@ pub async fn confirmation(ctx: &mut Context) -> HandlerResult {
     };
 
     if code != bridge_data.code {
+        metrics::AUTH_EMAIL_CODE_INCORRECT.inc();
         return Err(BrokerError::ProviderInput("incorrect code".to_owned()));
     }
 
+    metrics::AUTH_EMAIL_COMPLETED.inc();
     complete_auth(ctx).await
 }

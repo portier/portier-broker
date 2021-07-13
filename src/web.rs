@@ -4,6 +4,7 @@ use crate::config::ConfigRc;
 use crate::crypto::{self, SigningAlgorithm};
 use crate::email_address::EmailAddress;
 use crate::error::{BrokerError, BrokerResult};
+use crate::metrics;
 use crate::router::router;
 use crate::utils::{http::ResponseExt, real_ip, BoxError, BoxFuture};
 use bytes::{Bytes, BytesMut};
@@ -192,7 +193,7 @@ pub type Response = hyper::Response<Body>;
 /// Result type of handlers
 pub type HandlerResult = Result<Response, BrokerError>;
 
-// HTTP service
+/// HTTP service
 pub struct Service {
     /// The application configuration
     app: ConfigRc,
@@ -209,6 +210,8 @@ impl Service {
     }
 
     async fn serve(ip: IpAddr, req: Request, app: ConfigRc) -> Result<Response, BoxError> {
+        metrics::HTTP_REQUESTS.inc();
+
         // Handle only simple path requests.
         if req.uri().scheme_str().is_some() || req.uri().host().is_some() {
             let mut response = empty_response(StatusCode::BAD_REQUEST);
@@ -217,9 +220,9 @@ impl Service {
         }
 
         // Read the request body.
-        let (parts, body) = req.into_parts();
+        let (parts, mut body) = req.into_parts();
         let body = match parts.method {
-            Method::POST => read_body(body).await?,
+            Method::POST => read_body(&mut body).await?,
             _ => Bytes::from(vec![]),
         };
 
@@ -265,6 +268,16 @@ impl Service {
 
         // Set common response headers.
         set_headers(&mut response);
+
+        // Response status metrics.
+        match response.status().as_u16() {
+            100..=199 => metrics::HTTP_RESPONSE_STATUS_1XX.inc(),
+            200..=299 => metrics::HTTP_RESPONSE_STATUS_2XX.inc(),
+            300..=399 => metrics::HTTP_RESPONSE_STATUS_3XX.inc(),
+            400..=499 => metrics::HTTP_RESPONSE_STATUS_4XX.inc(),
+            500..=599 => metrics::HTTP_RESPONSE_STATUS_5XX.inc(),
+            _ => {}
+        }
 
         Ok(response)
     }
@@ -443,7 +456,7 @@ pub fn parse_form_encoded(input: &[u8]) -> HashMap<String, String> {
 }
 
 /// Read the request or response body up to a fixed size.
-pub async fn read_body(mut body: Body) -> Result<Bytes, BoxError> {
+pub async fn read_body(body: &mut Body) -> Result<Bytes, BoxError> {
     let mut acc = BytesMut::new();
     while let Some(result) = body.next().await {
         let chunk = result.map_err(Box::new)?;

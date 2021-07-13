@@ -20,6 +20,7 @@ mod crypto;
 mod email_address;
 mod error;
 mod handlers;
+mod metrics;
 mod router;
 mod utils;
 mod validation;
@@ -141,6 +142,7 @@ async fn start_server(builder: ConfigBuilder) {
         .expect("Failed to signal ready to the service manager");
 
     let make_service = make_service_fn(|stream| {
+        metrics::HTTP_CONNECTIONS.inc();
         let app = ConfigRc::clone(&app);
         future::ok::<_, BoxError>(Service::new(app, stream))
     });
