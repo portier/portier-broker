@@ -570,7 +570,7 @@ pub fn return_to_relier(ctx: &Context, params: &[(&str, &str)]) -> Response {
 /// Serializes the argument value to JSON and returns a HTTP 200 response
 /// code with the serialized JSON as the body.
 pub fn json_response(obj: &serde_json::Value, max_age: Option<Duration>) -> Response {
-    let body = serde_json::to_string(&obj).expect("unable to coerce JSON Value into string");
+    let body = serde_json::to_string_pretty(&obj).expect("unable to coerce JSON Value into string");
     let mut res = Response::new(Body::from(body));
     res.typed_header(ContentType::json());
     if let Some(max_age) = max_age {
