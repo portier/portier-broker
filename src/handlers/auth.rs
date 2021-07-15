@@ -116,10 +116,9 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
 
     let scope = try_get_input_param!(params, "scope");
     let mut scope_set: HashSet<&str> = scope.split(' ').collect();
-    scope_set.remove("email");
-    if !scope_set.remove("openid") || !scope_set.is_empty() {
+    if !scope_set.remove("openid") {
         return Err(BrokerError::Input(
-            "unsupported scope, must contain 'openid' and optionally 'email'".to_owned(),
+            "unsupported scope, must contain 'openid'".to_owned(),
         ));
     }
 

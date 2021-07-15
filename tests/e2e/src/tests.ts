@@ -107,21 +107,7 @@ test("cannot omit openid scope", async ({ driver, relyingParty }) => {
   relyingParty.on("gotError", (body) => {
     assert.equal(
       body.error_description,
-      "unsupported scope, must contain 'openid' and optionally 'email'"
-    );
-  });
-  await driver.get(authUrl);
-  await driver.wait(until.titleIs(RP_GOT_ERROR_TITLE), TIMEOUT);
-});
-
-test("cannot add unknown scope", async ({ driver, relyingParty }) => {
-  let authUrl = await relyingParty.portier!.authenticate(JOHN_EMAIL);
-  authUrl = authUrl.replace(/scope=openid%20email/, "scope=openid%20dummy");
-
-  relyingParty.on("gotError", (body) => {
-    assert.equal(
-      body.error_description,
-      "unsupported scope, must contain 'openid' and optionally 'email'"
+      "unsupported scope, must contain 'openid'"
     );
   });
   await driver.get(authUrl);
