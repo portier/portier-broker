@@ -53,9 +53,9 @@ test("successful flow with code input", async ({ mailbox, driver }) => {
   await codeInput.sendKeys(code, Key.RETURN);
   await driver.wait(until.titleIs(RP_CONFIRMED_TITLE), TIMEOUT);
 
-  const textElement = await driver.findElement(By.tagName("p"));
+  const textElement = await driver.findElement(By.css("p"));
   const text = await textElement.getText();
-  assert.equal(text, JOHN_EMAIL);
+  assert.strictEqual(text, JOHN_EMAIL);
 });
 
 test("successful flow following the email link", async ({
@@ -79,9 +79,9 @@ test("successful flow following the email link", async ({
   await driver.get(url);
   await driver.wait(until.titleIs(RP_CONFIRMED_TITLE), TIMEOUT);
 
-  const textElement = await driver.findElement(By.tagName("p"));
+  const textElement = await driver.findElement(By.css("p"));
   const text = await textElement.getText();
-  assert.equal(text, JOHN_EMAIL);
+  assert.strictEqual(text, JOHN_EMAIL);
 
   // Ensure the link no longer works.
   await driver.get(url);
@@ -89,7 +89,7 @@ test("successful flow following the email link", async ({
 
   const introElement = await driver.findElement(By.className("head"));
   const intro = await introElement.getText();
-  assert.equal(intro, "The session has expired.");
+  assert.strictEqual(intro, "The session has expired.");
 });
 
 test("can omit email scope", async ({ driver, relyingParty }) => {
@@ -105,7 +105,7 @@ test("cannot omit openid scope", async ({ driver, relyingParty }) => {
   authUrl = authUrl.replace(/scope=openid%20email/, "scope=email");
 
   relyingParty.on("gotError", (body) => {
-    assert.equal(
+    assert.strictEqual(
       body.error_description,
       "unsupported scope, must contain 'openid'"
     );
@@ -123,8 +123,8 @@ postmarkTest("sends API request", async ({ httpMailer, driver }) => {
   await driver.wait(until.titleIs(BROKER_CONFIRM_TITLE), TIMEOUT);
 
   const requests = httpMailer.getRequests();
-  assert.equal(requests.length, 1);
-  assert.equal(requests[0].body["To"], JOHN_EMAIL);
+  assert.strictEqual(requests.length, 1);
+  assert.strictEqual(requests[0].body["To"], JOHN_EMAIL);
 });
 
 mailgunTest("sends API request", async ({ httpMailer, driver }) => {
@@ -136,25 +136,25 @@ mailgunTest("sends API request", async ({ httpMailer, driver }) => {
   await driver.wait(until.titleIs(BROKER_CONFIRM_TITLE), TIMEOUT);
 
   const requests = httpMailer.getRequests();
-  assert.equal(requests.length, 1);
-  assert.equal(
+  assert.strictEqual(requests.length, 1);
+  assert.strictEqual(
     Object.prototype.hasOwnProperty.call(requests[0].body, "to"),
     true
   );
-  assert.equal(requests[0].body["to"], JOHN_EMAIL);
-  assert.equal(
+  assert.strictEqual(requests[0].body["to"], JOHN_EMAIL);
+  assert.strictEqual(
     Object.prototype.hasOwnProperty.call(requests[0].body, "from"),
     true
   );
-  assert.equal(
+  assert.strictEqual(
     Object.prototype.hasOwnProperty.call(requests[0].body, "subject"),
     true
   );
-  assert.equal(
+  assert.strictEqual(
     Object.prototype.hasOwnProperty.call(requests[0].body, "html"),
     true
   );
-  assert.equal(
+  assert.strictEqual(
     Object.prototype.hasOwnProperty.call(requests[0].body, "text"),
     true
   );

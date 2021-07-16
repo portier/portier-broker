@@ -1,11 +1,11 @@
 // Starts a simple relying party implementation.
 
 import express from "express";
-import bodyParser from "body-parser";
 import { EventEmitter } from "events";
 import { PortierClient } from "portier";
+import { urlencoded as createFormParser } from "body-parser";
 
-const formParser = bodyParser.urlencoded({ extended: false });
+const formParser = createFormParser({ extended: false });
 
 export type RelyingParty = EventEmitter & {
   portier?: PortierClient;
