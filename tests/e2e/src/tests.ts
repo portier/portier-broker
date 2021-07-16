@@ -92,6 +92,34 @@ test("successful flow following the email link", async ({
   assert.strictEqual(intro, "The session has expired.");
 });
 
+test("successful flow with authorization code", async ({
+  mailbox,
+  relyingParty,
+  driver,
+}) => {
+  const authUrl = (await relyingParty.portier.authenticate(JOHN_EMAIL))
+    .replace(/response_type=id_token/, "response_type=code")
+    .replace(/response_mode=form_post/, "");
+
+  await driver.get(authUrl);
+  await driver.wait(until.titleIs(BROKER_CONFIRM_TITLE), TIMEOUT);
+
+  const mail = mailbox.nextMail();
+  const match = /^[a-z0-9]{6} [a-z0-9]{6}$/m.exec(mail ?? "");
+  if (!match) {
+    throw Error("Could not find the verification code in the email text");
+  }
+  const code = match[0];
+
+  const codeInput = await driver.findElement(By.name("code"));
+  await codeInput.sendKeys(code, Key.RETURN);
+  await driver.wait(until.titleIs(RP_CONFIRMED_TITLE), TIMEOUT);
+
+  const textElement = await driver.findElement(By.css("p"));
+  const text = await textElement.getText();
+  assert.strictEqual(text, JOHN_EMAIL);
+});
+
 test("can omit email scope", async ({ driver, relyingParty }) => {
   let authUrl = await relyingParty.portier.authenticate(JOHN_EMAIL);
   authUrl = authUrl.replace(/scope=openid%20email/, "scope=openid");
