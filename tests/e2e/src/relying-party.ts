@@ -8,12 +8,12 @@ import { urlencoded as createFormParser } from "body-parser";
 const formParser = createFormParser({ extended: false });
 
 export type RelyingParty = EventEmitter & {
-  portier?: PortierClient;
-  destroy?: () => void;
+  portier: PortierClient;
+  destroy(): void;
 };
 
 export default (): RelyingParty => {
-  const instance: RelyingParty = new EventEmitter();
+  const emitter = new EventEmitter();
 
   const portier = new PortierClient({
     broker: "http://localhost:44133",
@@ -48,7 +48,7 @@ export default (): RelyingParty => {
 
   app.post("/verify", formParser, async (req, res) => {
     if (req.body.error) {
-      if (!instance.emit("gotError", req.body)) {
+      if (!emitter.emit("gotError", req.body)) {
         console.error(`RP got an error from the broker: ${req.body.error}`);
         console.error(`Description: ${req.body.error_description}`);
       }
@@ -61,7 +61,7 @@ export default (): RelyingParty => {
     try {
       email = await portier.verify(req.body.id_token);
     } catch (err) {
-      if (!instance.emit("invalidToken", req.body)) {
+      if (!emitter.emit("invalidToken", req.body)) {
         console.error("RP failed to verify token:");
         console.error(err);
       }
@@ -78,11 +78,11 @@ export default (): RelyingParty => {
 
   const server = app.listen(44180, "localhost");
 
-  instance.portier = portier;
-  instance.destroy = () => {
-    server.close();
-    portier.destroy();
-  };
-
-  return instance;
+  return Object.assign(emitter, {
+    portier,
+    destroy: () => {
+      server.close();
+      portier.destroy();
+    },
+  });
 };

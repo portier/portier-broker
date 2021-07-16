@@ -93,7 +93,7 @@ test("successful flow following the email link", async ({
 });
 
 test("can omit email scope", async ({ driver, relyingParty }) => {
-  let authUrl = await relyingParty.portier!.authenticate(JOHN_EMAIL);
+  let authUrl = await relyingParty.portier.authenticate(JOHN_EMAIL);
   authUrl = authUrl.replace(/scope=openid%20email/, "scope=openid");
 
   await driver.get(authUrl);
@@ -101,7 +101,7 @@ test("can omit email scope", async ({ driver, relyingParty }) => {
 });
 
 test("cannot omit openid scope", async ({ driver, relyingParty }) => {
-  let authUrl = await relyingParty.portier!.authenticate(JOHN_EMAIL);
+  let authUrl = await relyingParty.portier.authenticate(JOHN_EMAIL);
   authUrl = authUrl.replace(/scope=openid%20email/, "scope=email");
 
   relyingParty.on("gotError", (body) => {
