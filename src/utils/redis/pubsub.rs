@@ -244,7 +244,7 @@ pub async fn connect(info: &ConnectionInfo) -> RedisResult<Subscriber> {
     let (rx, tx): (
         Box<dyn io::AsyncRead + Unpin + Send>,
         Box<dyn io::AsyncWrite + Unpin + Send>,
-    ) = match *info.addr {
+    ) = match info.addr {
         ConnectionAddr::Tcp(ref host, port) => {
             let socket_addr = {
                 let mut socket_addrs = (&host[..], port).to_socket_addrs()?;
@@ -292,8 +292,8 @@ pub async fn connect(info: &ConnectionInfo) -> RedisResult<Subscriber> {
     };
     let mut tx = WriteHalf { inner: tx };
 
-    if let Some(ref passwd) = info.passwd {
-        if let Some(ref username) = info.username {
+    if let Some(ref passwd) = info.redis.password {
+        if let Some(ref username) = info.redis.username {
             tx.write(&[b"AUTH", username.as_bytes(), passwd.as_bytes()])
                 .await?;
         } else {
