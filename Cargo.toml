@@ -88,7 +88,7 @@ version = "1.0.114"
 features = ["derive"]
 
 [dependencies.tokio]
-version = "1.8.1"
+version = "1.8.2"
 features = ["fs", "macros", "process", "rt-multi-thread", "sync", "time"]
 
 [dependencies.trust-dns-resolver]
