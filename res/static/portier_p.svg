@@ -27,7 +27,7 @@
      inkscape:document-units="mm"
      showgrid="false"
      inkscape:zoom="7.972371"
-     inkscape:cx="27.783454"
+     inkscape:cx="25.400223"
      inkscape:cy="35.121296"
      inkscape:window-width="1920"
      inkscape:window-height="966"
@@ -45,7 +45,7 @@
      inkscape:label="Layer 1"
      inkscape:groupmode="layer"
      id="layer1"
-     transform="translate(-39.473448,-83.389319)">
+     transform="translate(-40.109007,-83.389319)">
     <g
        id="g1093"
        transform="translate(17.546218,-5.0855455)">
@@ -64,7 +64,7 @@
     <circle
        style="opacity:1;fill:#000000;fill-opacity:1.19677e-07;stroke:#000000;stroke-width:0.2;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1;paint-order:stroke markers fill"
        id="path1115"
-       cx="46.573448"
+       cx="47.209007"
        cy="90.489319"
        r="6" />
   </g>
