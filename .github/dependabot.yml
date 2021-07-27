@@ -1,3 +1,8 @@
+# Create PRs to automatically upgrade dependencies.
+#
+# NOTE: Before Dependabot runs, we perform simple upgrades automatically using
+# the `daily.yml` workflow `upgrade-deps` job.
+
 version: 2
 updates:
 
