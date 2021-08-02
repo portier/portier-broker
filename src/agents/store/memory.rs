@@ -152,7 +152,7 @@ impl Handler<Gc> for MemoryStore {
             .drain()
             .filter(|(_, ref entry)| entry.is_alive())
             .collect();
-        cx.reply(())
+        cx.reply(());
     }
 }
 
@@ -162,7 +162,7 @@ impl Handler<SaveSession> for MemoryStore {
             message.session_id,
             Expiring::from_duration(message.data, self.expire_sessions),
         );
-        cx.reply(Ok(()))
+        cx.reply(Ok(()));
     }
 }
 
@@ -173,14 +173,14 @@ impl Handler<GetSession> for MemoryStore {
             .get(&message.session_id)
             .filter(|entry| entry.is_alive())
             .map(|entry| entry.value.clone());
-        cx.reply(Ok(data))
+        cx.reply(Ok(data));
     }
 }
 
 impl Handler<DeleteSession> for MemoryStore {
     fn handle(&mut self, message: DeleteSession, cx: Context<Self, DeleteSession>) {
         self.sessions.remove(&message.session_id);
-        cx.reply(Ok(()))
+        cx.reply(Ok(()));
     }
 }
 
@@ -190,7 +190,7 @@ impl Handler<SaveAuthCode> for MemoryStore {
             message.code,
             Expiring::from_duration(message.data, self.expire_auth_codes),
         );
-        cx.reply(Ok(()))
+        cx.reply(Ok(()));
     }
 }
 
@@ -200,7 +200,7 @@ impl Handler<ConsumeAuthCode> for MemoryStore {
             .auth_codes
             .remove(&message.code)
             .filter(Expiring::is_alive)
-            .map(|entry| entry.value)))
+            .map(|entry| entry.value)));
     }
 }
 
@@ -228,7 +228,7 @@ impl Handler<IncrAndTestLimits> for MemoryStore {
     fn handle(&mut self, message: IncrAndTestLimits, cx: Context<Self, IncrAndTestLimits>) {
         let mut ok = true;
         for config in &self.limit_configs {
-            let key = message.input.build_key(&config, "", "|");
+            let key = message.input.build_key(config, "", "|");
             let count = match self.limits.entry(key) {
                 Entry::Occupied(mut entry) => {
                     let mut expiring = entry.get_mut();
@@ -261,7 +261,7 @@ impl Handler<DecrLimits> for MemoryStore {
             if !config.decr_complete {
                 continue;
             }
-            let key = message.input.build_key(&config, "", "|");
+            let key = message.input.build_key(config, "", "|");
             if let Entry::Occupied(mut entry) = self.limits.entry(key) {
                 let Expiring { expires, value } = *entry.get();
                 let now = Instant::now();

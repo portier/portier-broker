@@ -262,7 +262,7 @@ impl Handler<IncrAndTestLimits> for RedisStore {
             .limit_configs
             .iter()
             .map(|config| {
-                let key = message.input.build_key(&config, "rate-limit:", "|");
+                let key = message.input.build_key(config, "rate-limit:", "|");
                 (config.clone(), key)
             })
             .collect();
@@ -296,7 +296,7 @@ impl Handler<DecrLimits> for RedisStore {
             .iter()
             .filter_map(|config| {
                 if config.decr_complete {
-                    Some(message.input.build_key(&config, "rate-limit:", "|"))
+                    Some(message.input.build_key(config, "rate-limit:", "|"))
                 } else {
                     None
                 }
@@ -401,7 +401,7 @@ impl Handler<FetchKeys> for RedisStore {
                 |data| serde_json::from_str(&data).expect("Invalid key set JSON in Redis"),
             );
             Ok(key_set)
-        })
+        });
     }
 }
 

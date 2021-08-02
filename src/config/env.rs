@@ -100,7 +100,7 @@ impl EnvConfig {
     #[allow(clippy::cognitive_complexity)]
     fn apply(parsed: EnvConfig, builder: &mut ConfigBuilder) {
         if let Some(val) = parsed.listen_ip {
-            builder.listen_ip = val
+            builder.listen_ip = val;
         }
         if let Some(val) = parsed.listen_port {
             builder.listen_port = val;

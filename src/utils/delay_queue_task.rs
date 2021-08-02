@@ -65,7 +65,7 @@ impl<K: Clone + Eq + Hash + Send + 'static> DelayQueueTask<K> {
                     Either::Left((Some((key, item_deadline)), _)) => {
                         items.insert(key, deadline);
                         if item_deadline < deadline {
-                            deadline = item_deadline
+                            deadline = item_deadline;
                         }
                     }
                     Either::Left((None, _)) => break,
