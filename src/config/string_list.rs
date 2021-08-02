@@ -178,7 +178,7 @@ impl<'a, R: Read> Iterator for StringListReader<'a, R> {
     type Item = Result<String, IoError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some(data) = self.inner.next() {
+        for data in &mut self.inner {
             self.line += 1;
 
             let data = match data {

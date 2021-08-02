@@ -41,7 +41,7 @@ impl Eq for EmailAddress {}
 
 impl Hash for EmailAddress {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.serialization.hash(state)
+        self.serialization.hash(state);
     }
 }
 

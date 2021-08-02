@@ -8,6 +8,7 @@
     clippy::single_match_else,
     clippy::too_many_arguments,
     clippy::too_many_lines,
+    clippy::unused_async,
     clippy::wildcard_imports
 )]
 
@@ -154,7 +155,7 @@ async fn import_key(builder: ConfigBuilder, file: &Path) {
     let contents = if file == Path::new("-") {
         let mut buf = Vec::new();
         if let Err(err) = std::io::stdin().read_to_end(&mut buf) {
-            panic!("Could not read key from stdin: {}", err)
+            panic!("Could not read key from stdin: {}", err);
         }
         buf
     } else {

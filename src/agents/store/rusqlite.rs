@@ -234,7 +234,7 @@ impl Handler<Gc> for RusqliteStore {
         self.conn
             .execute("DELETE FROM rate_limits WHERE expires <= ?1", [now])
             .expect("rate limits cleanup failed");
-        cx.reply(())
+        cx.reply(());
     }
 }
 
@@ -378,7 +378,7 @@ impl Handler<IncrAndTestLimits> for RusqliteStore {
         cx.reply_with(move || {
             let mut ok = true;
             for config in &self.limit_configs {
-                let id = message.input.build_key(&config, "", "|");
+                let id = message.input.build_key(config, "", "|");
                 let now = unix_timestamp() as i64;
                 let window = config.window.as_secs() as i64;
                 let tx = self.conn.transaction()?;
@@ -408,7 +408,7 @@ impl Handler<IncrAndTestLimits> for RusqliteStore {
                 ok = ok && count as usize <= config.max_count;
             }
             Ok(ok)
-        })
+        });
     }
 }
 
@@ -419,7 +419,7 @@ impl Handler<DecrLimits> for RusqliteStore {
                 if !config.decr_complete {
                     continue;
                 }
-                let id = message.input.build_key(&config, "", "|");
+                let id = message.input.build_key(config, "", "|");
                 let expires = (unix_timestamp() + config.window.as_secs()) as i64;
                 let tx = self.conn.transaction()?;
                 tx.execute(
@@ -433,7 +433,7 @@ impl Handler<DecrLimits> for RusqliteStore {
                 tx.commit()?;
             }
             Ok(())
-        })
+        });
     }
 }
 

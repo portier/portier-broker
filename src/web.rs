@@ -268,7 +268,7 @@ impl Service {
             .and_then(|value| value.to_str().ok())
         {
             'lang: for user_language in &accept_language::parse(user_languages) {
-                for (idx, &(ref lang, _)) in app.i18n.catalogs.iter().enumerate() {
+                for (idx, &(lang, _)) in app.i18n.catalogs.iter().enumerate() {
                     if lang == user_language {
                         catalog_idx = idx;
                         break 'lang;
