@@ -316,4 +316,10 @@ impl Handler<ImportKeySet> for MemoryStore {
     }
 }
 
+impl Handler<ExportKeySet> for MemoryStore {
+    fn handle(&mut self, _message: ExportKeySet, _cx: Context<Self, ExportKeySet>) {
+        panic!("Exporting keys from a memory store has no effect");
+    }
+}
+
 impl StoreSender for Addr<MemoryStore> {}

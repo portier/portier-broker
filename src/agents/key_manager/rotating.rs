@@ -8,7 +8,6 @@ use crate::utils::{
 use ring::signature::{Ed25519KeyPair, RsaKeyPair};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use std::io::Cursor;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -118,13 +117,12 @@ impl<T: KeyPairExt + GeneratedKeyPair> ActiveKeySet<T> {
     }
 
     fn parse_one(pem: &str) -> T {
-        let mut key_pairs =
-            pem::parse_key_pairs(Cursor::new(pem)).expect("Could not parsed key as PEM");
-        if key_pairs.len() != 1 {
+        let mut entries = pem::parse_key_pairs(pem.as_bytes()).unwrap();
+        if entries.len() != 1 {
             panic!("Expected exactly one key in PEM");
         }
-        let key_pair = key_pairs.pop().unwrap();
-        T::from_parsed(key_pair).expect("Found key pair of incorrect type")
+        let entry = entries.pop().unwrap().expect("Could not parse key as PEM");
+        T::from_parsed(entry.key_pair).expect("Found key pair of incorrect type")
     }
 
     fn append_public_jwks(&self, vec: &mut Vec<serde_json::Value>) {

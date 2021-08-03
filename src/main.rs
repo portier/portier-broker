@@ -29,20 +29,17 @@ mod validation;
 mod web;
 mod webfinger;
 
-use crate::agents::{Expiring, ImportKeySet, KeySet};
+use crate::agents::{Expiring, ExportKeySet, ImportKeySet, KeySet};
 use crate::config::{ConfigBuilder, ConfigRc};
-use crate::crypto::SigningAlgorithm;
-use crate::utils::{
-    pem::{self, ParsedKeyPair},
-    BoxError,
-};
+use crate::utils::{pem, BoxError};
 use crate::web::Service;
 use futures_util::future;
 use hyper::{server::Server, service::make_service_fn};
-use log::info;
 use serde::Deserialize;
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::{BufReader, Write};
 use std::{
-    io::{Cursor, Read},
     net::SocketAddr,
     path::{Path, PathBuf},
     time::SystemTime,
@@ -59,14 +56,19 @@ Portier Broker
 
 Usage:
   portier-broker [CONFIG]
-  portier-broker [CONFIG] --import-key FILE
+  portier-broker [CONFIG] --import-keys FILE [--dry-run]
+  portier-broker [CONFIG] --export-keys FILE
   portier-broker --version
   portier-broker --help
 
 Options:
-  --version          Print version information and exit
-  --help             Print this help message and exit
-  --import-key FILE  Import a PEM private key, for migrating to rotating keys
+  --version           Print version information and exit
+  --help              Print this help message and exit
+
+  --import-keys FILE  Import PEM private keys
+  --dry-run           Parse PEM to be imported, but don't apply changes
+
+  --export-keys FILE  Export currently active private keys as PEM
 "#;
 
 /// Holds parsed command line parameters.
@@ -74,7 +76,9 @@ Options:
 #[allow(non_snake_case)]
 struct Args {
     arg_CONFIG: Option<PathBuf>,
-    flag_import_key: Option<PathBuf>,
+    flag_import_keys: Option<PathBuf>,
+    flag_export_keys: Option<PathBuf>,
+    flag_dry_run: bool,
 }
 
 /// The `main()` method. Will loop forever to serve HTTP requests.
@@ -102,8 +106,10 @@ async fn main() {
     builder.update_from_common_env();
     builder.update_from_broker_env();
 
-    if let Some(ref path) = args.flag_import_key {
-        import_key(builder, path).await;
+    if let Some(ref path) = args.flag_import_keys {
+        import_keys(builder, path, args.flag_dry_run).await;
+    } else if let Some(ref path) = args.flag_export_keys {
+        export_keys(builder, path).await;
     } else {
         start_server(builder).await;
     }
@@ -121,7 +127,7 @@ async fn start_server(builder: ConfigBuilder) {
     let builder = match listenfd::ListenFd::from_env().take_tcp_listener(0) {
         Ok(Some(tcp_listener)) => {
             let builder = Server::from_tcp(tcp_listener).expect("Socket activation failed");
-            info!("Listening on the socket received from the service manager");
+            log::info!("Listening on the socket received from the service manager");
             builder
         }
         Ok(None) => {
@@ -131,7 +137,7 @@ async fn start_server(builder: ConfigBuilder) {
                 .expect("Unable to parse listen address");
             let addr = SocketAddr::new(ip_addr, app.listen_port);
             let builder = Server::bind(&addr);
-            info!("Listening on {}", addr);
+            log::info!("Listening on {}", addr);
             builder
         }
         Err(err) => {
@@ -151,60 +157,155 @@ async fn start_server(builder: ConfigBuilder) {
     builder.serve(make_service).await.expect("Server error");
 }
 
-async fn import_key(builder: ConfigBuilder, file: &Path) {
-    let contents = if file == Path::new("-") {
-        let mut buf = Vec::new();
-        if let Err(err) = std::io::stdin().read_to_end(&mut buf) {
-            panic!("Could not read key from stdin: {}", err);
-        }
-        buf
+async fn import_keys(builder: ConfigBuilder, path: &Path, dry_run: bool) {
+    if builder.is_keyed_manually() {
+        eprintln!("Importing keys, but configuration uses manual keying.");
+        eprintln!("Make sure to remove 'keyfiles' and 'keytext' options");
+        eprintln!("afterwards, to switch to automatic key rotation.");
+    }
+
+    let entries = if path == Path::new("-") {
+        pem::parse_key_pairs(BufReader::new(std::io::stdin())).expect("Could not read from stdin")
     } else {
-        match std::fs::read(file) {
-            Ok(contents) => contents,
-            Err(err) => panic!("Could not open key file '{}': {}", file.display(), err),
+        let file = File::open(path).expect("Could not open file");
+        pem::parse_key_pairs(BufReader::new(file)).expect("Could not read from file")
+    };
+
+    let mut key_sets = HashMap::new();
+    let mut fail = false;
+    for (idx, result) in entries.into_iter().enumerate() {
+        let idx = idx + 1;
+        let entry = match result {
+            Ok(entry) => entry,
+            Err(err) => {
+                eprintln!("#{}: parse error, {}", idx, err);
+                fail = true;
+                continue;
+            }
+        };
+
+        let alg = entry.key_pair.signing_alg();
+        if !builder.signing_algs.contains(&alg) {
+            eprintln!("#{}: ignored, disabled signing algorithm", idx);
+            continue;
         }
+
+        let key_set = key_sets.entry(alg).or_insert(KeySet {
+            signing_alg: alg,
+            current: None,
+            next: None,
+            previous: None,
+        });
+
+        let fp = entry.raw.fingerprint();
+        let (purpose, lifespan) = if key_set.current.is_none() {
+            let lifespan = builder.keys_ttl;
+            key_set.current = Some(Expiring {
+                value: entry.raw.encode(),
+                expires: SystemTime::now() + lifespan,
+            });
+            ("current", Some(lifespan))
+        } else if key_set.next.is_none() {
+            let lifespan = builder.keys_ttl * 2;
+            key_set.next = Some(Expiring {
+                value: entry.raw.encode(),
+                expires: SystemTime::now() + lifespan,
+            });
+            ("next", Some(lifespan))
+        } else if key_set.previous.is_none() {
+            key_set.previous = Some(entry.raw.encode());
+            ("previous", None)
+        } else {
+            eprintln!("#{}: too many keys for signing algorithm {}", idx, alg);
+            fail = true;
+            continue;
+        };
+
+        if let Some(lifespan) = lifespan {
+            eprintln!(
+                "#{}: found {} key, fingerprint: {} (as {}, expires in {:?})",
+                idx, alg, fp, purpose, lifespan
+            );
+        } else {
+            eprintln!(
+                "#{}: found {} key, fingerprint: {} (as {})",
+                idx, alg, fp, purpose
+            );
+        }
+    }
+    if fail {
+        eprintln!("Aborting because of errors");
+        std::process::exit(1);
+    }
+    if key_sets.is_empty() {
+        eprintln!("No private keys found");
+        std::process::exit(1);
+    }
+
+    eprintln!("NOTE: Expiration times cannot be imported, and were reset");
+
+    if dry_run {
+        eprintln!("NOTE: Dry run, not applying changes");
+    } else {
+        let store = builder
+            .into_store()
+            .await
+            .unwrap_or_else(|err| panic!("Failed to build configuration: {}", err));
+        for (alg, key_set) in key_sets {
+            store.send(ImportKeySet(key_set)).await;
+            eprintln!("Successfully imported {} keys", alg);
+        }
+    }
+
+    // TODO: This is a little hacky, but we don't have code to shutdown gracefully.
+    // (Currently, if a Redis store is simply dropped, the pubsub task panics.)
+    std::process::exit(0);
+}
+
+async fn export_keys(builder: ConfigBuilder, path: &Path) {
+    if builder.is_keyed_manually() {
+        eprintln!("Exporting keys, but configuration uses manual keying.");
+    }
+
+    let mut writer: Box<dyn Write> = if path == Path::new("-") {
+        Box::new(std::io::stdout())
+    } else {
+        Box::new(File::create(path).expect("Could not create file"))
     };
 
-    let contents = match String::from_utf8(contents) {
-        Ok(contents) => contents,
-        Err(err) => panic!("Key file '{}' is not valid UTF-8: {}", file.display(), err),
-    };
-
-    let key = match pem::parse_key_pairs(Cursor::new(contents.as_bytes())) {
-        Ok(keys) if keys.len() == 1 => keys.into_iter().next().unwrap(),
-        Ok(_) => panic!(
-            "Expected exactly one PEM block in key file '{}'",
-            file.display()
-        ),
-        Err(err) => panic!(
-            "Could not parse PEM in key file '{}': {}",
-            file.display(),
-            err
-        ),
-    };
-
-    let keys_ttl = builder.keys_ttl;
+    let mut num: usize = 0;
+    let signing_algs = builder.signing_algs.clone();
     let store = builder
         .into_store()
         .await
-        .unwrap_or_else(|err| panic!("failed to build configuration: {}", err));
-
-    let signing_alg = match key {
-        ParsedKeyPair::Ed25519(_) => SigningAlgorithm::EdDsa,
-        ParsedKeyPair::Rsa(_) => SigningAlgorithm::Rs256,
-    };
-    store
-        .send(ImportKeySet(KeySet {
-            signing_alg,
-            current: Some(Expiring {
-                value: contents,
-                expires: SystemTime::now() + keys_ttl,
-            }),
-            next: None,
-            previous: None,
-        }))
-        .await;
-    eprintln!("Successfully imported {} key", signing_alg);
+        .unwrap_or_else(|err| panic!("Failed to build configuration: {}", err));
+    for alg in signing_algs {
+        let key_set = store.send(ExportKeySet(alg)).await;
+        if let Some(key) = key_set.current {
+            writer
+                .write_all(key.value.as_bytes())
+                .expect("Write failed");
+            num += 1;
+        }
+        if let Some(key) = key_set.next {
+            writer
+                .write_all(key.value.as_bytes())
+                .expect("Write failed");
+            num += 1;
+        }
+        if let Some(key) = key_set.previous {
+            writer.write_all(key.as_bytes()).expect("Write failed");
+            num += 1;
+        }
+    }
+    if num == 0 {
+        eprintln!("No private keys found in the store");
+        std::process::exit(1);
+    }
+    writer.flush().expect("Flush failed");
+    drop(writer);
+    eprintln!("Exported {} private keys", num);
+    eprintln!("NOTE: The output does not contain expiration times");
 
     // TODO: This is a little hacky, but we don't have code to shutdown gracefully.
     // (Currently, if a Redis store is simply dropped, the pubsub task panics.)

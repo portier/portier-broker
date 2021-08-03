@@ -480,6 +480,12 @@ impl Handler<ImportKeySet> for RusqliteStore {
     }
 }
 
+impl Handler<ExportKeySet> for RusqliteStore {
+    fn handle(&mut self, message: ExportKeySet, cx: Context<Self, ExportKeySet>) {
+        cx.reply(self.get_key_set(message.0));
+    }
+}
+
 impl Handler<SaveKeys> for RusqliteStore {
     fn handle(&mut self, message: SaveKeys, cx: Context<Self, SaveKeys>) {
         let key_set = message.0;

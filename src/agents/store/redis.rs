@@ -381,6 +381,17 @@ impl Handler<ImportKeySet> for RedisStore {
     }
 }
 
+impl Handler<ExportKeySet> for RedisStore {
+    fn handle(&mut self, message: ExportKeySet, cx: Context<Self, ExportKeySet>) {
+        let me = cx.addr().clone();
+        cx.reply_later(async move {
+            me.send(FetchKeys(message.0))
+                .await
+                .expect("Failed to fetch keys from Redis")
+        });
+    }
+}
+
 impl Handler<LockKeys> for RedisStore {
     fn handle(&mut self, message: LockKeys, cx: Context<Self, LockKeys>) {
         let mut locking = self.locking.clone();

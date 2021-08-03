@@ -495,7 +495,12 @@ impl ConfigBuilder {
         self
     }
 
+    pub fn is_keyed_manually(&self) -> bool {
+        !self.keyfiles.is_empty() || self.keytext.is_some()
+    }
+
     pub async fn done(mut self) -> Result<Config, ConfigError> {
+        let is_keyed_manually = self.is_keyed_manually();
         let store_config =
             StoreConfig::from_options(self.redis_url, self.sqlite_db, self.memory_storage)?;
         let mailer_config = MailerConfig::from_options(
@@ -528,30 +533,29 @@ impl ConfigBuilder {
                 rng: rng.clone(),
             })
             .await;
-        let key_manager: Box<dyn KeyManagerSender> =
-            if !self.keyfiles.is_empty() || self.keytext.is_some() {
-                let key_manager = ManualKeys::new(
-                    &self.keyfiles,
-                    self.keytext,
-                    &self.signing_algs,
-                    rng.clone(),
-                )?;
-                Box::new(spawn_agent(key_manager).await)
-            } else {
-                if self.signing_algs.contains(&SigningAlgorithm::Rs256)
-                    && self.generate_rsa_command.is_empty()
-                {
-                    return Err("generate_rsa_command is required for rotating RSA keys".into());
-                }
-                let key_manager = RotatingKeys::new(
-                    store.clone(),
-                    self.keys_ttl,
-                    &self.signing_algs,
-                    self.generate_rsa_command,
-                    rng.clone(),
-                );
-                Box::new(spawn_agent(key_manager).await)
-            };
+        let key_manager: Box<dyn KeyManagerSender> = if is_keyed_manually {
+            let key_manager = ManualKeys::new(
+                &self.keyfiles,
+                self.keytext,
+                &self.signing_algs,
+                rng.clone(),
+            )?;
+            Box::new(spawn_agent(key_manager).await)
+        } else {
+            if self.signing_algs.contains(&SigningAlgorithm::Rs256)
+                && self.generate_rsa_command.is_empty()
+            {
+                return Err("generate_rsa_command is required for rotating RSA keys".into());
+            }
+            let key_manager = RotatingKeys::new(
+                store.clone(),
+                self.keys_ttl,
+                &self.signing_algs,
+                self.generate_rsa_command,
+                rng.clone(),
+            );
+            Box::new(spawn_agent(key_manager).await)
+        };
         let mailer = mailer_config
             .spawn_mailer(MailerParams {
                 fetcher,
