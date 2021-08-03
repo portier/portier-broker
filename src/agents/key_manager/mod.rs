@@ -1,7 +1,11 @@
-use crate::crypto::SigningAlgorithm;
-use crate::utils::agent::{Message, Sender};
-use crate::utils::keys::SignError;
 use serde_json::Value as JsonValue;
+use std::time::SystemTime;
+
+use crate::crypto::SigningAlgorithm;
+use crate::utils::{
+    agent::{Message, Sender},
+    keys::SignError,
+};
 
 /// Message requesting a JSON payload to be signed.
 pub struct SignJws {
@@ -14,8 +18,12 @@ impl Message for SignJws {
 
 /// Message requesting a list of public JWKs.
 pub struct GetPublicJwks;
+pub struct GetPublicJwksReply {
+    pub jwks: Vec<JsonValue>,
+    pub expires: Option<SystemTime>,
+}
 impl Message for GetPublicJwks {
-    type Reply = Vec<JsonValue>;
+    type Reply = GetPublicJwksReply;
 }
 
 /// Key manager abstraction. Combines all message types.

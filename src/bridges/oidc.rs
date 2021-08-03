@@ -204,13 +204,10 @@ pub async fn auth(ctx: &mut Context, email_addr: &EmailAddress, link: &Link) -> 
     }
 
     if ctx.want_json {
-        Ok(json_response(
-            &json!({
-                "result": "redirect_to_provider",
-                "url": auth_url.as_str(),
-            }),
-            None,
-        ))
+        Ok(json_response(&json!({
+            "result": "redirect_to_provider",
+            "url": auth_url.as_str(),
+        })))
     } else {
         let mut res = empty_response(StatusCode::SEE_OTHER);
         res.header(hyper::header::LOCATION, auth_url.as_str());

@@ -96,13 +96,10 @@ pub async fn auth(ctx: &mut Context, email_addr: EmailAddress) -> HandlerResult 
 
     // Render a form for the user.
     if ctx.want_json {
-        Ok(json_response(
-            &json!({
-                "result": "verification_code_sent",
-                "session": &ctx.session_id,
-            }),
-            None,
-        ))
+        Ok(json_response(&json!({
+            "result": "verification_code_sent",
+            "session": &ctx.session_id,
+        })))
     } else {
         let catalog = ctx.catalog();
         Ok(html_response(ctx.app.templates.confirm_email.render(&[

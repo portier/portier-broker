@@ -91,14 +91,15 @@ struct ActiveKeySet<T: KeyPairExt + GeneratedKeyPair> {
     current: NamedKeyPair<T>,
     next: NamedKeyPair<T>,
     previous: Option<NamedKeyPair<T>>,
+    expires: SystemTime,
 }
 
 impl<T: KeyPairExt + GeneratedKeyPair> ActiveKeySet<T> {
     fn parse(key_set: &KeySet) -> Self {
-        let current = key_set
+        let (current, expires) = key_set
             .current
             .as_ref()
-            .map(|entry| Self::parse_one(&entry.value).into())
+            .map(|entry| (Self::parse_one(&entry.value).into(), entry.expires))
             .expect("Provided key set does not have a current key");
         let next = key_set
             .next
@@ -113,6 +114,7 @@ impl<T: KeyPairExt + GeneratedKeyPair> ActiveKeySet<T> {
             current,
             next,
             previous,
+            expires,
         }
     }
 
@@ -350,13 +352,23 @@ impl Handler<SignJws> for RotatingKeys {
 impl Handler<GetPublicJwks> for RotatingKeys {
     fn handle(&mut self, _message: GetPublicJwks, cx: Context<Self, GetPublicJwks>) {
         let mut jwks = vec![];
+        let mut expires = SystemTime::now() + self.keys_ttl;
         if let Some(ref key_set) = self.ed25519_keys {
             key_set.append_public_jwks(&mut jwks);
+            if key_set.expires < expires {
+                expires = key_set.expires;
+            }
         }
         if let Some(ref key_set) = self.rsa_keys {
             key_set.append_public_jwks(&mut jwks);
+            if key_set.expires < expires {
+                expires = key_set.expires;
+            }
         }
-        cx.reply(jwks);
+        cx.reply(GetPublicJwksReply {
+            jwks,
+            expires: Some(expires),
+        });
     }
 }
 

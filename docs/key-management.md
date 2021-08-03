@@ -79,3 +79,8 @@ _after_ keys from `keyfiles`.
 
 NOTE: Inputs are read during broker startup, and there is currently no way to
 reload configuration. Rotating keys manually requires restarting the broker.
+
+NOTE: When using manual keying, keys are served to clients with a
+`Cache-Control` header and `max-age` set according to the `keys_ttl` setting.
+When manually changing keys, keep in mind how long clients may be caching your
+public keys. (Proxies can be ignored, because we add `s-max-age=0`.)

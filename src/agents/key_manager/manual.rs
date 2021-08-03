@@ -139,7 +139,10 @@ impl Handler<GetPublicJwks> for ManualKeys {
     fn handle(&mut self, _message: GetPublicJwks, cx: Context<Self, GetPublicJwks>) {
         let ed25519_jwks = self.ed25519_keys.iter().map(NamedKeyPair::public_jwk);
         let rsa_jwks = self.rsa_keys.iter().map(NamedKeyPair::public_jwk);
-        cx.reply(ed25519_jwks.chain(rsa_jwks).collect());
+        cx.reply(GetPublicJwksReply {
+            jwks: ed25519_jwks.chain(rsa_jwks).collect(),
+            expires: None,
+        });
     }
 }
 
