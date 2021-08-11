@@ -1,17 +1,19 @@
 # Create PRs to automatically upgrade dependencies.
 #
 # NOTE: Before Dependabot runs, we perform simple upgrades automatically using
-# the `daily.yml` workflow `upgrade-deps` job.
+# the `daily.yml` workflow `upgrade-deps` job, which runs at 03:00 UTC.
 
 version: 2
 updates:
 
-- package-ecosystem: "cargo"
-  directory: "/"
+- package-ecosystem: 'cargo'
+  directory: '/'
   schedule:
-    interval: "daily"
+    interval: 'daily'
+    time: '05:00'
 
-- package-ecosystem: "github-actions"
-  directory: "/"
+- package-ecosystem: 'github-actions'
+  directory: '/'
   schedule:
-    interval: "daily"
+    interval: 'daily'
+    time: '05:00'
