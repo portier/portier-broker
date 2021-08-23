@@ -194,7 +194,7 @@ impl GeneratedKeyPair for Ed25519KeyPair {
     fn generate(config: Self::Config) -> String {
         let doc =
             Self::generate_pkcs8(&config.generator).expect("could not generate Ed25519 key pair");
-        pem::from_der(doc.as_ref())
+        pem::encode(doc.as_ref(), pem::PKCS8)
     }
 
     fn from_parsed(parsed: ParsedKeyPair) -> Option<Self> {

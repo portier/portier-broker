@@ -77,13 +77,10 @@ pub async fn complete_auth(ctx: &mut Context) -> HandlerResult {
     };
 
     if ctx.want_json {
-        Ok(json_response(
-            &json!({
-                auth_field: &auth_value,
-                "state": &state,
-            }),
-            None,
-        ))
+        Ok(json_response(&json!({
+            auth_field: &auth_value,
+            "state": &state,
+        })))
     } else {
         Ok(return_to_relier(
             ctx,

@@ -127,6 +127,14 @@ impl Message for ImportKeySet {
     type Reply = ();
 }
 
+/// Read a key set.
+///
+/// This is used to implement `--export-key`.
+pub struct ExportKeySet(pub SigningAlgorithm);
+impl Message for ExportKeySet {
+    type Reply = KeySet;
+}
+
 /// Store abstraction. Combines all message types.
 ///
 /// Downside of this is that it needs to be implemented on the agent side as:
@@ -143,6 +151,7 @@ pub trait StoreSender:
     + Sender<EnableRotatingKeys>
     + Sender<RotateKeysLocked>
     + Sender<ImportKeySet>
+    + Sender<ExportKeySet>
 {
 }
 

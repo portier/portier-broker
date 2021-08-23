@@ -56,12 +56,9 @@ pub async fn token(ctx: &mut Context) -> HandlerResult {
     .await
     .map_err(|err| BrokerError::Internal(format!("Could not create a JWT: {:?}", err)))?;
 
-    Ok(json_response(
-        &json!({
-            "access_token": "UNUSED",
-            "token_type": "bearer",
-            "id_token": &jwt,
-        }),
-        None,
-    ))
+    Ok(json_response(&json!({
+        "access_token": "UNUSED",
+        "token_type": "bearer",
+        "id_token": &jwt,
+    })))
 }

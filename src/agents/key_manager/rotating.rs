@@ -8,7 +8,6 @@ use crate::utils::{
 use ring::signature::{Ed25519KeyPair, RsaKeyPair};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use std::io::Cursor;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
@@ -92,14 +91,15 @@ struct ActiveKeySet<T: KeyPairExt + GeneratedKeyPair> {
     current: NamedKeyPair<T>,
     next: NamedKeyPair<T>,
     previous: Option<NamedKeyPair<T>>,
+    expires: SystemTime,
 }
 
 impl<T: KeyPairExt + GeneratedKeyPair> ActiveKeySet<T> {
     fn parse(key_set: &KeySet) -> Self {
-        let current = key_set
+        let (current, expires) = key_set
             .current
             .as_ref()
-            .map(|entry| Self::parse_one(&entry.value).into())
+            .map(|entry| (Self::parse_one(&entry.value).into(), entry.expires))
             .expect("Provided key set does not have a current key");
         let next = key_set
             .next
@@ -114,17 +114,17 @@ impl<T: KeyPairExt + GeneratedKeyPair> ActiveKeySet<T> {
             current,
             next,
             previous,
+            expires,
         }
     }
 
     fn parse_one(pem: &str) -> T {
-        let mut key_pairs =
-            pem::parse_key_pairs(Cursor::new(pem)).expect("Could not parsed key as PEM");
-        if key_pairs.len() != 1 {
+        let mut entries = pem::parse_key_pairs(pem.as_bytes()).unwrap();
+        if entries.len() != 1 {
             panic!("Expected exactly one key in PEM");
         }
-        let key_pair = key_pairs.pop().unwrap();
-        T::from_parsed(key_pair).expect("Found key pair of incorrect type")
+        let entry = entries.pop().unwrap().expect("Could not parse key as PEM");
+        T::from_parsed(entry.key_pair).expect("Found key pair of incorrect type")
     }
 
     fn append_public_jwks(&self, vec: &mut Vec<serde_json::Value>) {
@@ -352,13 +352,23 @@ impl Handler<SignJws> for RotatingKeys {
 impl Handler<GetPublicJwks> for RotatingKeys {
     fn handle(&mut self, _message: GetPublicJwks, cx: Context<Self, GetPublicJwks>) {
         let mut jwks = vec![];
+        let mut expires = SystemTime::now() + self.keys_ttl;
         if let Some(ref key_set) = self.ed25519_keys {
             key_set.append_public_jwks(&mut jwks);
+            if key_set.expires < expires {
+                expires = key_set.expires;
+            }
         }
         if let Some(ref key_set) = self.rsa_keys {
             key_set.append_public_jwks(&mut jwks);
+            if key_set.expires < expires {
+                expires = key_set.expires;
+            }
         }
-        cx.reply(jwks);
+        cx.reply(GetPublicJwksReply {
+            jwks,
+            expires: Some(expires),
+        });
     }
 }
 

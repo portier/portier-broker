@@ -2,14 +2,54 @@
 
 use crate::crypto::SigningAlgorithm;
 use crate::utils::keys::KeyPairExt;
-use ring::signature::{Ed25519KeyPair, RsaKeyPair};
-use std::io::{BufRead, Cursor, Error as IoError, Read};
+use ring::{
+    digest::{digest, SHA256},
+    signature::{Ed25519KeyPair, RsaKeyPair},
+};
+use std::io::{BufRead, Error as IoError, Read};
 use thiserror::Error;
 
-const RSA_START_MARK: &str = "-----BEGIN RSA PRIVATE KEY-----";
-const RSA_END_MARK: &str = "-----END RSA PRIVATE KEY-----";
-const PKCS8_START_MARK: &str = "-----BEGIN PRIVATE KEY-----";
-const PKCS8_END_MARK: &str = "-----END PRIVATE KEY-----";
+const ARMOR_BEGIN: &str = "-----BEGIN ";
+const ARMOR_END: &str = "-----END ";
+const ARMOR_TAIL: &str = "-----";
+
+pub const PKCS8: &str = "PRIVATE KEY";
+pub const RSA: &str = "RSA PRIVATE KEY";
+
+pub struct PemEntry {
+    pub raw: RawPem,
+    pub key_pair: ParsedKeyPair,
+}
+
+impl PemEntry {
+    fn new<F>(b64: &str, section: &'static str, decode: F) -> Result<Self, ParseError>
+    where
+        F: FnOnce(&[u8]) -> Result<ParsedKeyPair, ParseError>,
+    {
+        let data = base64::decode(b64).map_err(ParseError::Base64)?;
+        let key_pair = decode(&data)?;
+        let raw = RawPem { section, data };
+        Ok(PemEntry { raw, key_pair })
+    }
+}
+
+pub struct RawPem {
+    pub section: &'static str,
+    pub data: Vec<u8>,
+}
+
+impl RawPem {
+    /// Return a fingerprint of the data.
+    pub fn fingerprint(&self) -> String {
+        let hash = base64::encode(&digest(&SHA256, &self.data));
+        format!("SHA256:{}", hash)
+    }
+
+    /// Reformat the data as a PEM string.
+    pub fn encode(&self) -> String {
+        encode(&self.data, self.section)
+    }
+}
 
 pub enum ParsedKeyPair {
     Ed25519(Ed25519KeyPair),
@@ -29,8 +69,8 @@ impl ParsedKeyPair {
 
 #[derive(Debug, Error)]
 pub enum ParseError {
-    #[error("IO error: {0}")]
-    Io(#[from] IoError),
+    #[error("unrecognized PEM section: {0}")]
+    UnrecognizedSection(String),
     #[error("invalid base64: {0}")]
     Base64(#[from] base64::DecodeError),
     #[error("invalid private key: {0}")]
@@ -44,65 +84,80 @@ enum State {
 }
 
 /// Parse all supported key pairs from a PEM stream.
-pub fn parse_key_pairs(mut reader: impl BufRead) -> Result<Vec<ParsedKeyPair>, ParseError> {
-    let mut key_pairs = Vec::new();
+pub fn parse_key_pairs(
+    mut reader: impl BufRead,
+) -> Result<Vec<Result<PemEntry, ParseError>>, IoError> {
+    let mut entries = Vec::new();
     let mut b64buf = String::new();
     let mut state = State::Scan;
 
-    let mut raw_line = Vec::<u8>::new();
+    let mut line = Vec::<u8>::new();
     loop {
-        raw_line.clear();
-        let len = reader.read_until(b'\n', &mut raw_line)?;
+        line.clear();
+        let len = reader.read_until(b'\n', &mut line)?;
 
         if len == 0 {
-            return Ok(key_pairs);
+            return Ok(entries);
         }
-        let line = String::from_utf8_lossy(&raw_line);
 
         match state {
-            State::Scan => {
-                if line.starts_with(PKCS8_START_MARK) {
+            State::Scan => match get_section(&line, ARMOR_BEGIN) {
+                Some(section) if section == PKCS8 => {
                     state = State::InPkcs8;
                 }
-                if line.starts_with(RSA_START_MARK) {
+                Some(section) if section == RSA => {
                     state = State::InRsa;
                 }
-            }
-            State::InPkcs8 => {
-                if line.starts_with(PKCS8_END_MARK) {
-                    state = State::Scan;
-                    let der = base64::decode(&b64buf)?;
-                    let key_pair = Ed25519KeyPair::from_pkcs8(&der)
+                Some(other) => {
+                    entries.push(Err(ParseError::UnrecognizedSection(other)));
+                }
+                None => {}
+            },
+            State::InPkcs8 if get_section(&line, ARMOR_END).as_deref() == Some(PKCS8) => {
+                entries.push(PemEntry::new(&b64buf, PKCS8, |data| {
+                    Ed25519KeyPair::from_pkcs8(data)
                         .map(ParsedKeyPair::Ed25519)
-                        .or_else(|_| RsaKeyPair::from_pkcs8(&der).map(ParsedKeyPair::Rsa))
-                        .map_err(ParseError::KeyRejected)?;
-                    key_pairs.push(key_pair);
-                } else {
-                    b64buf.push_str(line.trim());
-                }
+                        .or_else(|_| RsaKeyPair::from_pkcs8(data).map(ParsedKeyPair::Rsa))
+                        .map_err(ParseError::KeyRejected)
+                }));
+                state = State::Scan;
+                b64buf.clear();
             }
-            State::InRsa => {
-                if line.starts_with(RSA_END_MARK) {
-                    state = State::Scan;
-                    let der = base64::decode(&b64buf)?;
-                    let key_pair = RsaKeyPair::from_der(&der)
+            State::InRsa if get_section(&line, ARMOR_END).as_deref() == Some(RSA) => {
+                entries.push(PemEntry::new(&b64buf, RSA, |data| {
+                    RsaKeyPair::from_der(data)
                         .map(ParsedKeyPair::Rsa)
-                        .map_err(ParseError::KeyRejected)?;
-                    key_pairs.push(key_pair);
-                } else {
-                    b64buf.push_str(line.trim());
-                }
+                        .map_err(ParseError::KeyRejected)
+                }));
+                state = State::Scan;
+                b64buf.clear();
+            }
+            State::InPkcs8 | State::InRsa => {
+                let line = String::from_utf8_lossy(&line);
+                b64buf.push_str(line.trim_end());
             }
         }
     }
 }
 
-/// Convert a PKCS #8 document to a PEM string.
-pub fn from_der(der: &[u8]) -> String {
+fn get_section(line: &[u8], prefix: &str) -> Option<String> {
+    let prefix = prefix.as_bytes();
+    if !line.starts_with(prefix) {
+        return None;
+    }
+    let line = String::from_utf8_lossy(&line[prefix.len()..]);
+    let line = line.trim_end().strip_suffix(ARMOR_TAIL)?;
+    Some(line.to_owned())
+}
+
+/// Format data as a PEM string.
+pub fn encode(data: &[u8], section: &str) -> String {
     let mut res = String::new();
-    let b64 = base64::encode(der);
-    let mut cursor = Cursor::new(b64.as_bytes());
-    res.push_str(PKCS8_START_MARK);
+    let b64 = base64::encode(data);
+    let mut cursor = b64.as_bytes();
+    res.push_str(ARMOR_BEGIN);
+    res.push_str(section);
+    res.push_str(ARMOR_TAIL);
     res.push('\n');
     let mut buf = [0_u8; 64];
     loop {
@@ -113,7 +168,9 @@ pub fn from_der(der: &[u8]) -> String {
         res.push_str(std::str::from_utf8(&buf[..size]).unwrap());
         res.push('\n');
     }
-    res.push_str(PKCS8_END_MARK);
+    res.push_str(ARMOR_END);
+    res.push_str(section);
+    res.push_str(ARMOR_TAIL);
     res.push('\n');
     res
 }

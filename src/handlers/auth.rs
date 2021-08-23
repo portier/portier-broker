@@ -3,6 +3,7 @@ use crate::config::LimitInput;
 use crate::crypto::SigningAlgorithm;
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
+use crate::utils::http::ResponseExt;
 use crate::utils::DomainValidationError;
 use crate::validation::parse_redirect_uri;
 use crate::web::{
@@ -10,6 +11,7 @@ use crate::web::{
 };
 use crate::webfinger::{self, Relation};
 use crate::{bridges, metrics};
+use headers::{CacheControl, Expires};
 use http::Method;
 use log::info;
 use serde_json::{from_value, json, Value};
@@ -21,7 +23,7 @@ use std::time::Duration;
 /// Most of this is hard-coded for now, although the URLs are constructed by
 /// using the base URL as configured in the `public_url` configuration value.
 pub async fn discovery(ctx: &mut Context) -> HandlerResult {
-    let obj = json!({
+    let mut res = json_response(&json!({
         "issuer": ctx.app.public_url,
         "authorization_endpoint": format!("{}/auth", ctx.app.public_url),
         "token_endpoint": format!("{}/token", ctx.app.public_url),
@@ -36,8 +38,14 @@ pub async fn discovery(ctx: &mut Context) -> HandlerResult {
         "id_token_signing_alg_values_supported": &ctx.app.signing_algs,
         // NOTE: This field is non-standard.
         "accepts_id_token_signing_alg_query_param": true,
-    });
-    Ok(json_response(&obj, Some(ctx.app.discovery_ttl)))
+    }));
+    res.typed_header(
+        CacheControl::new()
+            .with_public()
+            .with_max_age(ctx.app.discovery_ttl)
+            .with_s_max_age(Duration::from_secs(0)),
+    );
+    Ok(res)
 }
 
 /// Request handler for the JSON Web Key Set document.
@@ -47,10 +55,20 @@ pub async fn discovery(ctx: &mut Context) -> HandlerResult {
 /// Relying Parties will need to fetch this data to be able to verify identity
 /// tokens issued by this daemon instance.
 pub async fn key_set(ctx: &mut Context) -> HandlerResult {
-    let obj = json!({
-        "keys": ctx.app.key_manager.send(GetPublicJwks).await
-    });
-    Ok(json_response(&obj, Some(ctx.app.keys_ttl)))
+    let reply = ctx.app.key_manager.send(GetPublicJwks).await;
+    let mut res = json_response(&json!({ "keys": reply.jwks }));
+    if let Some(expires) = reply.expires {
+        res.typed_header(CacheControl::new().with_public());
+        res.typed_header(Expires::from(expires));
+    } else {
+        res.typed_header(
+            CacheControl::new()
+                .with_public()
+                .with_max_age(ctx.app.keys_ttl)
+                .with_s_max_age(Duration::from_secs(0)),
+        );
+    }
+    Ok(res)
 }
 
 /// Request handler for authentication requests from the RP.

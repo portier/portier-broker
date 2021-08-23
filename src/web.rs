@@ -363,14 +363,11 @@ async fn handle_error(ctx: &Context, err: BrokerError) -> Response {
     let reference = err.log(Some(&ctx.app.rng)).await;
 
     if ctx.want_json {
-        let mut res = json_response(
-            &json!({
-                "error": err.oauth_error_code(),
-                "error_description": &format!("{}", err),
-                "reference": reference,
-            }),
-            None,
-        );
+        let mut res = json_response(&json!({
+            "error": err.oauth_error_code(),
+            "error_description": &format!("{}", err),
+            "reference": reference,
+        }));
         *res.status_mut() = err.http_status_code();
         return res;
     }
@@ -569,13 +566,10 @@ pub fn return_to_relier(ctx: &Context, params: &[(&str, &str)]) -> Response {
 ///
 /// Serializes the argument value to JSON and returns a HTTP 200 response
 /// code with the serialized JSON as the body.
-pub fn json_response(obj: &serde_json::Value, max_age: Option<Duration>) -> Response {
+pub fn json_response(obj: &serde_json::Value) -> Response {
     let body = serde_json::to_string_pretty(&obj).expect("unable to coerce JSON Value into string");
     let mut res = Response::new(Body::from(body));
     res.typed_header(ContentType::json());
-    if let Some(max_age) = max_age {
-        res.typed_header(CacheControl::new().with_public().with_max_age(max_age));
-    }
     res
 }
 

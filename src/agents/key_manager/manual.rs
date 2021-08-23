@@ -9,16 +9,14 @@ use crate::utils::{
 use log::{info, warn};
 use ring::signature::{Ed25519KeyPair, RsaKeyPair};
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, Error as IoError};
 use std::path::PathBuf;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum ManualKeysError {
-    #[error("could not parse keytext: {0}")]
-    InvalidKeytext(#[from] pem::ParseError),
-    #[error("no PEM data found in keytext")]
-    EmptyKeytext,
+    #[error("could not read keyfile '{file}': {err}")]
+    IoError { file: PathBuf, err: IoError },
     #[error("no {} keys found in keyfiles or keytext", signing_alg)]
     MissingKeys { signing_alg: SigningAlgorithm },
 }
@@ -41,77 +39,64 @@ impl ManualKeys {
             "Using manual key management with algorithms: {}",
             SigningAlgorithm::format_list(signing_algs)
         );
+
         let mut parsed = vec![];
         for keyfile in keyfiles {
             let file = match File::open(keyfile) {
                 Ok(file) => file,
                 Err(err) => {
-                    warn!(
-                        "Ignoring keyfile '{}', could not open: {}",
-                        keyfile.display(),
-                        err
-                    );
+                    warn!("{}: ignoring, could not open: {}", keyfile.display(), err);
                     continue;
                 }
             };
-
-            let key_pairs = match pem::parse_key_pairs(BufReader::new(file)) {
-                Ok(key_pairs) => key_pairs,
-                Err(err) => {
-                    warn!(
-                        "Ignoring keyfile '{}', could not parse: {}",
-                        keyfile.display(),
-                        err
-                    );
-                    continue;
-                }
-            };
-
-            if key_pairs.is_empty() {
-                warn!(
-                    "Ignoring keyfile '{}', no PEM data found",
-                    keyfile.display()
-                );
-                continue;
-            }
-
-            let orig_len = key_pairs.len();
-            let mut key_pairs = key_pairs
-                .into_iter()
-                .filter(|key_pair| signing_algs.contains(&key_pair.signing_alg()))
-                .collect::<Vec<_>>();
-            if key_pairs.len() != orig_len {
-                warn!(
-                    "Ignoring {} (of {}) key(s) in '{}' for disabled signing algorithms",
-                    orig_len - key_pairs.len(),
-                    orig_len,
-                    keyfile.display()
-                );
-            }
-
-            parsed.append(&mut key_pairs);
+            let entries = pem::parse_key_pairs(BufReader::new(file)).map_err(|err| {
+                let file = keyfile.clone();
+                ManualKeysError::IoError { file, err }
+            })?;
+            let source = format!("{}", keyfile.display());
+            parsed.push((source, entries));
         }
         if let Some(keytext) = keytext {
-            let mut key_pairs = pem::parse_key_pairs(keytext.as_bytes())?;
-            if key_pairs.is_empty() {
-                return Err(ManualKeysError::EmptyKeytext);
-            }
-            parsed.append(&mut key_pairs);
+            let entries = pem::parse_key_pairs(keytext.as_bytes()).unwrap();
+            let source = "<keytext>".to_owned();
+            parsed.push((source, entries));
         }
 
         let mut ed25519_keys = vec![];
         let mut rsa_keys = vec![];
-        for key_pair in parsed {
-            match key_pair {
-                ParsedKeyPair::Ed25519(key_pair) => ed25519_keys.push(key_pair.into()),
-                ParsedKeyPair::Rsa(key_pair) => rsa_keys.push(key_pair.into()),
+        for (source, entries) in parsed {
+            if entries.is_empty() {
+                warn!("{}: ignoring, no PEM sections found", source);
+            }
+
+            for (idx, result) in entries.into_iter().enumerate() {
+                let idx = idx + 1;
+                let entry = match result {
+                    Ok(entry) => entry,
+                    Err(err) => {
+                        warn!("{} #{}: ignoring, {}", source, idx, err);
+                        continue;
+                    }
+                };
+
+                let alg = entry.key_pair.signing_alg();
+                if !signing_algs.contains(&alg) {
+                    warn!("{} #{}: ignoring, disabled signing algorithm", source, idx);
+                    continue;
+                }
+
+                match entry.key_pair {
+                    ParsedKeyPair::Ed25519(key_pair) => ed25519_keys.push(key_pair.into()),
+                    ParsedKeyPair::Rsa(key_pair) => rsa_keys.push(key_pair.into()),
+                }
+
+                let fp = entry.raw.fingerprint();
+                info!(
+                    "{} #{}: found {} key, fingerprint: {}",
+                    source, idx, alg, fp
+                );
             }
         }
-        info!(
-            "Found keys: {} Ed25519 key(s), {} RSA key(s)",
-            ed25519_keys.len(),
-            rsa_keys.len()
-        );
 
         for signing_alg in signing_algs {
             if match signing_alg {
@@ -154,7 +139,10 @@ impl Handler<GetPublicJwks> for ManualKeys {
     fn handle(&mut self, _message: GetPublicJwks, cx: Context<Self, GetPublicJwks>) {
         let ed25519_jwks = self.ed25519_keys.iter().map(NamedKeyPair::public_jwk);
         let rsa_jwks = self.rsa_keys.iter().map(NamedKeyPair::public_jwk);
-        cx.reply(ed25519_jwks.chain(rsa_jwks).collect());
+        cx.reply(GetPublicJwksReply {
+            jwks: ed25519_jwks.chain(rsa_jwks).collect(),
+            expires: None,
+        });
     }
 }
 
