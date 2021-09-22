@@ -2,6 +2,7 @@ use super::{ConfigBuilder, LegacyLimitPerEmail, LimitConfig};
 use crate::config::StringList;
 use crate::crypto::SigningAlgorithm;
 use crate::webfinger::Link;
+use ipnetwork::IpNetwork;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
@@ -14,6 +15,7 @@ pub struct TomlConfig {
     listen_ip: Option<String>,
     listen_port: Option<u16>,
     public_url: Option<String>,
+    trusted_proxies: Option<Vec<IpNetwork>>,
     data_dir: Option<String>,
 
     allowed_origins: Option<StringList>,
@@ -242,6 +244,9 @@ impl TomlConfig {
         }
         if let Some(val) = parsed.public_url {
             builder.public_url = Some(val);
+        }
+        if let Some(val) = parsed.trusted_proxies {
+            builder.trusted_proxies = val;
         }
         if let Some(val) = parsed.data_dir {
             builder.data_dir = val;
