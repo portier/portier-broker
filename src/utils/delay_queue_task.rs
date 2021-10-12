@@ -1,7 +1,7 @@
 use futures_util::future::{self, Either, FutureExt};
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc;
 use tokio::time::{sleep_until, Duration as TokioDuration, Instant as TokioInstant};
 
@@ -13,12 +13,6 @@ pub trait IntoDeadline {
 impl IntoDeadline for TokioInstant {
     fn into_deadline(self) -> TokioInstant {
         self
-    }
-}
-
-impl IntoDeadline for Instant {
-    fn into_deadline(self) -> TokioInstant {
-        TokioInstant::from_std(self)
     }
 }
 
@@ -63,7 +57,7 @@ impl<K: Clone + Eq + Hash + Send + 'static> DelayQueueTask<K> {
                 tokio::pin!(recv, sleep);
                 match future::select(recv, sleep).await {
                     Either::Left((Some((key, item_deadline)), _)) => {
-                        items.insert(key, deadline);
+                        items.insert(key, item_deadline);
                         if item_deadline < deadline {
                             deadline = item_deadline;
                         }
