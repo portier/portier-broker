@@ -250,8 +250,8 @@ pub async fn callback(ctx: &mut Context) -> HandlerResult {
     let iss = try_get_token_field!(jwt_payload, "iss", descr);
     let aud = try_get_token_field!(jwt_payload, "aud", descr);
     let email = try_get_token_field!(jwt_payload, "email", descr);
-    let iat = try_get_token_field!(jwt_payload, "iat", Value::as_u64, descr);
-    let exp = try_get_token_field!(jwt_payload, "exp", Value::as_u64, descr);
+    let iat = try_get_token_field!(jwt_payload, "iat", value_as_unix_timestamp, descr);
+    let exp = try_get_token_field!(jwt_payload, "exp", value_as_unix_timestamp, descr);
     let nonce = try_get_token_field!(jwt_payload, "nonce", descr);
 
     // Verify the token claims.
@@ -364,4 +364,11 @@ async fn fetch_config(
     })?;
 
     Ok((provider_config, key_set))
+}
+
+/// Try to convert a JSON Value to a u64 Unix timestamp.
+///
+/// Accepts a Number as either u64 or f64, and truncates the latter.
+fn value_as_unix_timestamp(val: &Value) -> Option<u64> {
+    val.as_u64().or_else(|| val.as_f64().map(|num| num as u64))
 }
