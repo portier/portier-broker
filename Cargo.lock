@@ -619,13 +619,13 @@ dependencies = [
 
 [[package]]
 name = "hyper-staticfile"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9cf435f95723ba94d2e44991abf717dd547b73f505830a917dc442a9195df06b"
+checksum = "3a244ca2999dd477ab5284849fadd6b1d9d32f16cb47c205c1ff126f7602a1e7"
 dependencies = [
- "chrono",
  "futures-util",
  "http",
+ "httpdate",
  "hyper",
  "mime_guess",
  "percent-encoding",
@@ -670,9 +670,9 @@ dependencies = [
 
 [[package]]
 name = "instant"
-version = "0.1.11"
+version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "716d3d89f35ac6a34fd0eed635395f4c3b76fa889338a4632e5231a8684216bd"
+checksum = "7a5bbe824c507c5da5956355e86a746d82e0e1464f65d862cc5e71da70e94b2c"
 dependencies = [
  "cfg-if",
 ]
