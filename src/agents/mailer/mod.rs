@@ -1,8 +1,10 @@
+use std::convert::TryInto;
+
 use crate::email_address::EmailAddress;
 use crate::utils::agent::Message;
 
-#[cfg(feature = "lettre_email")]
-use ::{lettre::SendableEmail, lettre_email::EmailBuilder};
+#[cfg(feature = "lettre")]
+use ::lettre::message::{Message as LettreMessage, MultiPart};
 
 /// Message requesting a mail be sent.
 ///
@@ -18,18 +20,31 @@ impl Message for SendMail {
     type Reply = bool;
 }
 
-#[cfg(feature = "lettre_email")]
+#[cfg(feature = "lettre")]
 impl SendMail {
-    /// Convert the message to a lettre `SendableEmail`.
-    pub fn into_lettre_email(self, from_address: &EmailAddress, from_name: &str) -> SendableEmail {
-        EmailBuilder::new()
-            .from((from_address.as_str(), from_name))
-            .to(self.to.into_string())
+    /// Convert the message to a Lettre `Message`.
+    pub fn into_lettre_message(
+        self,
+        from_address: &EmailAddress,
+        from_name: &str,
+    ) -> LettreMessage {
+        LettreMessage::builder()
+            .from(
+                (from_name, from_address.as_str())
+                    .try_into()
+                    .expect("Could not build mail From header"),
+            )
+            .to(self
+                .to
+                .as_str()
+                .parse()
+                .expect("Could not build mail To header"))
             .subject(self.subject)
-            .alternative(self.html_body, self.text_body)
-            .build()
+            .multipart(MultiPart::alternative_plain_html(
+                self.text_body,
+                self.html_body,
+            ))
             .expect("Could not build mail")
-            .into()
     }
 }
 
