@@ -88,10 +88,22 @@ jobs:
     - name: Check translations
       run: |
         set -e
-        ./msgfmt.sh
+
         if [ -n "$(git status -s)" ]; then
+          echo "Working tree dirty after checking translations:"
+          echo
+          git status
+          exit 1
+        fi
+
+        ./msgfmt.sh
+
+        if [ -n "$(git status -s)" ]; then
+          echo "Working tree dirty after checking translations."
           echo "If this fails, the lang/*.mo files are out of date."
           echo "To fix this, run: ./msgfmt.sh"
+          echo
+          git status
           exit 1
         fi
 
