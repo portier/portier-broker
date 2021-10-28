@@ -23,7 +23,7 @@ export default ({ mailbox }: { mailbox: Mailbox }): Broker => {
     BROKER_PUBLIC_URL: "http://localhost:44133",
     BROKER_FROM_ADDRESS: "portier@example.com",
     BROKER_LIMITS: "100000/s",
-    BROKER_ALLOWED_DOMAINS: "example.com"
+    BROKER_ALLOWED_DOMAINS: "example.com",
   };
 
   switch (TEST_STORE) {
@@ -99,21 +99,10 @@ export default ({ mailbox }: { mailbox: Mailbox }): Broker => {
     })
     .on("line", (line: string) => {
       switch (line) {
-        case "-----BEGIN RAW EMAIL-----":
         case "-----BEGIN EMAIL TEXT BODY-----":
           inMail = true;
           mailBuffer = "";
           break;
-
-        case "-----END RAW EMAIL-----": {
-          const mail = mailBuffer;
-          inMail = false;
-          mailBuffer = "";
-          if (mail) {
-            mailbox.pushRawMail(mail);
-          }
-          break;
-        }
 
         case "-----END EMAIL TEXT BODY-----": {
           const mail = mailBuffer;

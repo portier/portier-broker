@@ -24,6 +24,11 @@ export default ({ mailbox }: { mailbox: Mailbox }): HttpMailer => {
 
   let requests: HttpMailerRequest[] = [];
 
+  app.post("/raw", (req, res) => {
+    mailbox.pushRawMail(req);
+    return res.status(204).end();
+  });
+
   app.post("/postmark", jsonParser, (req, res) => {
     requests.push({ headers: req.headers, body: req.body });
     mailbox.pushMail(req.body.TextBody);

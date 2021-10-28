@@ -12,8 +12,8 @@ edition = "2018"
 [features]
 default = ["redis", "rusqlite", "lettre_smtp", "lettre_sendmail", "postmark", "mailgun"]
 insecure = []
-lettre_smtp = ["lettre", "lettre/smtp-transport", "lettre_email"]
-lettre_sendmail = ["lettre", "lettre/sendmail-transport", "lettre_email"]
+lettre_smtp = ["lettre", "lettre/smtp-transport", "lettre/native-tls"]
+lettre_sendmail = ["lettre", "lettre/sendmail-transport"]
 postmark = []
 mailgun = []
 
@@ -57,12 +57,9 @@ features = ["full"]
 
 [dependencies.lettre]
 optional = true
-version = "0.9.6"
+version = "0.10.0-rc.3"
 default-features = false
-
-[dependencies.lettre_email]
-optional = true
-version = "0.9.4"
+features = ["builder"]
 
 [dependencies.log]
 version = "0.4.11"
