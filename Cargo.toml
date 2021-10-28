@@ -21,6 +21,9 @@ mailgun = []
 name = "portier-broker"
 path = "src/main.rs"
 
+[profile.release]
+overflow-checks = true
+
 [dependencies]
 accept-language = "2.0.0"
 base64 = "0.13.0"
