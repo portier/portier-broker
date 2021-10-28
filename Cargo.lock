@@ -566,7 +566,7 @@ dependencies = [
  "hyper",
  "mime_guess",
  "percent-encoding",
- "rand 0.8.4",
+ "rand",
  "tokio",
  "url",
  "winapi",
