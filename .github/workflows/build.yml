@@ -90,7 +90,7 @@ jobs:
         set -e
 
         if [ -n "$(git status -s)" ]; then
-          echo "Working tree dirty after checking translations:"
+          echo "Working tree dirty before checking translations:"
           echo
           git status
           exit 1
