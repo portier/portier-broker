@@ -60,7 +60,7 @@ features = ["full"]
 
 [dependencies.lettre]
 optional = true
-version = "0.10.0-rc.3"
+version = "0.10.0-rc.4"
 default-features = false
 features = ["builder"]
 
