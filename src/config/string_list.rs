@@ -221,7 +221,7 @@ unusual# comment # syntax
         let mut input_reader = super::StringListReader::new(INPUT, &dummy_path);
         let mut expect_iter = EXPECT.iter();
         loop {
-            let input_item = input_reader.next().map(|item| item.unwrap());
+            let input_item = input_reader.next().map(Result::unwrap);
             let expect_item = expect_iter.next().map(|item| item.to_string());
             assert_eq!(input_item, expect_item);
             if input_item.is_none() {

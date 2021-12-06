@@ -155,7 +155,7 @@ impl TomlConfig {
                 parsed.public_url = table.public_url.clone();
             }
             if parsed.allowed_origins.is_none() {
-                parsed.allowed_origins = table.allowed_origins.clone().map(|list| list.into());
+                parsed.allowed_origins = table.allowed_origins.clone().map(Into::into);
             }
         }
 

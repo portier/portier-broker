@@ -120,9 +120,7 @@ impl<T: KeyPairExt + GeneratedKeyPair> ActiveKeySet<T> {
 
     fn parse_one(pem: &str) -> T {
         let mut entries = pem::parse_key_pairs(pem.as_bytes()).unwrap();
-        if entries.len() != 1 {
-            panic!("Expected exactly one key in PEM");
-        }
+        assert!(entries.len() == 1, "Expected exactly one key in PEM");
         let entry = entries.pop().unwrap().expect("Could not parse key as PEM");
         T::from_parsed(entry.key_pair).expect("Found key pair of incorrect type")
     }

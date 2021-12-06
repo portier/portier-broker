@@ -88,8 +88,9 @@ impl<K: Clone + Eq + Hash + Send + 'static> DelayQueueTask<K> {
     /// Insert or replace a timer.
     pub async fn insert(&mut self, key: K, deadline: impl IntoDeadline) {
         let deadline = deadline.into_deadline();
-        if self.tx.send((key, deadline)).await.is_err() {
-            panic!("Tried to send to DelayQueueTask that has panicked");
-        }
+        assert!(
+            self.tx.send((key, deadline)).await.is_ok(),
+            "Tried to send to DelayQueueTask that has panicked"
+        );
     }
 }
