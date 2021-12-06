@@ -105,12 +105,11 @@ impl RusqliteStore {
                 conn.query_row("SELECT * FROM pragma_application_id()", [], |row| {
                     row.get(0)
                 })?;
-            if app_id != APP_ID {
-                panic!(
-                    "The SQLite database has an invalid application ID: {}",
-                    app_id
-                );
-            }
+            assert!(
+                app_id == APP_ID,
+                "The SQLite database has an invalid application ID: {}",
+                app_id
+            );
         }
         Ok(())
     }

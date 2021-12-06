@@ -210,7 +210,7 @@ impl GeneratedKeyPair for RsaKeyPair {
     type Config = Vec<String>;
 
     fn generate(config: Vec<String>) -> String {
-        let mut args: Vec<OsString> = config.iter().map(|arg| arg.into()).collect();
+        let mut args: Vec<OsString> = config.iter().map(Into::into).collect();
         let program = args.remove(0);
         let output = Command::new(program)
             .args(args)
@@ -218,12 +218,11 @@ impl GeneratedKeyPair for RsaKeyPair {
             .stdout(Stdio::piped())
             .output()
             .expect("Failed to run command to generate RSA key");
-        if !output.status.success() {
-            panic!(
-                "Command to generate RSA key failed with status {}",
-                output.status
-            );
-        }
+        assert!(
+            output.status.success(),
+            "Command to generate RSA key failed with status {}",
+            output.status
+        );
         String::from_utf8(output.stdout).expect("Generated RSA is not UTF-8")
     }
 

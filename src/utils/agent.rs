@@ -146,9 +146,10 @@ pub async fn spawn_agent<A: Agent>(agent: A) -> Addr<A> {
         let send_fut = tx.send(Box::new(move |agent: &mut A| {
             agent.started(cx);
         }));
-        if send_fut.await.is_err() {
-            panic!("agent stopped before startup completed");
-        }
+        assert!(
+            send_fut.await.is_ok(),
+            "agent stopped before startup completed"
+        );
     });
     agent.spawn_loop(rx);
     reply_fut.await;
@@ -201,9 +202,10 @@ impl<A> Addr<A> {
             let send_fut = tx.send(Box::new(move |agent: &mut A| {
                 agent.handle(message, cx);
             }));
-            if send_fut.await.is_err() {
-                panic!("tried to send message to stopped agent");
-            }
+            assert!(
+                send_fut.await.is_ok(),
+                "tried to send message to stopped agent"
+            );
         });
         reply_fut
     }

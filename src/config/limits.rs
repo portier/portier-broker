@@ -165,7 +165,7 @@ mod tests {
             Ok(LimitConfig {
                 max_count: 10,
                 window: Duration::from_secs(1),
-                ..Default::default()
+                ..LimitConfig::default()
             })
         );
         assert_eq!(
@@ -175,7 +175,7 @@ mod tests {
                 decr_complete: true,
                 max_count: 11,
                 window: Duration::from_secs(120),
-                ..Default::default()
+                ..LimitConfig::default()
             })
         );
         assert_eq!(
@@ -184,7 +184,7 @@ mod tests {
                 with_email_domain: true,
                 max_count: 30,
                 window: Duration::from_secs(3600),
-                ..Default::default()
+                ..LimitConfig::default()
             })
         );
         assert_eq!(
@@ -193,7 +193,7 @@ mod tests {
                 with_origin: true,
                 max_count: 200,
                 window: Duration::from_secs(86400),
-                ..Default::default()
+                ..LimitConfig::default()
             })
         );
         assert_eq!(
@@ -203,7 +203,7 @@ mod tests {
                 extend_window: true,
                 max_count: 5,
                 window: Duration::from_secs(1),
-                ..Default::default()
+                ..LimitConfig::default()
             })
         );
     }

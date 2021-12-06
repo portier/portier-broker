@@ -125,7 +125,7 @@ mod tests {
         let trusted: Vec<_> = trusted.iter().map(|net| net.parse().unwrap()).collect();
 
         let mut req = http::Request::new(());
-        if header != "" {
+        if !header.is_empty() {
             req.headers_mut()
                 .insert(&*X_FORWARDED_FOR, HeaderValue::from_static(header));
         }
