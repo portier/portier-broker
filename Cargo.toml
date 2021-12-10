@@ -55,7 +55,7 @@ default-features = false
 features = ["std"]
 
 [dependencies.hyper]
-version = "0.14.11"
+version = "0.14.16"
 features = ["full"]
 
 [dependencies.lettre]
