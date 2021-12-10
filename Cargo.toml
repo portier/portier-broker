@@ -84,7 +84,7 @@ version = "0.26.3"
 features = ["bundled"]
 
 [dependencies.serde]
-version = "1.0.114"
+version = "1.0.131"
 features = ["derive"]
 
 [dependencies.tokio]
