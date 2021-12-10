@@ -80,7 +80,7 @@ features = ["script", "tokio-comp"]
 
 [dependencies.rusqlite]
 optional = true
-version = "0.26.0"
+version = "0.26.3"
 features = ["bundled"]
 
 [dependencies.serde]
