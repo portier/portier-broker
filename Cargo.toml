@@ -102,4 +102,4 @@ version = "2.1.1"
 features = ["serde"]
 
 [target.'cfg(unix)'.dependencies]
-sd-notify = "0.3.0"
+sd-notify = "0.4.0"
