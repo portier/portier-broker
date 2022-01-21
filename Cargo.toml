@@ -55,6 +55,10 @@ version = "4.6"
 default-features = false
 features = ["std"]
 
+[dependencies.ctrlc]
+version = "3.2.1"
+features = ["termination"]
+
 [dependencies.hyper]
 version = "0.14.16"
 features = ["full"]

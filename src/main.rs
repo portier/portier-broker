@@ -154,7 +154,25 @@ async fn start_server(builder: ConfigBuilder) {
         let app = ConfigRc::clone(&app);
         future::ok::<_, BoxError>(Service::new(app, stream))
     });
-    builder.serve(make_service).await.expect("Server error");
+    let server = builder.serve(make_service);
+
+    let (exit_tx, mut exit_rx) = tokio::sync::mpsc::channel(1);
+    ctrlc::set_handler(move || {
+        exit_tx
+            .blocking_send(())
+            .expect("Could not send the exit signal")
+    })
+    .expect("Could not install the exit signal handler");
+    let server = server.with_graceful_shutdown(async move {
+        exit_rx
+            .recv()
+            .await
+            .expect("Could not wait for the exit signal");
+        log::info!("Shutting down");
+    });
+
+    server.await.expect("Server error");
+    log::info!("Shutdown complete");
 }
 
 async fn import_keys(builder: ConfigBuilder, path: &Path, dry_run: bool) {
