@@ -160,7 +160,7 @@ async fn start_server(builder: ConfigBuilder) {
     ctrlc::set_handler(move || {
         exit_tx
             .blocking_send(())
-            .expect("Could not send the exit signal")
+            .expect("Could not send the exit signal");
     })
     .expect("Could not install the exit signal handler");
     let server = server.with_graceful_shutdown(async move {
