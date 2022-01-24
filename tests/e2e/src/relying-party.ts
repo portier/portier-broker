@@ -40,9 +40,10 @@ export default (): RelyingParty => {
     } catch (err) {
       console.error("RP failed to start authentication:");
       console.error(err);
-      return res.status(500).type("html").end(`
+      res.status(500).type("html").end(`
         <title>RP: Error</title>
       `);
+      return;
     }
 
     res.redirect(303, authUrl);
@@ -57,9 +58,10 @@ export default (): RelyingParty => {
         console.error(`RP got an error from the broker: ${params.error}`);
         console.error(`Description: ${params.error_description}`);
       }
-      return res.status(500).type("html").end(`
+      res.status(500).type("html").end(`
         <title>RP: Got error</title>
       `);
+      return;
     }
 
     // For testing the authorization code flow.
@@ -79,9 +81,10 @@ export default (): RelyingParty => {
           console.error(`RP got an error from the broker: ${body.error}`);
           console.error(`Description: ${body.error_description}`);
         }
-        return res.status(500).type("html").end(`
+        res.status(500).type("html").end(`
           <title>RP: Got error</title>
         `);
+        return;
       }
       token = body.id_token || "";
     }
@@ -94,9 +97,10 @@ export default (): RelyingParty => {
         console.error("RP failed to verify token:");
         console.error(err);
       }
-      return res.status(500).type("html").end(`
+      res.status(500).type("html").end(`
         <title>RP: Invalid token</title>
       `);
+      return;
     }
 
     res.type("html").end(`
