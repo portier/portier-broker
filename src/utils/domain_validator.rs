@@ -99,27 +99,26 @@ impl DomainValidator {
                 protocol: Protocol::Udp,
                 tls_dns_name: None,
                 trust_nx_responses: true,
+                bind_addr: None,
             });
         }
 
-        let opts = ResolverOpts {
-            // Email domains must always be FQDNs.
-            ndots: 0,
-            // Tighter timeouts and retries, because we're handling a user agent request.
-            timeout: Duration::from_secs(5),
-            attempts: 1,
-            // Trust the server, don't do DNSSEC ourselves.
-            validate: false,
-            // Assume mail servers still require IPv4, so try query only A-records first.
-            // This creates an edge case with `verify_public_ip`, where the mail server only has
-            // private IPv4, but public IPv6, yet we fail. We consider this extremely unlikely.
-            ip_strategy: LookupIpStrategy::Ipv4thenIpv6,
-            // Leave all caching to the server.
-            cache_size: 0,
-            // Per our config docs, using `/etc/hosts` would be surprising behaviour.
-            use_hosts_file: false,
-            ..ResolverOpts::default()
-        };
+        let mut opts = ResolverOpts::default();
+        // Email domains must always be FQDNs.
+        opts.ndots = 0;
+        // Tighter timeouts and retries, because we're handling a user agent request.
+        opts.timeout = Duration::from_secs(5);
+        opts.attempts = 1;
+        // Trust the server, don't do DNSSEC ourselves.
+        opts.validate = false;
+        // Assume mail servers still require IPv4, so try query only A-records first.
+        // This creates an edge case with `verify_public_ip`, where the mail server only has
+        // private IPv4, but public IPv6, yet we fail. We consider this extremely unlikely.
+        opts.ip_strategy = LookupIpStrategy::Ipv4thenIpv6;
+        // Leave all caching to the server.
+        opts.cache_size = 0;
+        // Per our config docs, using `/etc/hosts` would be surprising behaviour.
+        opts.use_hosts_file = false;
 
         // Unwrap, because this currently doesn't appear to fail ever.
         self.dns_resolver = Some(TokioAsyncResolver::tokio(cfg, opts).unwrap());
