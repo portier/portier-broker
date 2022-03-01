@@ -15,7 +15,7 @@ lazy_static::lazy_static! {
 /// Walks the path indicated by `X-Forwarded-For` until it finds the first non-proxy IP address.
 pub fn real_ip<B>(received_from: SocketAddr, req: &Request<B>, trusted: &[IpNetwork]) -> IpAddr {
     let received_from = received_from.ip();
-    let list = req
+    let list: Vec<_> = req
         .headers()
         .get(&*X_FORWARDED_FOR)
         .and_then(|input| input.to_str().ok())
@@ -26,7 +26,7 @@ pub fn real_ip<B>(received_from: SocketAddr, req: &Request<B>, trusted: &[IpNetw
                 .collect::<Result<_, _>>()
                 .ok()
         })
-        .unwrap_or_else(Vec::new);
+        .unwrap_or_default();
 
     let mut iter = once(received_from).chain(list).peekable();
     loop {
