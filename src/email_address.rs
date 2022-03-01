@@ -134,7 +134,7 @@ impl EmailAddress {
         };
 
         // Ignore dots
-        let local = local.replace(".", "");
+        let local = local.replace('.', "");
 
         EmailAddress::from_parts(&local, domain)
     }
