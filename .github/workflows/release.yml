@@ -40,7 +40,7 @@ jobs:
         rm /etc/apt/apt.conf.d/docker-clean
 
     - name: APT cache
-      uses: actions/cache@v2
+      uses: actions/cache@v3
       with:
         path: |
           /var/cache/apt/
@@ -83,7 +83,7 @@ jobs:
         rustup target add $build_targets
 
     - name: Cache
-      uses: actions/cache@v2
+      uses: actions/cache@v3
       with:
         path: |
           ~/.cargo/registry
@@ -162,7 +162,7 @@ jobs:
         rustup target add $build_targets
 
     - name: Cache
-      uses: actions/cache@v2
+      uses: actions/cache@v3
       with:
         path: |
           ~/.cargo/registry
@@ -227,7 +227,7 @@ jobs:
         rustup target add $build_targets
 
     - name: Cache
-      uses: actions/cache@v2
+      uses: actions/cache@v3
       with:
         path: |
           ~/.cargo/registry
