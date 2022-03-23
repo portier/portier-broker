@@ -526,9 +526,9 @@ checksum = "c4a1e36c821dbe04574f602848a19f742f4fb3c98d40449f11bcad18d6b17421"
 
 [[package]]
 name = "hyper"
-version = "0.14.17"
+version = "0.14.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "043f0e083e9901b6cc658a77d1eb86f4fc650bbb977a4337dd63192826aa85dd"
+checksum = "b26ae0a80afebe130861d90abf98e3814a4f28a4c6ffeb5ab8ebb2be311e0ef2"
 dependencies = [
  "bytes",
  "futures-channel",
@@ -719,14 +719,14 @@ version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e19e8d5c34a3e0e2223db8e060f9e8264aeeb5c5fc64a4ee9965c062211c024b"
 dependencies = [
- "log 0.4.14",
+ "log 0.4.16",
 ]
 
 [[package]]
 name = "log"
-version = "0.4.14"
+version = "0.4.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51b9bbe6c47d51fc3e1a9b945965946b4c44142ab8792c50835a980d362c2710"
+checksum = "6389c490849ff5bc16be905ae24bc913a9c8892e19b2341dbc175e14c341c2b8"
 dependencies = [
  "cfg-if",
 ]
@@ -790,7 +790,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "52da4364ffb0e4fe33a9841a98a3f3014fb964045ce4f7a45a398243c8d6b0c9"
 dependencies = [
  "libc",
- "log 0.4.14",
+ "log 0.4.16",
  "miow",
  "ntapi",
  "wasi 0.11.0+wasi-snapshot-preview1",
@@ -824,7 +824,7 @@ checksum = "48ba9f7719b5a0f42f338907614285fb5fd70e53858141f69898a1fb7203b24d"
 dependencies = [
  "lazy_static",
  "libc",
- "log 0.4.14",
+ "log 0.4.16",
  "openssl",
  "openssl-probe",
  "openssl-sys",
@@ -1010,7 +1010,7 @@ dependencies = [
  "lazy_static",
  "lettre",
  "listenfd",
- "log 0.4.14",
+ "log 0.4.16",
  "matches",
  "mustache",
  "native-tls",
@@ -1446,7 +1446,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-sink",
- "log 0.4.14",
+ "log 0.4.16",
  "pin-project-lite",
  "tokio",
 ]
@@ -1502,7 +1502,7 @@ dependencies = [
  "idna",
  "ipnet",
  "lazy_static",
- "log 0.4.14",
+ "log 0.4.16",
  "rand",
  "smallvec",
  "thiserror",
@@ -1520,7 +1520,7 @@ dependencies = [
  "cfg-if",
  "futures-util",
  "lazy_static",
- "log 0.4.14",
+ "log 0.4.16",
  "lru-cache",
  "parking_lot 0.12.0",
  "smallvec",
@@ -1614,7 +1614,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ce8a968cb1cd110d136ff8b819a556d6fb6d919363c61534f6860c7eb172ba0"
 dependencies = [
- "log 0.4.14",
+ "log 0.4.16",
  "try-lock",
 ]
 
@@ -1648,7 +1648,7 @@ checksum = "8b21c0df030f5a177f3cba22e9bc4322695ec43e7257d865302900290bcdedca"
 dependencies = [
  "bumpalo",
  "lazy_static",
- "log 0.4.14",
+ "log 0.4.16",
  "proc-macro2",
  "quote",
  "syn",
