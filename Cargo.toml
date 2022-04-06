@@ -7,8 +7,8 @@ homepage = "http://portier.io"
 repository = "https://github.com/portier/portier-broker"
 readme = "README.md"
 license = "MIT/Apache-2.0"
-edition = "2018"
-resolver = "2"
+rust-version = "1.56"
+edition = "2021"
 
 [features]
 default = ["redis", "rusqlite", "lettre_smtp", "lettre_sendmail", "postmark", "mailgun"]
@@ -106,4 +106,4 @@ version = "2.1.1"
 features = ["serde"]
 
 [target.'cfg(unix)'.dependencies]
-sd-notify = "0.3.0"
+sd-notify = "0.4.0"
