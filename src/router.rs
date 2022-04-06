@@ -8,7 +8,7 @@ pub async fn router(ctx: &mut Context) -> HandlerResult {
         // Relying party endpoints
         (&Method::GET, "/.well-known/openid-configuration") => handlers::auth::discovery(ctx).await,
         (&Method::GET, "/keys.json") => handlers::auth::key_set(ctx).await,
-        (&Method::GET, "/auth") | (&Method::POST, "/auth") => handlers::auth::auth(ctx).await,
+        (&(Method::GET | Method::POST), "/auth") => handlers::auth::auth(ctx).await,
         (&Method::POST, "/normalize") => handlers::normalize::normalize(ctx).await,
         (&Method::POST, "/token") => handlers::token::token(ctx).await,
 
@@ -30,7 +30,7 @@ pub async fn router(ctx: &mut Context) -> HandlerResult {
         (&Method::GET, "/metrics") => handlers::pages::metrics(ctx).await,
 
         // Lastly, fall back to trying to serve static files out of ./res/
-        (&Method::GET, _) | (&Method::HEAD, _) => handlers::pages::static_(ctx).await,
+        (&(Method::GET | Method::HEAD), _) => handlers::pages::static_(ctx).await,
 
         _ => Ok(empty_response(StatusCode::BAD_REQUEST)),
     }

@@ -293,7 +293,7 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
             // Discovery succeeded, simply return the response.
             return Ok(v);
         }
-        Ok(Err(e @ BrokerError::Provider(_))) | Ok(Err(e @ BrokerError::ProviderCancelled)) => {
+        Ok(Err(e @ (BrokerError::Provider(_) | BrokerError::ProviderCancelled))) => {
             // Provider errors cause fallback to email loop auth.
             e.log(None).await;
         }

@@ -385,9 +385,11 @@ async fn handle_error(ctx: &Context, err: BrokerError) -> Response {
     let catalog = ctx.catalog();
     match (err, can_redirect) {
         // Redirects with description.
-        (err @ BrokerError::Input(_), true)
-        | (err @ BrokerError::Provider(_), true)
-        | (err @ BrokerError::ProviderInput(_), true) => return_to_relier(
+        (
+            err
+            @ (BrokerError::Input(_) | BrokerError::Provider(_) | BrokerError::ProviderInput(_)),
+            true,
+        ) => return_to_relier(
             ctx,
             &[
                 ("error", err.oauth_error_code()),
@@ -405,7 +407,7 @@ async fn handle_error(ctx: &Context, err: BrokerError) -> Response {
             *res.status_mut() = err.http_status_code();
             res
         }
-        (err @ BrokerError::Provider(_), false) | (err @ BrokerError::ProviderInput(_), false) => {
+        (err @ (BrokerError::Provider(_) | BrokerError::ProviderInput(_)), false) => {
             let mut res = html_response(ctx.app.templates.error.render(&[
                 ("error", &format!("{}", err)),
                 (
