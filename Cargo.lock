@@ -182,9 +182,9 @@ checksum = "56899898ce76aaf4a0f24d914c97ea6ed976d42fec6ad33fcbb0a1103e07b2b0"
 
 [[package]]
 name = "email-encoding"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75b91dddc343e7eaa27f9764e5bffe57370d957017fdd75244f5045e829a8441"
+checksum = "827e1fb86d24d558ab0454ca3fa084f8a6144ade1e3e6982f697c586bf96b41b"
 dependencies = [
  "base64",
  "memchr",
