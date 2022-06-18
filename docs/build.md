@@ -1,7 +1,7 @@
 # Building the broker
 
 To build the broker from source code, you'll need [Rust] installed. We
-currently support Rust 1.56 and newer.
+currently support Rust 1.56.1 and newer.
 
 [rust]: https://www.rust-lang.org/
 

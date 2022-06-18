@@ -7,7 +7,7 @@ homepage = "http://portier.io"
 repository = "https://github.com/portier/portier-broker"
 readme = "README.md"
 license = "MIT/Apache-2.0"
-rust-version = "1.56"
+rust-version = "1.56.1"
 edition = "2021"
 
 [features]
