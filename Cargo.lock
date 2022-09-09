@@ -978,7 +978,7 @@ dependencies = [
  "hyper",
  "hyper-staticfile",
  "hyper-tls",
- "idna 0.2.3",
+ "idna 0.3.0",
  "ipnetwork",
  "lazy_static",
  "lettre",
