@@ -79,7 +79,7 @@ default-features = false
 
 [dependencies.redis]
 optional = true
-version = "0.21.0"
+version = "0.22.0"
 default-features = false
 features = ["script", "tokio-comp"]
 
