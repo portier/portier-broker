@@ -7,7 +7,7 @@ homepage = "http://portier.io"
 repository = "https://github.com/portier/portier-broker"
 readme = "README.md"
 license = "MIT/Apache-2.0"
-rust-version = "1.56.1"
+rust-version = "1.59"
 edition = "2021"
 
 [features]
@@ -79,7 +79,7 @@ default-features = false
 
 [dependencies.redis]
 optional = true
-version = "0.21.0"
+version = "0.22.0"
 default-features = false
 features = ["script", "tokio-comp"]
 
