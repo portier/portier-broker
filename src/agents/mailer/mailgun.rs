@@ -39,7 +39,7 @@ impl Handler<SendMail> for MailgunMailer {
     fn handle(&mut self, message: SendMail, cx: Context<Self, SendMail>) {
         let body = form_urlencoded::Serializer::new(String::new())
             .append_pair("from", &self.from)
-            .append_pair("to", &message.to.to_string())
+            .append_pair("to", message.to.as_ref())
             .append_pair("subject", &message.subject)
             .append_pair("html", &message.html_body)
             .append_pair("text", &message.text_body)

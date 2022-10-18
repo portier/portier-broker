@@ -55,7 +55,7 @@ impl FromStr for LimitConfig {
         let window_str = &rate[(rate_sep + 1)..];
 
         let window_split = window_str
-            .find(|c: char| !c.is_digit(10))
+            .find(|c: char| !c.is_ascii_digit())
             .ok_or(LimitConfigError::NoWindowUnit)?;
         let mut window = if window_split == 0 {
             1
