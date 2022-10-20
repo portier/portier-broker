@@ -962,7 +962,7 @@ checksum = "1df8c4ec4b0627e53bdf214615ad287367e482558cf84b109250b37464dc03ae"
 
 [[package]]
 name = "portier_broker"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "accept-language",
  "base64",
