@@ -4,7 +4,7 @@ use crate::email_address::EmailAddress;
 use crate::utils::agent::Message;
 
 #[cfg(feature = "lettre")]
-use ::lettre::message::{Message as LettreMessage, MultiPart};
+use ::lettre::message::{Mailbox, Message as LettreMessage, MultiPart};
 
 /// Message requesting a mail be sent.
 ///
@@ -34,11 +34,13 @@ impl SendMail {
                     .try_into()
                     .expect("Could not build mail From header"),
             )
-            .to(self
-                .to
-                .as_str()
-                .parse()
-                .expect("Could not build mail To header"))
+            .to(Mailbox::new(
+                None,
+                self.to
+                    .as_str()
+                    .parse()
+                    .expect("Could not build mail To header"),
+            ))
             .subject(self.subject)
             .multipart(MultiPart::alternative_plain_html(
                 self.text_body,
