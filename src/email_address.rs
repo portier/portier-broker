@@ -11,18 +11,47 @@ fn is_invalid_domain_char(c: char) -> bool {
 
 #[derive(Debug, Error)]
 pub enum ParseEmailError {
+    #[error("email address contains invalid characters")]
+    InvalidChars,
     #[error("missing '@' separator in email address")]
     NoSeparator,
     #[error("local part of an email address cannot be empty")]
     EmptyLocal,
+    #[error("local part of the email address is too long")]
+    LocalPartTooLong,
     #[error("invalid international domain name in email address")]
     InvalidIdna(idna::Errors),
     #[error("domain part of an email address cannot be empty")]
     EmptyDomain,
     #[error("email address contains invalid characters in the domain part")]
     InvalidDomainChars,
+    #[error("domain part of the email address is too long")]
+    DomainTooLong,
+    #[error("domain part of the email address contains a component that is too long")]
+    DomainComponentTooLong,
     #[error("email address domain part cannot be a raw IP address")]
     RawAddrNotAllowed,
+}
+
+impl From<email_address::Error> for ParseEmailError {
+    fn from(err: email_address::Error) -> Self {
+        use email_address::Error as Raw;
+        match err {
+            Raw::InvalidCharacter => Self::InvalidChars,
+            Raw::MissingSeparator => Self::NoSeparator,
+            Raw::LocalPartEmpty => Self::EmptyLocal,
+            Raw::LocalPartTooLong => Self::LocalPartTooLong,
+            Raw::DomainEmpty => Self::EmptyDomain,
+            Raw::DomainTooLong => Self::DomainTooLong,
+            Raw::SubDomainTooLong => Self::DomainComponentTooLong,
+            // It appears these are never produced.
+            Raw::DomainTooFew
+            | Raw::DomainInvalidSeparator
+            | Raw::UnbalancedQuotes
+            | Raw::InvalidComment
+            | Raw::InvalidIPAddress => unreachable!(),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -52,24 +81,26 @@ impl std::str::FromStr for EmailAddress {
     /// <https://github.com/portier/portier.github.io/blob/main/specs/Email-Normalization.md>
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         let local_end = input.rfind('@').ok_or(ParseEmailError::NoSeparator)?;
-        // Transform the local part to lowercase
+        // Transform the local part to lowercase.
         let local = input[..local_end].to_lowercase();
-        if local.is_empty() {
-            return Err(ParseEmailError::EmptyLocal);
-        }
-        // Verify and normalize the domain
+        // Normalize international domain names.
         let domain =
             idna::domain_to_ascii(&input[local_end + 1..]).map_err(ParseEmailError::InvalidIdna)?;
-        if domain.is_empty() {
-            return Err(ParseEmailError::EmptyDomain);
-        }
-        if domain.find(is_invalid_domain_char).is_some() {
-            return Err(ParseEmailError::InvalidDomainChars);
-        }
+        // Reject IP addresses.
         if domain.parse::<std::net::Ipv4Addr>().is_ok() {
             return Err(ParseEmailError::RawAddrNotAllowed);
         }
-        Ok(EmailAddress::from_parts(&local, &domain))
+        // The email_address crate doesn't validate the domain per WHATWG, but
+        // our normalization spec requires it.
+        if domain.find(is_invalid_domain_char).is_some() {
+            return Err(ParseEmailError::InvalidDomainChars);
+        }
+        // Perform remaining validation using the email_address crate. This
+        // ensures we don't encounter any unexpected errors when sending mail
+        // using Lettre.
+        let result = EmailAddress::from_parts(&local, &domain);
+        email_address::EmailAddress::from_str(&result.serialization)?;
+        Ok(result)
     }
 }
 
@@ -81,7 +112,7 @@ impl AsRef<str> for EmailAddress {
 }
 
 impl EmailAddress {
-    /// Create an email address from trusted local and domain parts.
+    /// Create an email address from local and domain parts.
     fn from_parts(local: &str, domain: &str) -> EmailAddress {
         EmailAddress {
             serialization: format!("{}@{}", local, domain),
