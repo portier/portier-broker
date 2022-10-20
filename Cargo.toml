@@ -59,6 +59,10 @@ features = ["std"]
 version = "3.2.1"
 features = ["termination"]
 
+[dependencies.email_address]
+version = "0.2.3"
+default-features = false
+
 [dependencies.hyper]
 version = "0.14.16"
 features = ["full"]

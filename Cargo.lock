@@ -970,6 +970,7 @@ dependencies = [
  "combine",
  "ctrlc",
  "docopt",
+ "email_address",
  "envy",
  "futures-util",
  "gettext",
