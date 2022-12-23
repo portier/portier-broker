@@ -128,8 +128,13 @@ jobs:
           exit 1
         fi
 
+    - name: Install Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: 18
+
     - name: E2E test deps
-      run: cd tests/e2e/ && yarn --frozen-lockfile
+      run: cd tests/e2e/ && npm install
 
     - name: E2E test Firefox
       run: cd tests/e2e/ && SELENIUM_BROWSER=firefox ./main.js
@@ -203,7 +208,7 @@ jobs:
       run: cargo test --locked
 
     - name: E2E test deps
-      run: cd tests/e2e/ && yarn --frozen-lockfile
+      run: cd tests/e2e/ && npm install
 
     - name: E2E test Safari
       run: cd tests/e2e/ && SELENIUM_BROWSER=safari ./main.js
