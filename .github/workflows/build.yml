@@ -35,12 +35,36 @@ jobs:
 
   linux-build:
     runs-on: ubuntu-latest
+    container: "debian:bullseye"
     services:
       redis:
         image: redis:latest
-        ports:
-        - 6379:6379
     steps:
+
+    # Docker Debian images clear APT cache after every operation.
+    # This disables those settings, so GitHub can use the cache.
+    - name: Prepare APT cache
+      run: |
+        rm /etc/apt/apt.conf.d/docker-clean
+
+    - name: APT cache
+      uses: actions/cache@v3
+      with:
+        path: |
+          /var/cache/apt/
+          /var/lib/apt/lists/
+        key: debian-bullseye-apt
+
+    # - curl & ca-certificates are used for installing Rust and GitHub CLI.
+    # - git is a dependency of actions/checkout and GitHub CLI.
+    # - The remainder are dependencies of our build.
+    - name: Add packages
+      run: |
+        apt-get update -y
+        apt-get install -y --no-install-recommends \
+          curl ca-certificates \
+          git \
+          build-essential pkg-config libssl-dev gettext
 
     - name: Checkout
       uses: actions/checkout@v3
@@ -81,9 +105,6 @@ jobs:
 
     - name: Rustfmt
       run: cargo fmt -- --check
-
-    - name: Install gettext
-      run: sudo apt-get install gettext
 
     - name: Check translations
       run: |

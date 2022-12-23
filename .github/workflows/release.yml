@@ -45,7 +45,7 @@ jobs:
         path: |
           /var/cache/apt/
           /var/lib/apt/lists/
-        key: debian-bullseye-apt
+        key: debian-bullseye-apt-release
 
     # - curl & ca-certificates are used for installing Rust and GitHub CLI.
     # - git is a dependency of actions/checkout and GitHub CLI.
