@@ -46,7 +46,11 @@ impl Handler<SendMail> for MailgunMailer {
             .finish();
 
         let mut auth = String::from("Basic ");
-        base64::encode_config_buf(format!("api:{}", &self.token), base64::STANDARD, &mut auth);
+        base64::encode_engine_string(
+            format!("api:{}", &self.token),
+            &mut auth,
+            &base64::engine::DEFAULT_ENGINE,
+        );
 
         let request = Request::post(format!("{}/{}/messages", &self.api, &self.domain))
             .header("Accept", "application/json")
