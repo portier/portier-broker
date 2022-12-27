@@ -5,7 +5,6 @@ use headers::{CacheControl, HeaderMapExt};
 use http::{HeaderValue, Request, StatusCode};
 use hyper::client::{Client, HttpConnector};
 use hyper::Body;
-use hyper_tls::HttpsConnector;
 use prometheus::Histogram;
 use std::time::Duration;
 use thiserror::Error;
@@ -57,14 +56,36 @@ impl FetchUrl {
 
 /// Agent that fetches URLs.
 pub struct FetchAgent {
-    client: Client<HttpsConnector<HttpConnector>>,
+    #[cfg(feature = "rustls")]
+    client: Client<hyper_rustls::HttpsConnector<HttpConnector>>,
+    #[cfg(feature = "native-tls")]
+    client: Client<hyper_tls::HttpsConnector<HttpConnector>>,
     user_agent: HeaderValue,
 }
 
 impl FetchAgent {
     pub fn new() -> Self {
+        #[cfg(feature = "rustls")]
+        let connector = {
+            let connector = hyper_rustls::HttpsConnectorBuilder::new().with_native_roots();
+
+            #[cfg(feature = "insecure")]
+            let connector = connector.https_or_http();
+            #[cfg(not(feature = "insecure"))]
+            let connector = connector.https_only();
+
+            connector.enable_http1().enable_http2().build()
+        };
+
+        #[cfg(feature = "native-tls")]
+        let connector = {
+            let mut connector = hyper_tls::HttpsConnector::new();
+            connector.https_only(cfg!(not(feature = "insecure")));
+            connector
+        };
+
         FetchAgent {
-            client: Client::builder().build(HttpsConnector::new()),
+            client: Client::builder().build(connector),
             user_agent: HeaderValue::from_str(&format!("portier.io/{}", env!("CARGO_PKG_VERSION")))
                 .expect("Could not prepare User-Agent header"),
         }

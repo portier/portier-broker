@@ -107,6 +107,11 @@ jobs:
           exit 1
         fi
 
+    # Feature `insecure` is used so the broker can connect to
+    # the plain HTTP server created by the E2E test harness.
+    - name: Build insecure
+      run: cargo build --locked --features insecure
+
     - name: E2E test deps
       run: cd tests/e2e/ && yarn --frozen-lockfile
 
