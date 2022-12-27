@@ -17,53 +17,25 @@ env:
 
 jobs:
   release-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        # These are tags for rust-musl-cross.
+        # NOTE: Packages are named after the first component of the target,
+        # so these must be unique.
+        # NOTE: On Linux, we are limited mostly by arch support in Ring.
+        # See: https://github.com/briansmith/ring/blob/main/mk/cargo.sh
+        target:
+        - aarch64-musl
+        - armv7-musleabihf
+        - i686-musl
+        - x86_64-musl
     runs-on: ubuntu-latest
-    container: "debian:bullseye"
-    env:
-
-      # NOTE: Packages are named after the first component of the target
-      # triple, so these must be unique.
-      # NOTE: On Linux, we are limited mostly by arch support in Ring.
-      # TODO: Add 32-bit ARM. Not sure whether we need hardfloat builds or not,
-      # and how to communicate this in our releases. Also need Docker images.
-      build_targets: |
-        aarch64-unknown-linux-gnu
-        i686-unknown-linux-gnu
-        x86_64-unknown-linux-gnu
-
+    container: "ghcr.io/rust-cross/rust-musl-cross:${{ matrix.target }}"
     steps:
-
-    # Docker Debian images clear APT cache after every operation.
-    # This disables those settings, so GitHub can use the cache.
-    - name: Prepare APT cache
-      run: |
-        rm /etc/apt/apt.conf.d/docker-clean
-
-    - name: APT cache
-      uses: actions/cache@v3
-      with:
-        path: |
-          /var/cache/apt/
-          /var/lib/apt/lists/
-        key: debian-bullseye-apt
-
-    # - curl & ca-certificates are used for installing Rust and GitHub CLI.
-    # - git is a dependency of actions/checkout and GitHub CLI.
-    - name: Add packages
-      run: |
-        apt-get update -y
-        apt-get install -y --no-install-recommends \
-          curl ca-certificates \
-          git
 
     - name: Checkout
       uses: actions/checkout@v3
-
-    - name: Prepare cross
-      uses: ./.github/actions/prep-linux-cross
-      with:
-        targets: ${{ env.build_targets }}
-        packages: libssl-dev
 
     - name: Install GitHub CLI
       run: |
@@ -71,59 +43,23 @@ jobs:
         dpkg -i gh.deb
         rm gh.deb
 
-    - name: Install Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        profile: minimal
-        default: true
-
-    - name: Add targets
-      run: |
-        rustup target add $build_targets
-
-    - name: Cache
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
     - name: Build
-      run: |
-        source /tmp/prep_cross.sh  # Written by prep-linux-cross
-        for target in $build_targets; do
-          echo "::group::Building for $target"
-          prep_cross $target
-          if ! cargo build --release --locked --target $target; then
-            echo "::warning::Build for $target failed"
-          fi
-          echo "::endgroup::"
-        done
+      run: cargo build --release --locked
 
     - name: Package
+      env:
+        matrix_target: ${{ matrix.target }}
       run: |
         rm docs/build.md  # Not useful for binaries
 
         mkdir release-packages
-        for target in $build_targets; do
-          broker_executable="./target/$target/release/portier-broker"
-          if [ ! -f "$broker_executable" ]; then
-            continue
-          fi
 
-          echo "::group::Packaging for $target"
-          basename="Portier-Broker-${tag_name}-Linux-${target/-*/}"
-
-          mkdir $basename
-          cp $broker_executable $basename/
-          cp -r $package_resources $basename/
-          tar -czf "release-packages/$basename.tgz" $basename
-
-          echo "::endgroup::"
-        done
+        broker_executable=target/*-unknown-linux-musl*/release/portier-broker
+        basename="Portier-Broker-${tag_name}-Linux-${matrix_target/-*/}"
+        mkdir $basename
+        cp $broker_executable $basename/
+        cp -r $package_resources $basename/
+        tar -czf "release-packages/$basename.tgz" $basename
 
     - name: Upload
       env:
@@ -156,15 +92,6 @@ jobs:
     - name: Add targets
       run: |
         rustup target add $build_targets
-
-    - name: Cache
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Build
       run: |
@@ -221,15 +148,6 @@ jobs:
     - name: Add targets
       run: |
         rustup target add $build_targets
-
-    - name: Cache
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Build
       run: |
@@ -289,7 +207,7 @@ jobs:
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v2
       with:
-        platforms: arm64
+        platforms: arm,arm64
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
@@ -305,6 +223,7 @@ jobs:
         build_targets['386']='i686'
         build_targets['amd64']='x86_64'
         build_targets['arm64/v8']='aarch64'
+        build_targets['arm/v7']='armv7'
 
         declare -a scratch_tags
         for docker_arch in "${!build_targets[@]}"; do

@@ -3,8 +3,8 @@
 This directory contains end-to-end tests for the Portier broker, written using
 Node.js and Selenium WebDriver.
 
-You must have a debug build ready of the broker. The tests expect to find it at
-the cargo default path `target/debug/portier-broker`.
+The tests look for the broker binary at `target/debug/portier-broker`, but this
+can be overridden by setting `PORTIER_BIN`.
 
 Tests will try to listen on the following ports (on localhost) for the duration
 of the test run: 44125, 44133, 44180.

@@ -2,6 +2,7 @@
 // These variables hold the configuration for the test run.
 
 const {
+  PORTIER_BIN = "target/debug/portier-broker",
   RUST_LOG = "error",
   TEST_STORE = "memory",
   TEST_KEY_MANAGER = "manual",
@@ -12,6 +13,7 @@ const {
 
 // Re-apply to environment, mostly for Selenium.
 Object.assign(process.env, {
+  PORTIER_BIN,
   RUST_LOG,
   TEST_STORE,
   TEST_KEY_MANAGER,
@@ -21,6 +23,7 @@ Object.assign(process.env, {
 });
 
 export {
+  PORTIER_BIN,
   RUST_LOG,
   TEST_STORE,
   TEST_KEY_MANAGER,
