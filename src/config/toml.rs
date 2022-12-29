@@ -39,6 +39,7 @@ pub struct TomlConfig {
     keyfiles: Option<Vec<PathBuf>>,
     keytext: Option<String>,
     signing_algs: Option<Vec<SigningAlgorithm>>,
+    rsa_modulus_bits: Option<usize>,
     generate_rsa_command: Option<Vec<String>>,
 
     redis_url: Option<String>,
@@ -330,6 +331,9 @@ impl TomlConfig {
         }
         if let Some(val) = parsed.signing_algs {
             builder.signing_algs = val;
+        }
+        if let Some(val) = parsed.rsa_modulus_bits {
+            builder.rsa_modulus_bits = val;
         }
         if let Some(val) = parsed.generate_rsa_command {
             builder.generate_rsa_command = val;

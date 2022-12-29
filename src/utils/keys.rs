@@ -14,6 +14,9 @@ use std::ffi::OsString;
 use std::process::{Command, Stdio};
 use thiserror::Error;
 
+#[cfg(feature = "rsa")]
+use rsa::pkcs8::EncodePrivateKey;
+
 #[derive(Debug, Error)]
 pub enum SignError {
     #[error("unsupported signing algorithm {0}")]
@@ -206,11 +209,26 @@ impl GeneratedKeyPair for Ed25519KeyPair {
     }
 }
 
-impl GeneratedKeyPair for RsaKeyPair {
-    type Config = Vec<String>;
+pub struct GenerateRsaConfig {
+    pub rng: SecureRandom,
+    pub modulus_bits: usize,
+    pub command: Vec<String>,
+}
 
-    fn generate(config: Vec<String>) -> String {
-        let mut args: Vec<OsString> = config.iter().map(Into::into).collect();
+impl GeneratedKeyPair for RsaKeyPair {
+    type Config = GenerateRsaConfig;
+
+    fn generate(mut config: GenerateRsaConfig) -> String {
+        #[cfg(feature = "rsa")]
+        if config.command.is_empty() {
+            let der = rsa::RsaPrivateKey::new(&mut config.rng, config.modulus_bits)
+                .expect("Failed to generate RSA key")
+                .to_pkcs8_der()
+                .expect("Failed to serialize generated RSA key as PKCS8");
+            return pem::encode(der.as_bytes(), pem::PKCS8);
+        }
+
+        let mut args: Vec<OsString> = config.command.iter().map(Into::into).collect();
         let program = args.remove(0);
         let output = Command::new(program)
             .args(args)

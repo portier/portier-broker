@@ -8,16 +8,6 @@ practice, each key is valid for 3 times this duration, as the key is rotated
 through three steps: next, current, previous. These three steps allow our
 rotation to work well with client cache.
 
-## Generating RSA keys
-
-Currently, the broker is not capable of generating RSA keys by itself, and
-instead an external command is invoked when a new key must be generated. By
-default, this command is `openssl genrsa 2048`, but this can be customized
-using the `generate_rsa_command` configuration option. This option is
-documented in the [example configuration file].
-
-[example configuration file]: ../config.toml.dist
-
 ## Import / export
 
 The broker provides import and export options for its private keys. These can

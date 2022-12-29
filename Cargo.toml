@@ -11,13 +11,14 @@ rust-version = "1.60"
 edition = "2021"
 
 [features]
-default = ["rustls", "redis", "rusqlite", "lettre_smtp", "lettre_sendmail", "postmark", "mailgun"]
+default = ["rustls", "rsa", "redis", "rusqlite", "lettre_smtp", "lettre_sendmail", "postmark", "mailgun"]
 insecure = []
 lettre_smtp = ["lettre", "lettre/smtp-transport"]
 lettre_sendmail = ["lettre", "lettre/sendmail-transport"]
 postmark = []
 mailgun = []
 native-tls = ["hyper-tls", "lettre?/native-tls"]
+rsa = ["dep:rsa", "rand_core"]
 rustls = ["hyper-rustls", "lettre?/rustls-tls", "lettre?/rustls-native-certs"]
 
 [[bin]]
@@ -90,11 +91,20 @@ features = ["std", "release_max_level_info"]
 version = "0.13.0"
 default-features = false
 
+[dependencies.rand_core]
+optional = true
+version = "0.6.4"
+
 [dependencies.redis]
 optional = true
 version = "0.22.0"
 default-features = false
 features = ["script", "tokio-comp"]
+
+[dependencies.rsa]
+optional = true
+version = "0.8.2"
+default-features = false
 
 [dependencies.rusqlite]
 optional = true
@@ -120,3 +130,7 @@ features = ["serde"]
 
 [target.'cfg(unix)'.dependencies]
 sd-notify = "0.4.0"
+
+# Per `rsa` crate docs, significantly speeds up key generation for debug builds.
+[profile.dev.package.num-bigint-dig]
+opt-level = 3

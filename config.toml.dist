@@ -66,18 +66,6 @@ from_address = "" # Required
 
 #google_client_id = ""
 
-# To generate RSA keys, the broker runs an external command. By default, this
-# looks for the OpenSSL CLI in `$PATH`, but you may need to change this for
-# your environment. Whatever command you specify here should output a single
-# PEM key on stdout.
-#
-# Using automatic key rotation is strongly recommended, but if you cannot
-# provide a working value for this setting, it's possible to manually configure
-# keys. See the `keyfiles` and `keytext` options in the advanced section for
-# how to do this.
-
-generate_rsa_command = ["openssl", "genrsa", "2048"]
-
 ################################################################
 # Storage
 
@@ -221,6 +209,16 @@ keyfiles = []
 # experimental and non-standard, so by default only RS256 is enabled.
 
 signing_algs = ["RS256"]
+
+# When using automatic key rotation and the RS256 algorithm is enabled (both
+# true by default), this setting controls the size of the generated RSA keys.
+
+rsa_modulus_bits = 2048
+
+# If set, an external command is invoked to generate RSA keys. The above
+# `rsa_modulus_bits` is ignored in this case.
+
+#generate_rsa_command = ["openssl", "genrsa", "2048"]
 
 # Directory that contains broker data files. This directory should contain the
 # `lang`, `res` and `tmpl` subdirectories. The default empty string value for
