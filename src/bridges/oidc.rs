@@ -238,8 +238,8 @@ pub async fn callback(ctx: &mut Context) -> HandlerResult {
     let jwt_payload = crypto::verify_jws(&id_token, &key_set.keys, bridge_data.signing_alg)
         .map_err(|err| {
             BrokerError::ProviderInput(format!(
-                "could not verify the token received from {}: {}",
-                bridge_data.origin, err
+                "could not verify the token received from {}: {err}",
+                bridge_data.origin
             ))
         })?;
 
@@ -282,7 +282,7 @@ pub async fn callback(ctx: &mut Context) -> HandlerResult {
         Relation::Google => {
             // Check `email` after additional Google-specific normalization.
             let email_addr: EmailAddress = email.parse().map_err(|err| {
-                BrokerError::ProviderInput(format!("failed to parse email in {}: {}", descr, err))
+                BrokerError::ProviderInput(format!("failed to parse email in {descr}: {err}"))
             })?;
             let google_email_addr = email_addr.normalize_google();
             let expected = data.email_addr.normalize_google();
@@ -309,19 +309,19 @@ async fn fetch_config(
         .store
         .send(FetchUrlCached {
             url: config_url,
-            metric: &*metrics::AUTH_OIDC_FETCH_CONFIG_DURATION,
+            metric: &metrics::AUTH_OIDC_FETCH_CONFIG_DURATION,
         })
         .await
         .map_err(|e| {
             BrokerError::Provider(format!(
-                "could not fetch {}'s configuration: {}",
-                bridge_data.origin, e
+                "could not fetch {}'s configuration: {e}",
+                bridge_data.origin
             ))
         })?;
     let provider_config: ProviderConfig = serde_json::from_str(&provider_config).map_err(|e| {
         BrokerError::Provider(format!(
-            "could not parse {}'s configuration: {}",
-            bridge_data.origin, e
+            "could not parse {}'s configuration: {e}",
+            bridge_data.origin
         ))
     })?;
 
@@ -347,20 +347,17 @@ async fn fetch_config(
         .store
         .send(FetchUrlCached {
             url: provider_config.jwks_uri.clone(),
-            metric: &*metrics::AUTH_OIDC_FETCH_JWKS_DURATION,
+            metric: &metrics::AUTH_OIDC_FETCH_JWKS_DURATION,
         })
         .await
         .map_err(|e| {
             BrokerError::Provider(format!(
-                "could not fetch {}'s keys: {}",
-                bridge_data.origin, e
+                "could not fetch {}'s keys: {e}",
+                bridge_data.origin
             ))
         })?;
     let key_set: ProviderKeys = serde_json::from_str(&key_set).map_err(|e| {
-        BrokerError::Provider(format!(
-            "could not parse{}'s keys: {}",
-            bridge_data.origin, e
-        ))
+        BrokerError::Provider(format!("could not parse{}'s keys: {e}", bridge_data.origin))
     })?;
 
     Ok((provider_config, key_set))

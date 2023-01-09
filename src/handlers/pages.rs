@@ -24,7 +24,7 @@ pub async fn version(_ctx: &mut Context) -> HandlerResult {
     // Maybe check/set it in build.rs? Fall back to HEROKU_SLUG_COMMIT?
     let mut body = format!("Portier {}", env!("CARGO_PKG_VERSION"));
     if let Ok(commit) = env::var("HEROKU_SLUG_COMMIT") {
-        body.push_str(&format!(" (git commit {})", commit));
+        body.push_str(&format!(" (git commit {commit})"));
     }
 
     let mut res = Response::new(Body::from(body));
@@ -48,7 +48,7 @@ pub async fn metrics(_ctx: &mut Context) -> HandlerResult {
 pub async fn static_(ctx: &mut Context) -> HandlerResult {
     let result = resolve_path(&ctx.app.res_dir, ctx.uri.path())
         .await
-        .map_err(|e| BrokerError::Internal(format!("static serving failed: {}", e)))?;
+        .map_err(|e| BrokerError::Internal(format!("static serving failed: {e}")))?;
     let res = ResponseBuilder::new()
         .request_parts(&ctx.method, &ctx.uri, &ctx.headers)
         .cache_headers(Some(ctx.app.static_ttl.as_secs() as u32))

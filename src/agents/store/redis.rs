@@ -129,11 +129,11 @@ impl RedisStore {
     }
 
     fn format_session_key(session_id: &str) -> String {
-        format!("session:{}", session_id)
+        format!("session:{session_id}")
     }
 
     fn format_auth_code_key(code: &str) -> String {
-        format!("auth_code:{}", code)
+        format!("auth_code:{code}")
     }
 }
 
@@ -238,7 +238,7 @@ impl Handler<FetchUrlCached> for RedisStore {
         let expire_cache = self.expire_cache;
         cx.reply_later(async move {
             let key = format!("cache:{}", message.url);
-            let _lock = locking.lock(format!("lock:{}", key).as_bytes()).await;
+            let _lock = locking.lock(format!("lock:{key}").as_bytes()).await;
             if let Some(data) = conn.get(key).await? {
                 Ok(data)
             } else {
@@ -331,7 +331,7 @@ impl Handler<EnableRotatingKeys> for RedisStore {
             for signing_alg in &message.signing_algs {
                 let signing_alg = *signing_alg;
                 // Listen for key changes by other workers.
-                let chan = format!("keys-updated:{}", signing_alg).into_bytes();
+                let chan = format!("keys-updated:{signing_alg}").into_bytes();
                 let mut sub = pubsub.subscribe(chan).await;
                 let me2 = me.clone();
                 let my_id2 = my_id.clone();
@@ -405,7 +405,7 @@ impl Handler<FetchKeys> for RedisStore {
     fn handle(&mut self, message: FetchKeys, cx: Context<Self, FetchKeys>) {
         let mut conn = self.conn.clone();
         let signing_alg = message.0;
-        let db_key = format!("keys:{}", signing_alg);
+        let db_key = format!("keys:{signing_alg}");
         cx.reply_later(async move {
             let key_set: Option<String> = conn.get(db_key).await?;
             let key_set = key_set.map_or_else(
@@ -421,12 +421,12 @@ impl Handler<SaveKeys> for RedisStore {
     fn handle(&mut self, message: SaveKeys, cx: Context<Self, SaveKeys>) {
         let mut conn = self.conn.clone();
         let signing_alg = message.0.signing_alg;
-        let db_key = format!("keys:{}", signing_alg);
+        let db_key = format!("keys:{signing_alg}");
         let data = serde_json::to_string(&message.0).expect("Could not encode key set as JSON");
         let mut pipe = pipe();
         pipe.atomic()
             .set(db_key, data)
-            .publish(format!("keys-updated:{}", signing_alg), &self.id[..]);
+            .publish(format!("keys-updated:{signing_alg}"), &self.id[..]);
         cx.reply_later(async move { pipe.query_async(&mut conn).await });
     }
 }

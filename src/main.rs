@@ -120,7 +120,7 @@ async fn start_server(builder: ConfigBuilder) {
         builder
             .done()
             .await
-            .unwrap_or_else(|err| panic!("failed to build configuration: {}", err)),
+            .unwrap_or_else(|err| panic!("failed to build configuration: {err}")),
     );
 
     // TODO: Add unix socket support.
@@ -141,7 +141,7 @@ async fn start_server(builder: ConfigBuilder) {
             builder
         }
         Err(err) => {
-            panic!("Socket activation failed: {}", err);
+            panic!("Socket activation failed: {err}");
         }
     };
 
@@ -196,7 +196,7 @@ async fn import_keys(builder: ConfigBuilder, path: &Path, dry_run: bool) {
         let entry = match result {
             Ok(entry) => entry,
             Err(err) => {
-                eprintln!("#{}: parse error, {}", idx, err);
+                eprintln!("#{idx}: parse error, {err}");
                 fail = true;
                 continue;
             }
@@ -204,7 +204,7 @@ async fn import_keys(builder: ConfigBuilder, path: &Path, dry_run: bool) {
 
         let alg = entry.key_pair.signing_alg();
         if !builder.signing_algs.contains(&alg) {
-            eprintln!("#{}: ignored, disabled signing algorithm", idx);
+            eprintln!("#{idx}: ignored, disabled signing algorithm");
             continue;
         }
 
@@ -234,7 +234,7 @@ async fn import_keys(builder: ConfigBuilder, path: &Path, dry_run: bool) {
             key_set.previous = Some(entry.raw.encode());
             ("previous", None)
         } else {
-            eprintln!("#{}: too many keys for signing algorithm {}", idx, alg);
+            eprintln!("#{idx}: too many keys for signing algorithm {alg}");
             fail = true;
             continue;
         };
@@ -268,10 +268,10 @@ async fn import_keys(builder: ConfigBuilder, path: &Path, dry_run: bool) {
         let store = builder
             .into_store()
             .await
-            .unwrap_or_else(|err| panic!("Failed to build configuration: {}", err));
+            .unwrap_or_else(|err| panic!("Failed to build configuration: {err}"));
         for (alg, key_set) in key_sets {
             store.send(ImportKeySet(key_set)).await;
-            eprintln!("Successfully imported {} keys", alg);
+            eprintln!("Successfully imported {alg} keys");
         }
     }
 
@@ -296,7 +296,7 @@ async fn export_keys(builder: ConfigBuilder, path: &Path) {
     let store = builder
         .into_store()
         .await
-        .unwrap_or_else(|err| panic!("Failed to build configuration: {}", err));
+        .unwrap_or_else(|err| panic!("Failed to build configuration: {err}"));
     for alg in signing_algs {
         let key_set = store.send(ExportKeySet(alg)).await;
         if let Some(key) = key_set.current {
@@ -322,7 +322,7 @@ async fn export_keys(builder: ConfigBuilder, path: &Path) {
     }
     writer.flush().expect("Flush failed");
     drop(writer);
-    eprintln!("Exported {} private keys", num);
+    eprintln!("Exported {num} private keys");
     eprintln!("NOTE: The output does not contain expiration times");
 
     // TODO: This is a little hacky, but we don't have code to shutdown gracefully.

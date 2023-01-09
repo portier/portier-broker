@@ -121,7 +121,7 @@ impl LimitInput {
     /// The prefix can be used to add additional namespacing to the key, for usage with Redis for
     /// example. The separator is added between each element of the key.
     pub fn build_key(&self, config: &LimitConfig, prefix: &str, sep: &str) -> String {
-        let mut result = format!("{}{}", prefix, config.id);
+        let mut result = format!("{prefix}{}", config.id);
         if config.with_ip {
             result.push_str(sep);
             result.push_str(&format!("{}", self.ip));

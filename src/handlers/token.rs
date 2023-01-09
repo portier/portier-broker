@@ -29,7 +29,7 @@ pub async fn token(ctx: &mut Context) -> HandlerResult {
         .send(ConsumeAuthCode { code })
         .await
         .map_err(|e| {
-            BrokerError::Internal(format!("could not lookup the authorization code: {}", e))
+            BrokerError::Internal(format!("could not lookup the authorization code: {e}"))
         })?
         .ok_or_else(|| BrokerError::ProviderInput("invalid authorization code".to_owned()))?;
 
@@ -54,7 +54,7 @@ pub async fn token(ctx: &mut Context) -> HandlerResult {
         data.signing_alg,
     )
     .await
-    .map_err(|err| BrokerError::Internal(format!("Could not create a JWT: {:?}", err)))?;
+    .map_err(|err| BrokerError::Internal(format!("Could not create a JWT: {err:?}")))?;
 
     Ok(json_response(&json!({
         "access_token": "UNUSED",

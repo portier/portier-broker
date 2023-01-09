@@ -89,7 +89,7 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
     let client_id = try_get_input_param!(params, "client_id");
     let response_type = try_get_input_param!(params, "response_type");
     let response_errors = try_get_input_param!(params, "response_errors", "true".to_owned());
-    let state = try_get_input_param!(params, "state", "".to_owned());
+    let state = try_get_input_param!(params, "state", String::new());
 
     // Parse response_type and response_mode by wrapping them in a JSON Value.
     // This has minimal overhead, and saves us a separate implementation.
@@ -109,7 +109,7 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
     })?;
 
     let redirect_uri = parse_redirect_uri(&redirect_uri, "redirect_uri")
-        .map_err(|e| BrokerError::Input(format!("{}", e)))?;
+        .map_err(|e| BrokerError::Input(format!("{e}")))?;
 
     if client_id != redirect_uri.origin().ascii_serialization() {
         return Err(BrokerError::Input(
@@ -159,11 +159,11 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
         .ok_or_else(|| {
             BrokerError::Input(format!(
                 "unsupported id_token_signing_alg, must be one of: {}",
-                SigningAlgorithm::format_list(&*ctx.app.signing_algs)
+                SigningAlgorithm::format_list(&ctx.app.signing_algs)
             ))
         })?;
 
-    let login_hint = try_get_input_param!(params, "login_hint", "".to_string());
+    let login_hint = try_get_input_param!(params, "login_hint", String::new());
     if login_hint.is_empty() && !ctx.want_json {
         let display_origin = redirect_uri_.origin().unicode_serialization();
 
@@ -197,7 +197,7 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
 
     // Verify and normalize the email.
     let email_addr = login_hint.parse::<EmailAddress>().map_err(|err| {
-        BrokerError::Input(format!("login_hint is not a valid email address: {}", err))
+        BrokerError::Input(format!("login_hint is not a valid email address: {err}"))
     })?;
 
     // Enforce rate limits.

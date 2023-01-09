@@ -257,14 +257,14 @@ impl TomlConfig {
             for (source, res) in val.iter_values() {
                 match res {
                     Ok(data) => list.push(data.into_owned()),
-                    Err(err) => panic!("IO error in allowed_origins entry {}: {}", source, err),
+                    Err(err) => panic!("IO error in allowed_origins entry {source}: {err}"),
                 }
             }
         };
         for (source, res) in parsed.allowed_domains.iter_values() {
             let data = match res {
                 Ok(data) => data,
-                Err(err) => panic!("IO error in allowed_domains entry {}: {}", source, err),
+                Err(err) => panic!("IO error in allowed_domains entry {source}: {err}"),
             };
             if let Err(err) = builder.domain_validator.add_allowed_domain(data.as_ref()) {
                 panic!(
@@ -276,7 +276,7 @@ impl TomlConfig {
         for (source, res) in parsed.blocked_domains.iter_values() {
             let data = match res {
                 Ok(data) => data,
-                Err(err) => panic!("IO error in blocked_domains entry {}: {}", source, err),
+                Err(err) => panic!("IO error in blocked_domains entry {source}: {err}"),
             };
             if let Err(err) = builder.domain_validator.add_blocked_domain(data.as_ref()) {
                 panic!(

@@ -28,7 +28,7 @@ impl MailgunMailer {
             token,
             api,
             domain,
-            from: format!("{} <{}>", from_name, from_address),
+            from: format!("{from_name} <{from_address}>"),
         }
     }
 }
@@ -57,7 +57,7 @@ impl Handler<SendMail> for MailgunMailer {
 
         let future = self.fetcher.send(FetchUrl {
             request,
-            metric: &*metrics::AUTH_EMAIL_SEND_DURATION,
+            metric: &metrics::AUTH_EMAIL_SEND_DURATION,
         });
         cx.reply_later(async move {
             match future.await {

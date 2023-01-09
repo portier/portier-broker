@@ -99,7 +99,7 @@ impl RusqliteStore {
             })?;
         if schema_version == 0 {
             // Note: can't use parameter binding in pragma.
-            conn.execute(&format!("PRAGMA application_id = {}", APP_ID), [])?;
+            conn.execute(&format!("PRAGMA application_id = {APP_ID}"), [])?;
         } else {
             let app_id: u32 =
                 conn.query_row("SELECT * FROM pragma_application_id()", [], |row| {
@@ -277,7 +277,7 @@ impl Handler<DeleteSession> for RusqliteStore {
     fn handle(&mut self, message: DeleteSession, cx: Context<Self, DeleteSession>) {
         cx.reply_with(move || {
             self.conn
-                .execute("DELETE FROM sessions WHERE id = ?1", &[&message.session_id])?;
+                .execute("DELETE FROM sessions WHERE id = ?1", [&message.session_id])?;
             Ok(())
         });
     }

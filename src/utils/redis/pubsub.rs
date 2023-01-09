@@ -178,7 +178,7 @@ async fn conn_loop(mut rx: ReadHalf, mut tx: WriteHalf, mut cmd: mpsc::Receiver<
                     // replies instead of events.
                     Value::Status(status) if status == "PONG" => continue,
                     Value::Bulk(ref vec) if vec.len() >= 2 => vec,
-                    _ => panic!("Unexpected value from Redis: {:?}", value),
+                    _ => panic!("Unexpected value from Redis: {value:?}"),
                 };
                 match (&vec[0], &vec[1], vec.get(2)) {
                     // Handle a message event by sending on the broadcast channel.
@@ -203,7 +203,7 @@ async fn conn_loop(mut rx: ReadHalf, mut tx: WriteHalf, mut cmd: mpsc::Receiver<
                     }
                     // Some other events are ok, but we do nothing with them.
                     (&Value::Data(ref ev), _, _) if ev == b"unsubscribe" || ev == b"pong" => {}
-                    _ => panic!("Unexpected value from Redis: {:?}", value),
+                    _ => panic!("Unexpected value from Redis: {value:?}"),
                 }
             }
         }

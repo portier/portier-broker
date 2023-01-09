@@ -105,7 +105,7 @@ impl LockClient {
         match value {
             Value::Nil => false,
             Value::Okay => true,
-            value => panic!("Unexpected lock result from Redis: {:?}", value),
+            value => panic!("Unexpected lock result from Redis: {value:?}"),
         }
     }
 

@@ -14,7 +14,7 @@ pub async fn normalize(ctx: &mut Context) -> HandlerResult {
         .lines()
         .map(|s| match s.parse::<EmailAddress>() {
             Ok(addr) => addr.to_string(),
-            Err(_) => "".to_owned(),
+            Err(_) => String::new(),
         })
         .collect::<Vec<_>>()
         .join("\n");

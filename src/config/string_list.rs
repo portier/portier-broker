@@ -137,10 +137,10 @@ impl<'a> fmt::Display for StringListSource<'a> {
         match self {
             StringListSource::Literal { index } => write!(f, "#{} (literal)", index + 1),
             StringListSource::File { index, path, line } if *line != 0 => {
-                write!(f, "#{} {:?}:{}", index + 1, path, line)
+                write!(f, "#{} {path:?}:{line}", index + 1)
             }
             StringListSource::File { index, path, .. } => {
-                write!(f, "#{} {:?}", index + 1, path)
+                write!(f, "#{} {path:?}", index + 1)
             }
         }
     }
@@ -222,7 +222,7 @@ unusual# comment # syntax
         let mut expect_iter = EXPECT.iter();
         loop {
             let input_item = input_reader.next().map(Result::unwrap);
-            let expect_item = expect_iter.next().map(|item| item.to_string());
+            let expect_item = expect_iter.next().map(|item| (*item).to_string());
             assert_eq!(input_item, expect_item);
             if input_item.is_none() {
                 break;

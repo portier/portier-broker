@@ -111,24 +111,24 @@ pub async fn query(app: &ConfigRc, email_addr: &EmailAddress) -> Result<Vec<Link
     let url = Url::parse_with_params(
         &url,
         &[
-            ("resource", format!("acct:{}", email_addr).as_str()),
+            ("resource", format!("acct:{email_addr}").as_str()),
             ("rel", WEBFINGER_PORTIER_REL),
             ("rel", WEBFINGER_GOOGLE_REL),
         ],
     )
-    .map_err(|e| BrokerError::Internal(format!("could not build webfinger query url: {}", e)))?;
+    .map_err(|e| BrokerError::Internal(format!("could not build webfinger query url: {e}")))?;
 
     // Make the request.
     let descriptor = app
         .store
         .send(FetchUrlCached {
             url,
-            metric: &*metrics::AUTH_WEBFINGER_DURATION,
+            metric: &metrics::AUTH_WEBFINGER_DURATION,
         })
         .await
-        .map_err(|e| BrokerError::Provider(format!("webfinger request failed: {}", e)))?;
+        .map_err(|e| BrokerError::Provider(format!("webfinger request failed: {e}")))?;
     let descriptor: DescriptorDef = serde_json::from_str(&descriptor)
-        .map_err(|e| BrokerError::Provider(format!("invalid webfinger response: {}", e)))?;
+        .map_err(|e| BrokerError::Provider(format!("invalid webfinger response: {e}")))?;
 
     // Parse the relations.
     let links = descriptor

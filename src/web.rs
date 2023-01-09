@@ -195,7 +195,7 @@ impl Context {
                 data: Session { data, bridge_data },
             })
             .await
-            .map_err(|e| BrokerError::Internal(format!("could not save a session: {}", e)))?;
+            .map_err(|e| BrokerError::Internal(format!("could not save a session: {e}")))?;
         Ok(true)
     }
 
@@ -211,7 +211,7 @@ impl Context {
                 session_id: id.to_owned(),
             })
             .await
-            .map_err(|e| BrokerError::Internal(format!("could not load a session: {}", e)))?
+            .map_err(|e| BrokerError::Internal(format!("could not load a session: {e}")))?
             .ok_or(BrokerError::SessionExpired)?;
         self.return_params = Some(data.return_params.clone());
         self.session_id = id.to_owned();
@@ -365,7 +365,7 @@ async fn handle_error(ctx: &Context, err: BrokerError) -> Response {
     if ctx.want_json {
         let mut res = json_response(&json!({
             "error": err.oauth_error_code(),
-            "error_description": &format!("{}", err),
+            "error_description": &format!("{err}"),
             "reference": reference,
         }));
         *res.status_mut() = err.http_status_code();
@@ -393,13 +393,13 @@ async fn handle_error(ctx: &Context, err: BrokerError) -> Response {
             ctx,
             &[
                 ("error", err.oauth_error_code()),
-                ("error_description", &format!("{}", err)),
+                ("error_description", &format!("{err}")),
             ],
         ),
         // Friendly error pages for what we can't redirect.
         (err @ BrokerError::Input(_), false) => {
             let mut res = html_response(ctx.app.templates.error.render(&[
-                ("error", &format!("{}", err)),
+                ("error", &format!("{err}")),
                 ("intro", catalog.gettext("The request is invalid, and could not be completed.")),
                 ("reason", catalog.gettext("Technical description")),
                 ("explanation", catalog.gettext("This indicates an issue with the site you're trying to login to. Contact the site administrator to get the issue resolved.")),
@@ -409,7 +409,7 @@ async fn handle_error(ctx: &Context, err: BrokerError) -> Response {
         }
         (err @ (BrokerError::Provider(_) | BrokerError::ProviderInput(_)), false) => {
             let mut res = html_response(ctx.app.templates.error.render(&[
-                ("error", &format!("{}", err)),
+                ("error", &format!("{err}")),
                 (
                     "intro",
                     catalog.gettext("Failed to connect with your email domain."),

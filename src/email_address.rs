@@ -115,7 +115,7 @@ impl EmailAddress {
     /// Create an email address from local and domain parts.
     fn from_parts(local: &str, domain: &str) -> EmailAddress {
         EmailAddress {
-            serialization: format!("{}@{}", local, domain),
+            serialization: format!("{local}@{domain}"),
             local_end: local.len(),
         }
     }

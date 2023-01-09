@@ -12,7 +12,7 @@ impl Template {
         path.set_extension("mustache");
         Template(
             mustache::compile_path(&path)
-                .unwrap_or_else(|err| panic!("unable to compile template {:?}: {:?}", path, err)),
+                .unwrap_or_else(|err| panic!("unable to compile template {path:?}: {err:?}")),
         )
     }
 

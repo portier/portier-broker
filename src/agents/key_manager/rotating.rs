@@ -215,7 +215,7 @@ impl Handler<Check> for RotatingKeys {
                 EdDsa => self.ed25519_keys.is_none(),
                 Rs256 => self.rsa_keys.is_none(),
             } {
-                panic!("Store did not provide a key set for {}", signing_alg);
+                panic!("Store did not provide a key set for {signing_alg}");
             }
         }
         cx.reply(());

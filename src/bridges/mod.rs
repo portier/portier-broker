@@ -27,7 +27,7 @@ pub async fn complete_auth(ctx: &mut Context) -> HandlerResult {
             session_id: ctx.session_id.clone(),
         })
         .await
-        .map_err(|e| BrokerError::Internal(format!("could not remove a session: {}", e)))?;
+        .map_err(|e| BrokerError::Internal(format!("could not remove a session: {e}")))?;
 
     let state = data.return_params.state.clone();
     let origin = data
@@ -46,7 +46,7 @@ pub async fn complete_auth(ctx: &mut Context) -> HandlerResult {
             },
         })
         .await
-        .map_err(|e| BrokerError::Internal(format!("could not decrement rate limits: {}", e)))?;
+        .map_err(|e| BrokerError::Internal(format!("could not decrement rate limits: {e}")))?;
 
     let (auth_field, auth_value) = match data.response_type {
         ResponseType::IdToken => {
@@ -59,7 +59,7 @@ pub async fn complete_auth(ctx: &mut Context) -> HandlerResult {
                 data.signing_alg,
             )
             .await
-            .map_err(|err| BrokerError::Internal(format!("Could not create a JWT: {:?}", err)))?;
+            .map_err(|err| BrokerError::Internal(format!("Could not create a JWT: {err:?}")))?;
             ("id_token", jwt)
         }
         ResponseType::Code => {
@@ -71,7 +71,7 @@ pub async fn complete_auth(ctx: &mut Context) -> HandlerResult {
                     data,
                 })
                 .await
-                .map_err(|e| BrokerError::Internal(format!("could not save auth code: {}", e)))?;
+                .map_err(|e| BrokerError::Internal(format!("could not save auth code: {e}")))?;
             ("code", code)
         }
     };

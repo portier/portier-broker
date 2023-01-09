@@ -43,8 +43,8 @@ pub struct RawPem {
 impl RawPem {
     /// Return a fingerprint of the data.
     pub fn fingerprint(&self) -> String {
-        let hash = BASE64_STANDARD.encode(&digest(&SHA256, &self.data));
-        format!("SHA256:{}", hash)
+        let hash = BASE64_STANDARD.encode(digest(&SHA256, &self.data));
+        format!("SHA256:{hash}")
     }
 
     /// Reformat the data as a PEM string.

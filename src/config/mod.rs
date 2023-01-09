@@ -464,7 +464,7 @@ impl ConfigBuilder {
         }
 
         if let Ok(val) = env_var("HEROKU_APP_NAME") {
-            self.public_url = Some(format!("https://{}.herokuapp.com", val));
+            self.public_url = Some(format!("https://{val}.herokuapp.com"));
         }
 
         for var in &[
