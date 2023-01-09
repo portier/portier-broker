@@ -1,9 +1,9 @@
-use crate::email_address::EmailAddress;
-use crate::utils::agent::*;
-use crate::{agents::*, metrics};
+use base64::prelude::*;
 use http::Request;
 use hyper::Body;
 use url::form_urlencoded;
+
+use crate::{agents::*, email_address::EmailAddress, metrics, utils::agent::*};
 
 /// Mailer agent that uses the Mailgun API.
 pub struct MailgunMailer {
@@ -46,11 +46,7 @@ impl Handler<SendMail> for MailgunMailer {
             .finish();
 
         let mut auth = String::from("Basic ");
-        base64::encode_engine_string(
-            format!("api:{}", &self.token),
-            &mut auth,
-            &base64::engine::DEFAULT_ENGINE,
-        );
+        BASE64_STANDARD.encode_string(format!("api:{}", &self.token), &mut auth);
 
         let request = Request::post(format!("{}/{}/messages", &self.api, &self.domain))
             .header("Accept", "application/json")
