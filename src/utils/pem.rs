@@ -1,13 +1,15 @@
 // This file is based on code from rustls 0.16.0. (Licensed Apache 2.0, MIT, ISC)
 
-use crate::crypto::SigningAlgorithm;
-use crate::utils::keys::KeyPairExt;
+use std::io::{BufRead, Error as IoError, Read};
+
+use base64::prelude::*;
 use ring::{
     digest::{digest, SHA256},
     signature::{Ed25519KeyPair, RsaKeyPair},
 };
-use std::io::{BufRead, Error as IoError, Read};
 use thiserror::Error;
+
+use crate::{crypto::SigningAlgorithm, utils::keys::KeyPairExt};
 
 const ARMOR_BEGIN: &str = "-----BEGIN ";
 const ARMOR_END: &str = "-----END ";
@@ -26,7 +28,7 @@ impl PemEntry {
     where
         F: FnOnce(&[u8]) -> Result<ParsedKeyPair, ParseError>,
     {
-        let data = base64::decode(b64).map_err(ParseError::Base64)?;
+        let data = BASE64_STANDARD.decode(b64).map_err(ParseError::Base64)?;
         let key_pair = decode(&data)?;
         let raw = RawPem { section, data };
         Ok(PemEntry { raw, key_pair })
@@ -41,7 +43,7 @@ pub struct RawPem {
 impl RawPem {
     /// Return a fingerprint of the data.
     pub fn fingerprint(&self) -> String {
-        let hash = base64::encode(&digest(&SHA256, &self.data));
+        let hash = BASE64_STANDARD.encode(&digest(&SHA256, &self.data));
         format!("SHA256:{}", hash)
     }
 
@@ -153,7 +155,7 @@ fn get_section(line: &[u8], prefix: &str) -> Option<String> {
 /// Format data as a PEM string.
 pub fn encode(data: &[u8], section: &str) -> String {
     let mut res = String::new();
-    let b64 = base64::encode(data);
+    let b64 = BASE64_STANDARD.encode(data);
     let mut cursor = b64.as_bytes();
     res.push_str(ARMOR_BEGIN);
     res.push_str(section);
