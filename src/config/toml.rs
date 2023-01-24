@@ -7,6 +7,7 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::str::from_utf8;
 use std::time::Duration;
 
 /// Intermediate structure for deserializing TOML files
@@ -140,8 +141,9 @@ impl TomlConfig {
     #[allow(clippy::cognitive_complexity)]
     fn parse(path: &Path) -> TomlConfig {
         let data = fs::read(path).expect("Could not read config file");
+        let data = from_utf8(&data).expect("Config file contains invalid UTF-8");
         let mut parsed: TomlConfig =
-            toml::from_slice(&data).expect("Could not parse TOML in config file");
+            toml::from_str(data).expect("Could not parse TOML in config file");
 
         if let Some(ref table) = parsed.server {
             Self::warn_table("server");
