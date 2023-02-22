@@ -69,7 +69,7 @@ export default (): Mailbox => {
         api.pushRawMail(stream, callback);
       },
     });
-    server.listen(44125, "localhost");
+    server.listen(44125, "127.0.0.1");
   }
 
   return api;
