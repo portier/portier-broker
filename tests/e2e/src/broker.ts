@@ -20,7 +20,7 @@ export default ({ mailbox }: { mailbox: Mailbox }): Broker => {
     RUST_LOG,
     RUST_BACKTRACE: "1",
     BROKER_LISTEN_PORT: "44133",
-    BROKER_PUBLIC_URL: "http://localhost:44133",
+    BROKER_PUBLIC_URL: "http://127.0.0.1:44133",
     BROKER_FROM_ADDRESS: "portier@example.com",
     BROKER_LIMITS: "100000/s",
     BROKER_ALLOWED_DOMAINS: "example.com",
@@ -71,10 +71,10 @@ export default ({ mailbox }: { mailbox: Mailbox }): Broker => {
       break;
     case "postmark":
       env.BROKER_POSTMARK_TOKEN = "POSTMARK_API_TEST";
-      env.BROKER_POSTMARK_API = "http://localhost:44920/postmark";
+      env.BROKER_POSTMARK_API = "http://127.0.0.1:44920/postmark";
       break;
     case "mailgun":
-      env.BROKER_MAILGUN_API = "http://localhost:44920/mailgun";
+      env.BROKER_MAILGUN_API = "http://127.0.0.1:44920/mailgun";
       env.BROKER_MAILGUN_TOKEN = "123";
       env.BROKER_MAILGUN_DOMAIN = "portier.io";
       break;
