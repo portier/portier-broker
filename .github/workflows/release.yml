@@ -129,6 +129,8 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
+        # Workaround for wonky ownership because we build in docker.
+        git config --global --add safe.directory "$PWD"
         gh release upload "$tag_name" release-packages/*
 
   release-macos:
