@@ -121,8 +121,7 @@ pub async fn auth(ctx: &mut Context, email_addr: &EmailAddress, link: &Link) -> 
                 .ok_or(BrokerError::ProviderCancelled)?;
             if provider_origin != GOOGLE_IDP_ORIGIN {
                 return Err(BrokerError::Provider(format!(
-                    "invalid href: Google provider only supports {}",
-                    GOOGLE_IDP_ORIGIN
+                    "invalid href: Google provider only supports {GOOGLE_IDP_ORIGIN}"
                 )));
             }
             OidcBridgeData {

@@ -123,41 +123,26 @@ impl EnvConfig {
             for (source, res) in val.iter_values() {
                 match res {
                     Ok(data) => list.push(data.into_owned()),
-                    Err(err) => panic!(
-                        "IO error in BROKER_ALLOWED_ORIGINS entry {}: {}",
-                        source, err
-                    ),
+                    Err(err) => panic!("IO error in BROKER_ALLOWED_ORIGINS entry {source}: {err}"),
                 }
             }
         }
         for (source, res) in parsed.allowed_domains.iter_values() {
             let data = match res {
                 Ok(data) => data,
-                Err(err) => panic!(
-                    "IO error in BROKER_ALLOWED_DOMAINS entry {}: {}",
-                    source, err
-                ),
+                Err(err) => panic!("IO error in BROKER_ALLOWED_DOMAINS entry {source}: {err}"),
             };
             if let Err(err) = builder.domain_validator.add_allowed_domain(data.as_ref()) {
-                panic!(
-                    "Invalid BROKER_ALLOWED_DOMAINS entry {}: '{}': {}",
-                    source, data, err
-                );
+                panic!("Invalid BROKER_ALLOWED_DOMAINS entry {source}: '{data}': {err}");
             }
         }
         for (source, res) in parsed.blocked_domains.iter_values() {
             let data = match res {
                 Ok(data) => data,
-                Err(err) => panic!(
-                    "IO error in BROKER_BLOCKED_DOMAINS entry {}: {}",
-                    source, err
-                ),
+                Err(err) => panic!("IO error in BROKER_BLOCKED_DOMAINS entry {source}: {err}"),
             };
             if let Err(err) = builder.domain_validator.add_blocked_domain(data.as_ref()) {
-                panic!(
-                    "Invalid BROKER_BLOCKED_DOMAINS entry {}: '{}': {}",
-                    source, data, err
-                );
+                panic!("Invalid BROKER_BLOCKED_DOMAINS entry {source}: '{data}': {err}");
             }
         }
         if let Some(val) = parsed.verify_with_resolver {

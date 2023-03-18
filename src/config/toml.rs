@@ -270,10 +270,7 @@ impl TomlConfig {
                 Err(err) => panic!("IO error in allowed_domains entry {source}: {err}"),
             };
             if let Err(err) = builder.domain_validator.add_allowed_domain(data.as_ref()) {
-                panic!(
-                    "Invalid allowed_domains entry {}: '{}': {}",
-                    source, data, err
-                );
+                panic!("Invalid allowed_domains entry {source}: '{data}': {err}");
             }
         }
         for (source, res) in parsed.blocked_domains.iter_values() {
@@ -282,10 +279,7 @@ impl TomlConfig {
                 Err(err) => panic!("IO error in blocked_domains entry {source}: {err}"),
             };
             if let Err(err) = builder.domain_validator.add_blocked_domain(data.as_ref()) {
-                panic!(
-                    "Invalid blocked_domains entry {}: '{}': {}",
-                    source, data, err
-                );
+                panic!("Invalid blocked_domains entry {source}: '{data}': {err}");
             }
         }
         if let Some(val) = parsed.verify_with_resolver {

@@ -241,14 +241,10 @@ async fn import_keys(builder: ConfigBuilder, path: &Path, dry_run: bool) {
 
         if let Some(lifespan) = lifespan {
             eprintln!(
-                "#{}: found {} key, fingerprint: {} (as {}, expires in {:?})",
-                idx, alg, fp, purpose, lifespan
+                "#{idx}: found {alg} key, fingerprint: {fp} (as {purpose}, expires in {lifespan:?})"
             );
         } else {
-            eprintln!(
-                "#{}: found {} key, fingerprint: {} (as {})",
-                idx, alg, fp, purpose
-            );
+            eprintln!("#{idx}: found {alg} key, fingerprint: {fp} (as {purpose})");
         }
     }
     if fail {

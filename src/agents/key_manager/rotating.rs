@@ -293,7 +293,7 @@ impl Handler<RotateKeys> for RotatingKeys {
             mut next,
             mut previous,
         } = message.0;
-        if let (&Some(ref current), &Some(ref next)) = (&current, &next) {
+        if let (Some(current), Some(next)) = (&current, &next) {
             assert!(next.expires > current.expires);
         }
 

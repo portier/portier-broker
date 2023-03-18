@@ -43,7 +43,7 @@ impl rand_core::RngCore for SecureRandom {
 
     fn fill_bytes(&mut self, dest: &mut [u8]) {
         self.try_fill_bytes(dest)
-            .expect("secure random number generator failed")
+            .expect("secure random number generator failed");
     }
 
     fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
