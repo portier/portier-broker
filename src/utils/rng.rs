@@ -30,3 +30,28 @@ impl SecureRandom {
             .expect("secure random number generator panicked")
     }
 }
+
+#[cfg(feature = "rand_core")]
+impl rand_core::RngCore for SecureRandom {
+    fn next_u32(&mut self) -> u32 {
+        rand_core::impls::next_u32_via_fill(self)
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        rand_core::impls::next_u64_via_fill(self)
+    }
+
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        self.try_fill_bytes(dest)
+            .expect("secure random number generator failed");
+    }
+
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
+        self.generator
+            .fill(dest)
+            .map_err(|_| rand_core::Error::new("secure random number generator failed"))
+    }
+}
+
+#[cfg(feature = "rand_core")]
+impl rand_core::CryptoRng for SecureRandom {}

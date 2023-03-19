@@ -135,8 +135,7 @@ mod tests {
         ] {
             assert!(
                 parse_redirect_uri(uri, "input").is_err(),
-                "did not reject uri: {}",
-                uri
+                "did not reject uri: {uri}"
             );
         }
     }
@@ -167,8 +166,7 @@ mod tests {
             let uri = uri.parse().expect("could not parse a test uri");
             assert!(
                 parse_oidc_href(&uri).is_some(),
-                "unexpectedly rejected uri: {}",
-                uri
+                "unexpectedly rejected uri: {uri}"
             );
         }
     }
@@ -190,11 +188,7 @@ mod tests {
         ] {
             println!("{uri}");
             let uri = uri.parse().expect("could not parse a test uri");
-            assert!(
-                parse_oidc_href(&uri).is_none(),
-                "did not reject uri: {}",
-                uri
-            );
+            assert!(parse_oidc_href(&uri).is_none(), "did not reject uri: {uri}");
         }
     }
 }

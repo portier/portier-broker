@@ -6,10 +6,16 @@ import readline from "readline";
 import { spawn } from "child_process";
 import { Mailbox } from "./mailbox";
 
-import { RUST_LOG, TEST_STORE, TEST_KEY_MANAGER, TEST_MAILER } from "./env";
+import {
+  PORTIER_BIN,
+  RUST_LOG,
+  TEST_STORE,
+  TEST_KEY_MANAGER,
+  TEST_MAILER,
+} from "./env";
 
 const ROOT = path.resolve(__dirname, "../../../");
-const BIN = path.resolve(ROOT, "target/debug/portier-broker");
+const BIN = path.resolve(ROOT, PORTIER_BIN);
 
 export interface Broker {
   destroy(): void;

@@ -220,8 +220,7 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
         }
         Err(e) => {
             return Err(BrokerError::Internal(format!(
-                "could not test rate limit: {}",
-                e
+                "could not test rate limit: {e}"
             )))
         }
     }

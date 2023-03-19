@@ -6,7 +6,8 @@
 #
 
 # Stage 1: Build the broker in release mode.
-FROM rust:1-bullseye AS build
+FROM rust:1-alpine AS build
+RUN apk add --no-cache build-base
 WORKDIR /build
 COPY . .
 RUN cargo build --release --locked
@@ -27,22 +28,15 @@ fi
 # Don't keep translation source files.
 RUN rm -f ./lang/*.po
 
-# Stage 3: Prepare the base Debian system.
+# Stage 3: Prepare the base Alpine system.
 # This stage is separate, because release images only use this,
 # then copy in the release tarball as a layer on top.
-FROM debian:bullseye AS base
+FROM alpine AS base
 # Add a user and group first to make sure their IDs get assigned consistently,
 # regardless of whatever dependencies get added.
 RUN set -x \
-  && groupadd -r -g 999 portier-broker \
-  && useradd -r -g portier-broker -u 999 portier-broker
-# Install run-time dependencies.
-RUN set -x \
-  && apt-get update \
-  && apt-get install -y --no-install-recommends \
-    openssl \
-    ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
+  && addgroup -S -g 2000 portier-broker \
+  && adduser -S -G portier-broker -u 2000 portier-broker
 # Set image settings.
 WORKDIR /opt/portier-broker
 ENTRYPOINT ["/opt/portier-broker/portier-broker"]

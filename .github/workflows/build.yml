@@ -35,12 +35,19 @@ jobs:
 
   linux-build:
     runs-on: ubuntu-latest
+    env:
+      BUILD_TARGET: x86_64-unknown-linux-musl
+      # For E2E tests.
+      PORTIER_BIN: target/x86_64-unknown-linux-musl/debug/portier-broker
     services:
       redis:
         image: redis:latest
         ports:
         - 6379:6379
     steps:
+
+    - name: APT dependencies
+      run: sudo apt-get install gettext musl-tools
 
     - name: Checkout
       uses: actions/checkout@v3
@@ -49,6 +56,7 @@ jobs:
       uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
+        target: ${{ env.BUILD_TARGET }}
         profile: minimal
         components: rustfmt, clippy
         default: true
@@ -63,16 +71,16 @@ jobs:
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
     - name: Build
-      run: cargo build --locked
+      run: cargo build --locked --target $BUILD_TARGET
 
     - name: Upload artifact
       uses: actions/upload-artifact@v3
       with:
         name: Linux binary (debug)
-        path: target/debug/portier-broker
+        path: target/${{ env.BUILD_TARGET }}/debug/portier-broker
 
     - name: Test
-      run: cargo test --locked
+      run: cargo test --locked --target $BUILD_TARGET
 
     - name: Clippy
       uses: actions-rs/clippy-check@v1
@@ -81,9 +89,6 @@ jobs:
 
     - name: Rustfmt
       run: cargo fmt -- --check
-
-    - name: Install gettext
-      run: sudo apt-get install gettext
 
     - name: Check translations
       run: |
@@ -106,6 +111,11 @@ jobs:
           git status
           exit 1
         fi
+
+    # Feature `insecure` is used so the broker can connect to
+    # the plain HTTP server created by the E2E test harness.
+    - name: Build insecure
+      run: cargo build --locked --target $BUILD_TARGET --features insecure
 
     - name: E2E test deps
       run: cd tests/e2e/ && yarn --frozen-lockfile

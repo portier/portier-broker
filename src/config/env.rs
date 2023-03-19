@@ -39,6 +39,7 @@ pub struct EnvConfig {
     keyfiles: Option<Vec<PathBuf>>,
     keytext: Option<String>,
     signing_algs: Option<Vec<SigningAlgorithm>>,
+    rsa_modulus_bits: Option<usize>,
     generate_rsa_command: Option<String>,
 
     redis_url: Option<String>,
@@ -122,41 +123,26 @@ impl EnvConfig {
             for (source, res) in val.iter_values() {
                 match res {
                     Ok(data) => list.push(data.into_owned()),
-                    Err(err) => panic!(
-                        "IO error in BROKER_ALLOWED_ORIGINS entry {}: {}",
-                        source, err
-                    ),
+                    Err(err) => panic!("IO error in BROKER_ALLOWED_ORIGINS entry {source}: {err}"),
                 }
             }
         }
         for (source, res) in parsed.allowed_domains.iter_values() {
             let data = match res {
                 Ok(data) => data,
-                Err(err) => panic!(
-                    "IO error in BROKER_ALLOWED_DOMAINS entry {}: {}",
-                    source, err
-                ),
+                Err(err) => panic!("IO error in BROKER_ALLOWED_DOMAINS entry {source}: {err}"),
             };
             if let Err(err) = builder.domain_validator.add_allowed_domain(data.as_ref()) {
-                panic!(
-                    "Invalid BROKER_ALLOWED_DOMAINS entry {}: '{}': {}",
-                    source, data, err
-                );
+                panic!("Invalid BROKER_ALLOWED_DOMAINS entry {source}: '{data}': {err}");
             }
         }
         for (source, res) in parsed.blocked_domains.iter_values() {
             let data = match res {
                 Ok(data) => data,
-                Err(err) => panic!(
-                    "IO error in BROKER_BLOCKED_DOMAINS entry {}: {}",
-                    source, err
-                ),
+                Err(err) => panic!("IO error in BROKER_BLOCKED_DOMAINS entry {source}: {err}"),
             };
             if let Err(err) = builder.domain_validator.add_blocked_domain(data.as_ref()) {
-                panic!(
-                    "Invalid BROKER_BLOCKED_DOMAINS entry {}: '{}': {}",
-                    source, data, err
-                );
+                panic!("Invalid BROKER_BLOCKED_DOMAINS entry {source}: '{data}': {err}");
             }
         }
         if let Some(val) = parsed.verify_with_resolver {
@@ -202,6 +188,9 @@ impl EnvConfig {
         }
         if let Some(val) = parsed.signing_algs {
             builder.signing_algs = val;
+        }
+        if let Some(val) = parsed.rsa_modulus_bits {
+            builder.rsa_modulus_bits = val;
         }
         if let Some(val) = parsed.generate_rsa_command {
             builder.generate_rsa_command = val.split_whitespace().map(ToOwned::to_owned).collect();

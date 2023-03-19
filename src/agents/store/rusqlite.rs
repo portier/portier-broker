@@ -107,8 +107,7 @@ impl RusqliteStore {
                 })?;
             assert!(
                 app_id == APP_ID,
-                "The SQLite database has an invalid application ID: {}",
-                app_id
+                "The SQLite database has an invalid application ID: {app_id}"
             );
         }
         Ok(())
@@ -122,10 +121,7 @@ impl RusqliteStore {
                 0 => Self::init_schema_1(conn)?,
                 1 => Self::init_schema_2(conn)?,
                 2 => return Ok(()),
-                _ => panic!(
-                    "The SQLite database has an unknown version: {}",
-                    user_version
-                ),
+                _ => panic!("The SQLite database has an unknown version: {user_version}"),
             }
         }
     }

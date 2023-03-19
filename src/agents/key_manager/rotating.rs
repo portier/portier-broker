@@ -1,5 +1,6 @@
 use crate::agents::*;
 use crate::crypto::SigningAlgorithm;
+use crate::utils::keys::GenerateRsaConfig;
 use crate::utils::{
     agent::*,
     keys::{GeneratedKeyPair, KeyPairExt, NamedKeyPair, SignError},
@@ -139,6 +140,7 @@ pub struct RotatingKeys {
     store: Arc<dyn StoreSender>,
     keys_ttl: Duration,
     signing_algs: HashSet<SigningAlgorithm>,
+    rsa_modulus_bits: usize,
     generate_rsa_command: Vec<String>,
     rng: SecureRandom,
     ed25519_keys: Option<ActiveKeySet<Ed25519KeyPair>>,
@@ -151,6 +153,7 @@ impl RotatingKeys {
         store: Arc<dyn StoreSender>,
         keys_ttl: Duration,
         signing_algs: &[SigningAlgorithm],
+        rsa_modulus_bits: usize,
         generate_rsa_command: Vec<String>,
         rng: SecureRandom,
     ) -> Self {
@@ -163,6 +166,7 @@ impl RotatingKeys {
             store,
             keys_ttl,
             signing_algs: signing_algs.iter().copied().collect(),
+            rsa_modulus_bits,
             generate_rsa_command,
             rng,
             ed25519_keys: None,
@@ -175,7 +179,11 @@ impl RotatingKeys {
         use SigningAlgorithm::*;
         match signing_alg {
             EdDsa => Ed25519KeyPair::generate(self.rng.clone()),
-            Rs256 => RsaKeyPair::generate(self.generate_rsa_command.clone()),
+            Rs256 => RsaKeyPair::generate(GenerateRsaConfig {
+                rng: self.rng.clone(),
+                modulus_bits: self.rsa_modulus_bits,
+                command: self.generate_rsa_command.clone(),
+            }),
         }
     }
 }
@@ -285,7 +293,7 @@ impl Handler<RotateKeys> for RotatingKeys {
             mut next,
             mut previous,
         } = message.0;
-        if let (&Some(ref current), &Some(ref next)) = (&current, &next) {
+        if let (Some(current), Some(next)) = (&current, &next) {
             assert!(next.expires > current.expires);
         }
 

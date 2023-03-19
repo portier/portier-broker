@@ -39,6 +39,7 @@ pub struct TomlConfig {
     keyfiles: Option<Vec<PathBuf>>,
     keytext: Option<String>,
     signing_algs: Option<Vec<SigningAlgorithm>>,
+    rsa_modulus_bits: Option<usize>,
     generate_rsa_command: Option<Vec<String>>,
 
     redis_url: Option<String>,
@@ -269,10 +270,7 @@ impl TomlConfig {
                 Err(err) => panic!("IO error in allowed_domains entry {source}: {err}"),
             };
             if let Err(err) = builder.domain_validator.add_allowed_domain(data.as_ref()) {
-                panic!(
-                    "Invalid allowed_domains entry {}: '{}': {}",
-                    source, data, err
-                );
+                panic!("Invalid allowed_domains entry {source}: '{data}': {err}");
             }
         }
         for (source, res) in parsed.blocked_domains.iter_values() {
@@ -281,10 +279,7 @@ impl TomlConfig {
                 Err(err) => panic!("IO error in blocked_domains entry {source}: {err}"),
             };
             if let Err(err) = builder.domain_validator.add_blocked_domain(data.as_ref()) {
-                panic!(
-                    "Invalid blocked_domains entry {}: '{}': {}",
-                    source, data, err
-                );
+                panic!("Invalid blocked_domains entry {source}: '{data}': {err}");
             }
         }
         if let Some(val) = parsed.verify_with_resolver {
@@ -330,6 +325,9 @@ impl TomlConfig {
         }
         if let Some(val) = parsed.signing_algs {
             builder.signing_algs = val;
+        }
+        if let Some(val) = parsed.rsa_modulus_bits {
+            builder.rsa_modulus_bits = val;
         }
         if let Some(val) = parsed.generate_rsa_command {
             builder.generate_rsa_command = val;

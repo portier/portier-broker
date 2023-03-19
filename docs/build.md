@@ -41,6 +41,17 @@ flags you want.
 
 The broker currently defines the following feature flags:
 
+- `rustls`: Uses [rustls] for TLS connectivity. (Enabled by default.) Root
+  certificates are loaded from the system root store. This feature conflicts
+  with `native-tls`.
+
+- `native-tls`: Uses the platform native TLS library via the
+  [native-tls crate]. This feature conflicts with `rustls`.
+
+- `rsa`: Uses the [rsa crate] to generate RSA keys. Without this feature, an
+  external command must be provided to generate RSA keys (via the
+  `generate_rsa_command` setting).
+
 - `redis`: Enables [Redis] storage support using the [redis crate]. (Enabled by
   default.)
 
@@ -63,6 +74,9 @@ The broker currently defines the following feature flags:
   Identity Providers to use plain HTTP in their discovery documents. Useful for
   testing Identity Provider implementations.
 
+[rustls]: https://crates.io/crates/rustls
+[native-tls crate]: https://crates.io/crates/native-tls
+[rsa crate]: https://crates.io/crates/rsa
 [redis]: https://redis.io
 [redis crate]: https://crates.io/crates/redis
 [sqlite]: https://www.sqlite.org/index.html

@@ -357,6 +357,7 @@ pub struct ConfigBuilder {
     pub keyfiles: Vec<PathBuf>,
     pub keytext: Option<String>,
     pub signing_algs: Vec<SigningAlgorithm>,
+    pub rsa_modulus_bits: usize,
     pub generate_rsa_command: Vec<String>,
 
     pub redis_url: Option<String>,
@@ -410,10 +411,15 @@ impl ConfigBuilder {
             keyfiles: Vec::new(),
             keytext: None,
             signing_algs: vec![SigningAlgorithm::Rs256],
-            generate_rsa_command: "openssl genrsa 2048"
-                .split_whitespace()
-                .map(ToOwned::to_owned)
-                .collect(),
+            rsa_modulus_bits: 2048,
+            generate_rsa_command: if cfg!(feature = "rsa") {
+                vec![]
+            } else {
+                "openssl genrsa 2048"
+                    .split_whitespace()
+                    .map(ToOwned::to_owned)
+                    .collect()
+            },
 
             redis_url: None,
             sqlite_db: None,
@@ -542,7 +548,8 @@ impl ConfigBuilder {
             )?;
             Box::new(spawn_agent(key_manager).await)
         } else {
-            if self.signing_algs.contains(&SigningAlgorithm::Rs256)
+            if !cfg!(feature = "rsa")
+                && self.signing_algs.contains(&SigningAlgorithm::Rs256)
                 && self.generate_rsa_command.is_empty()
             {
                 return Err("generate_rsa_command is required for rotating RSA keys".into());
@@ -551,6 +558,7 @@ impl ConfigBuilder {
                 store.clone(),
                 self.keys_ttl,
                 &self.signing_algs,
+                self.rsa_modulus_bits,
                 self.generate_rsa_command,
                 rng.clone(),
             );

@@ -182,17 +182,15 @@ async fn conn_loop(mut rx: ReadHalf, mut tx: WriteHalf, mut cmd: mpsc::Receiver<
                 };
                 match (&vec[0], &vec[1], vec.get(2)) {
                     // Handle a message event by sending on the broadcast channel.
-                    (
-                        &Value::Data(ref ev),
-                        &Value::Data(ref chan),
-                        Some(&Value::Data(ref data)),
-                    ) if ev == b"message" => {
+                    (Value::Data(ev), Value::Data(chan), Some(Value::Data(data)))
+                        if ev == b"message" =>
+                    {
                         if let Some(sub) = subs.get(&chan[..]) {
                             let _ignored = sub.tx.send(data.clone());
                         }
                     }
                     // Handle subscription confirmation by sending out pending replies.
-                    (&Value::Data(ref ev), &Value::Data(ref chan), _) if ev == b"subscribe" => {
+                    (Value::Data(ev), Value::Data(chan), _) if ev == b"subscribe" => {
                         if let Some(ref mut sub) = subs.get_mut(&chan[..]) {
                             if let Some(pending) = sub.pending.take() {
                                 for reply in pending {
@@ -202,7 +200,7 @@ async fn conn_loop(mut rx: ReadHalf, mut tx: WriteHalf, mut cmd: mpsc::Receiver<
                         }
                     }
                     // Some other events are ok, but we do nothing with them.
-                    (&Value::Data(ref ev), _, _) if ev == b"unsubscribe" || ev == b"pong" => {}
+                    (Value::Data(ev), _, _) if ev == b"unsubscribe" || ev == b"pong" => {}
                     _ => panic!("Unexpected value from Redis: {value:?}"),
                 }
             }
