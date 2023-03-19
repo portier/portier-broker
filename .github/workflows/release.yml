@@ -191,6 +191,9 @@ jobs:
   release-linux-docker:
     needs: release-linux
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     services:
       # Scratch registry for building multiarch images.
       registry:
@@ -262,18 +265,30 @@ jobs:
         docker buildx imagetools create -t "$scratch_repo" "${scratch_tags[@]}"
 
     - name: Upload
-      env:
-        SKOPEO_AUTH: ${{ secrets.SKOPEO_AUTH }}
       run: |
-        mkdir -p "${HOME}/.config/containers"
-        echo "${SKOPEO_AUTH}" > "${HOME}/.config/containers/auth.json"
+        # We used to use skopeo to copy the final multiarch image, but the
+        # current version installed on the GitHub runner is too old. Here we
+        # setup regclient.
+        curl -L https://github.com/regclient/regclient/releases/latest/download/regctl-linux-amd64 > "/tmp/regctl"
+        sudo install -t /usr/local/bin -o root -g root -m 0755 "/tmp/regctl"
 
-        skopeo --insecure-policy copy --all --src-tls-verify=false \
-          "docker://$scratch_repo" \
-          "docker://portier/broker:$tag_name"
+        # Setup the scratch registry.
+        regctl registry set --tls=disabled localhost:5000
+        # Login to GitHub Container Registry.
+        docker login --password-stdin \
+          --username '${{ github.actor }}' \
+          ghcr.io <<< '${{ secrets.GITHUB_TOKEN }}'
+        # Login to Docker Hub.
+        docker login --password-stdin \
+          --username '${{ secrets.DOCKERHUB_USERNAME }}' \
+          <<< '${{ secrets.DOCKERHUB_TOKEN }}'
 
+        # Publish a version-specific tag.
+        regctl image copy "$scratch_repo" "ghcr.io/portier/portier-broker:$tag_name"
+        regctl image copy "$scratch_repo" "docker.io/portier/broker:$tag_name"
+
+        # Publish a 'latest' tag.
         if ! grep -q "test" <<< "$tag_name"; then
-          skopeo copy --all \
-            "docker://portier/broker:$tag_name" \
-            "docker://portier/broker:latest"
+          regctl image copy "$scratch_repo" "ghcr.io/portier/portier-broker:latest"
+          regctl image copy "$scratch_repo" "docker.io/portier/broker:latest"
         fi
