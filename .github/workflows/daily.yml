@@ -49,14 +49,20 @@ jobs:
         profile: minimal
         default: true
 
-    - name: Cache
+    - name: Cache Rust
       uses: actions/cache@v3
       with:
         path: ~/.cargo/registry
         key: upgrade-deps-cargo
 
-    - name: Upgrade deps
+    - name: Upgrade Rust deps
       run: cargo update
+
+    - name: Install Nix
+      uses: cachix/install-nix-action@v20
+
+    - name: Upgrade Nix flake
+      run: nix flake update
 
     - name: Create PR
       id: cpr
