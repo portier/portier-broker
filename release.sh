@@ -40,7 +40,7 @@ fi
 #
 # Assumes it's somewhere in the first 5 lines, because we want to avoid
 # replacing dependency versions.
-sed -i '' -e "1,5 s/^version = \".*\"/version = \"$1\"/" Cargo.toml
+sed -i -e "1,5 s/^version = \".*\"/version = \"$1\"/" Cargo.toml
 
 # Run Cargo to have it update Cargo.lock.
 cargo check
