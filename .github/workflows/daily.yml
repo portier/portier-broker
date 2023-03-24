@@ -2,10 +2,8 @@ name: Daily checks
 
 on:
   workflow_dispatch:
-  # NOTE: Dependabot runs after this workflow, at 05:00 UTC. By ensuring this
-  # workflow runs first, we can perform simple upgrades ahead of Dependabot.
   schedule:
-  - cron: '0 3 * * *'
+  - cron: '0 7 * * *'
 
 jobs:
 
@@ -31,53 +29,3 @@ jobs:
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         generate-lockfile: false
-
-  # Performs simple dependency upgrades automatically.
-  # Creates (or updates) a PR, and enables automerging.
-  # For larger upgrades, we use Dependabot.
-  upgrade-deps:
-    runs-on: ubuntu-latest
-    steps:
-
-    - name: Checkout
-      uses: actions/checkout@v3
-
-    - name: Install Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: '1.60'
-        profile: minimal
-        default: true
-
-    - name: Cache Rust
-      uses: actions/cache@v3
-      with:
-        path: ~/.cargo/registry
-        key: upgrade-deps-cargo
-
-    - name: Upgrade Rust deps
-      run: cargo update
-
-    - name: Install Nix
-      uses: cachix/install-nix-action@v20
-
-    - name: Upgrade Nix flake
-      run: nix flake update
-
-    - name: Create PR
-      id: cpr
-      uses: peter-evans/create-pull-request@v4
-      with:
-        # Use a bot token, so checks run on the PR.
-        token: ${{ secrets.BOT_GITHUB_TOKEN }}
-        author: 'r-stephank <ghbot@stephank.nl>'
-        committer: 'r-stephank <ghbot@stephank.nl>'
-        commit-message: "Update Cargo.lock"
-        title: "Update Cargo.lock"
-        branch: "auto/update-deps"
-
-    - name: Enable automerge
-      if: steps.cpr.outputs.pull-request-operation == 'created'
-      run: gh pr merge --merge --auto '${{ steps.cpr.outputs.pull-request-number }}'
-      env:
-        GH_TOKEN: ${{ secrets.BOT_GITHUB_TOKEN }}
