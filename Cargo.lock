@@ -1385,7 +1385,7 @@ dependencies = [
 
 [[package]]
 name = "portier_broker"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "accept-language",
  "base64 0.21.0",
