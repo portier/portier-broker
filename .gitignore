@@ -3,9 +3,13 @@
 # Version control
 .git
 
+# Misc
+.direnv
+
 # Build products
 target
 node_modules
+result
 
 # Runtime files
 *.pem

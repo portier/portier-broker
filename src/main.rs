@@ -1,3 +1,4 @@
+#![forbid(unsafe_code)]
 #![warn(clippy::pedantic)]
 #![allow(
     clippy::cast_possible_truncation,
