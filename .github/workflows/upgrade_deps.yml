@@ -49,8 +49,8 @@ jobs:
         token: ${{ secrets.BOT_GITHUB_TOKEN }}
         author: 'r-stephank <ghbot@stephank.nl>'
         committer: 'r-stephank <ghbot@stephank.nl>'
-        commit-message: "Update Cargo.lock"
-        title: "Update Cargo.lock"
+        commit-message: "Update dependencies"
+        title: "Update dependencies"
         branch: "auto/update-deps"
 
     - name: Enable automerge
