@@ -32,19 +32,24 @@ mod webfinger;
 
 use crate::agents::{Expiring, ExportKeySet, ImportKeySet, KeySet};
 use crate::config::{ConfigBuilder, ConfigRc};
-use crate::utils::{pem, BoxError};
+use crate::utils::pem;
 use crate::web::Service;
-use futures_util::future;
-use hyper::{server::Server, service::make_service_fn};
+use hyper::server::conn::Http;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufReader, Write};
+use std::io::{self, BufReader, Write};
+use std::time::Duration;
 use std::{
     net::SocketAddr,
     path::{Path, PathBuf},
     time::SystemTime,
 };
+use tokio::net::{TcpListener, TcpStream};
+use tokio::task::JoinSet;
+
+#[cfg(not(windows))]
+use tokio::net::{unix::SocketAddr as UnixSocketAddr, UnixListener, UnixStream};
 
 /// Defines the program's version, as set by Cargo at compile time.
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -117,6 +122,26 @@ async fn main() {
 }
 
 async fn start_server(builder: ConfigBuilder) {
+    enum Listener {
+        Tcp(TcpListener),
+        #[cfg(not(windows))]
+        Unix(UnixListener),
+    }
+    enum Socket {
+        Tcp((TcpStream, SocketAddr)),
+        #[cfg(not(windows))]
+        Unix((UnixStream, UnixSocketAddr)),
+    }
+    impl Listener {
+        async fn accept(&mut self) -> io::Result<Socket> {
+            match self {
+                Listener::Tcp(ref mut listener) => listener.accept().await.map(Socket::Tcp),
+                #[cfg(not(windows))]
+                Listener::Unix(ref mut listener) => listener.accept().await.map(Socket::Unix),
+            }
+        }
+    }
+
     let app = ConfigRc::new(
         builder
             .done()
@@ -124,38 +149,60 @@ async fn start_server(builder: ConfigBuilder) {
             .unwrap_or_else(|err| panic!("failed to build configuration: {err}")),
     );
 
-    // TODO: Add unix socket support.
-    let builder = match listenfd::ListenFd::from_env().take_tcp_listener(0) {
-        Ok(Some(tcp_listener)) => {
-            let builder = Server::from_tcp(tcp_listener).expect("Socket activation failed");
-            log::info!("Listening on the socket received from the service manager");
-            builder
+    let mut fds = listenfd::ListenFd::from_env();
+    let mut listener = None;
+
+    // Try socket activation with a Unix socket first.
+    #[cfg(not(windows))]
+    if let Ok(Some(unix)) = fds.take_unix_listener(0) {
+        unix.set_nonblocking(true)
+            .expect("Socket activation failed");
+        let unix = UnixListener::from_std(unix).expect("Socket activation failed");
+        let addr = unix.local_addr().expect("Socket activation failed");
+        listener = Some(Listener::Unix(unix));
+        match addr.as_pathname() {
+            Some(path) => log::info!("Listening on Unix {:?} (via service manager)", path),
+            None => log::info!("Listening on unnamed Unix socket (via service manager)"),
         }
-        Ok(None) => {
+    }
+
+    // Otherwise, if socket activation was used at all, it must be a TCP socket.
+    if listener.is_none() && fds.len() >= 1 {
+        match fds.take_tcp_listener(0) {
+            Ok(Some(tcp)) => {
+                tcp.set_nonblocking(true).expect("Socket activation failed");
+                let tcp = TcpListener::from_std(tcp).expect("Socket activation failed");
+                let addr = tcp.local_addr().expect("Socket activation failed");
+                listener = Some(Listener::Tcp(tcp));
+                log::info!("Listening on TCP {} (via service manager)", addr);
+            }
+            Ok(None) => unreachable!(),
+            Err(err) => {
+                panic!("Socket activation failed: {err}");
+            }
+        }
+    }
+
+    // No socket activation, bind on the configured TCP port.
+    let mut listener = match listener {
+        Some(listener) => listener,
+        None => {
             let ip_addr = app
                 .listen_ip
                 .parse()
                 .expect("Unable to parse listen address");
             let addr = SocketAddr::new(ip_addr, app.listen_port);
-            let builder = Server::bind(&addr);
-            log::info!("Listening on {}", addr);
-            builder
-        }
-        Err(err) => {
-            panic!("Socket activation failed: {err}");
+            let tcp = TcpListener::bind(&addr)
+                .await
+                .expect("Unable to bind to listen address");
+            log::info!("Listening on TCP {}", addr);
+            Listener::Tcp(tcp)
         }
     };
 
-    #[cfg(unix)]
-    sd_notify::notify(true, &[sd_notify::NotifyState::Ready])
-        .expect("Failed to signal ready to the service manager");
-
-    let make_service = make_service_fn(|stream| {
-        metrics::HTTP_CONNECTIONS.inc();
-        let app = ConfigRc::clone(&app);
-        future::ok::<_, BoxError>(Service::new(app, stream))
-    });
-    let server = builder.serve(make_service);
+    let mut http = Http::new();
+    http.http1_only(true)
+        .http1_header_read_timeout(Duration::from_secs(5));
 
     let (exit_tx, mut exit_rx) = tokio::sync::mpsc::channel(1);
     ctrlc::set_handler(move || {
@@ -164,15 +211,63 @@ async fn start_server(builder: ConfigBuilder) {
             .expect("Could not send the exit signal");
     })
     .expect("Could not install the exit signal handler");
-    let server = server.with_graceful_shutdown(async move {
-        exit_rx
-            .recv()
-            .await
-            .expect("Could not wait for the exit signal");
-        log::info!("Shutting down");
-    });
 
-    server.await.expect("Server error");
+    let mut connections = JoinSet::new();
+
+    #[cfg(unix)]
+    sd_notify::notify(true, &[sd_notify::NotifyState::Ready])
+        .expect("Failed to signal ready to the service manager");
+
+    let mut accepting = true;
+    loop {
+        let res = tokio::select! {
+            // Drive active connections.
+            Some(res) = connections.join_next() => {
+                if let Err(err) = res {
+                    log::warn!("Error in HTTP connection: {}", err);
+                }
+                accepting = true;
+                continue;
+            },
+            // Accept new connections.
+            res = listener.accept(), if accepting => res,
+            // Exit the loop on the exit signal.
+            _ = exit_rx.recv() => break,
+        };
+        match res {
+            Ok(Socket::Tcp((socket, addr))) => {
+                metrics::HTTP_CONNECTIONS.inc();
+                let service = Service::new(&app, Some(addr));
+                connections.spawn(http.serve_connection(socket, service));
+            }
+            #[cfg(not(windows))]
+            Ok(Socket::Unix((socket, _))) => {
+                metrics::HTTP_CONNECTIONS.inc();
+                let service = Service::new(&app, None);
+                connections.spawn(http.serve_connection(socket, service));
+            }
+            Err(err) => match err.kind() {
+                io::ErrorKind::ConnectionRefused
+                | io::ErrorKind::ConnectionAborted
+                | io::ErrorKind::ConnectionReset => {}
+                _ => {
+                    log::error!("Accept error: {}", err);
+                    // Assume resource exhaustion (e.g.: out of fds).
+                    // Delay accepting until one of our connections closes.
+                    if connections.is_empty() {
+                        break;
+                    }
+                    accepting = false;
+                }
+            },
+        }
+    }
+
+    #[cfg(unix)]
+    if let Err(err) = sd_notify::notify(true, &[sd_notify::NotifyState::Stopping]) {
+        log::error!("Failed to signal stopping to the service manager: {}", err);
+    }
+    while connections.join_next().await.is_some() {}
     log::info!("Shutdown complete");
 }
 

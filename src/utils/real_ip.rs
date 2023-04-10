@@ -1,9 +1,6 @@
 use http::{header::HeaderName, Request};
 use ipnetwork::IpNetwork;
-use std::{
-    iter::once,
-    net::{IpAddr, SocketAddr},
-};
+use std::net::{IpAddr, SocketAddr};
 
 lazy_static::lazy_static! {
     static ref X_FORWARDED_FOR: HeaderName = HeaderName::from_static("x-forwarded-for");
@@ -13,8 +10,14 @@ lazy_static::lazy_static! {
 ///
 /// This takes the socket address, the HTTP request, and a list of configured proxies to trust.
 /// Walks the path indicated by `X-Forwarded-For` until it finds the first non-proxy IP address.
-pub fn real_ip<B>(received_from: SocketAddr, req: &Request<B>, trusted: &[IpNetwork]) -> IpAddr {
-    let received_from = received_from.ip();
+///
+/// If no socket address is given, assumes the first hop is trusted. This currently only happens
+/// for Unix socket connections.
+pub fn real_ip<B>(
+    received_from: Option<SocketAddr>,
+    req: &Request<B>,
+    trusted: &[IpNetwork],
+) -> IpAddr {
     let list: Vec<_> = req
         .headers()
         .get(&*X_FORWARDED_FOR)
@@ -28,7 +31,11 @@ pub fn real_ip<B>(received_from: SocketAddr, req: &Request<B>, trusted: &[IpNetw
         })
         .unwrap_or_default();
 
-    let mut iter = once(received_from).chain(list).peekable();
+    let mut iter = received_from
+        .map(|addr| addr.ip())
+        .into_iter()
+        .chain(list)
+        .peekable();
     loop {
         let ip = iter.next().unwrap();
         if iter.peek().is_none() || !trusted.iter().any(|net| net.contains(ip)) {
@@ -120,7 +127,7 @@ mod tests {
     }
 
     fn test_one(received_from: &str, header: &'static str, trusted: &[&str], expect: &str) {
-        let received_from = received_from.parse().unwrap();
+        let received_from = Some(received_from.parse().unwrap());
         let expect: IpAddr = expect.parse().unwrap();
         let trusted: Vec<_> = trusted.iter().map(|net| net.parse().unwrap()).collect();
 

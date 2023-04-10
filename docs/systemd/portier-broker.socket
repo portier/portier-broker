@@ -5,14 +5,16 @@
 
 [Socket]
 
-# Bind to IPv4 on the loopback interface.
+# Bind to a Unix domain socket.
 #
-# Note that the broker currently only supports HTTP (not HTTPS). Using a front
-# proxy to provide HTTPS is recommended.
-#
-# Note also that the broker currently does not support listening on Unix
-# sockets, not even through socket activation.
-ListenStream=127.0.0.1:3333
+# Alternatively, you can bind directly to a TCP port, but note that the broker
+# only speaks HTTP (not HTTPS or HTTP/2). Using a front proxy to provide HTTPS
+# is recommended.
+ListenStream=/var/run/portier-broker.socket
+
+# Allow only Nginx to access the socket.
+SocketGroup=nginx
+SocketMode=0660
 
 [Install]
 WantedBy=sockets.target
