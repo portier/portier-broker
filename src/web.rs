@@ -12,7 +12,6 @@ use futures_util::stream::StreamExt;
 use gettext::Catalog;
 use headers::{CacheControl, ContentType, Header, StrictTransportSecurity};
 use http::{HeaderMap, Method, StatusCode, Uri};
-use hyper::server::conn::AddrStream;
 use hyper::service::Service as HyperService;
 use hyper::Body;
 use log::info;
@@ -224,23 +223,21 @@ impl Context {
 pub type Request = hyper::Request<Body>;
 /// Standard response type.
 pub type Response = hyper::Response<Body>;
-/// Result type of handlers
+/// Result type of handlers.
 pub type HandlerResult = Result<Response, BrokerError>;
 
 /// HTTP service
 pub struct Service {
-    /// The application configuration
+    /// The application configuration.
     app: ConfigRc,
-    /// The client address
-    remote_addr: SocketAddr,
+    /// The client address. None if a Unix socket connection.
+    remote_addr: Option<SocketAddr>,
 }
 
 impl Service {
-    pub fn new(app: ConfigRc, stream: &AddrStream) -> Self {
-        Self {
-            app,
-            remote_addr: stream.remote_addr(),
-        }
+    pub fn new(app: &ConfigRc, remote_addr: Option<SocketAddr>) -> Self {
+        let app = app.clone();
+        Self { app, remote_addr }
     }
 
     async fn serve(ip: IpAddr, req: Request, app: ConfigRc) -> Result<Response, BoxError> {
