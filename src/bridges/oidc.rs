@@ -224,10 +224,8 @@ pub async fn callback(ctx: &mut Context) -> HandlerResult {
     let session_id = try_get_provider_param!(params, "state");
     let id_token = try_get_provider_param!(params, "id_token");
 
-    #[allow(clippy::match_wildcard_for_single_variants)]
-    let bridge_data = match ctx.load_session(&session_id).await? {
-        BridgeData::Oidc(bridge_data) => bridge_data,
-        _ => return Err(BrokerError::ProviderInput("invalid session".to_owned())),
+    let BridgeData::Oidc(bridge_data) = ctx.load_session(&session_id).await? else {
+        return Err(BrokerError::ProviderInput("invalid session".to_owned()));
     };
 
     // Retrieve the provider's configuration.

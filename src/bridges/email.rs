@@ -135,10 +135,8 @@ pub async fn confirmation(ctx: &mut Context) -> HandlerResult {
         .replace(char::is_whitespace, "")
         .to_lowercase();
 
-    #[allow(clippy::match_wildcard_for_single_variants)]
-    let bridge_data = match ctx.load_session(&session_id).await? {
-        BridgeData::Email(bridge_data) => bridge_data,
-        _ => return Err(BrokerError::ProviderInput("invalid session".to_owned())),
+    let BridgeData::Email(bridge_data) = ctx.load_session(&session_id).await? else {
+        return Err(BrokerError::ProviderInput("invalid session".to_owned()));
     };
 
     if code != bridge_data.code {
