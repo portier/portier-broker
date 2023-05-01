@@ -103,7 +103,7 @@ features = ["script", "tokio-comp"]
 
 [dependencies.rsa]
 optional = true
-version = "0.8.2"
+version = "0.9.0"
 default-features = false
 
 [dependencies.rusqlite]
