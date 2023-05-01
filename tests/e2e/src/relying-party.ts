@@ -18,8 +18,8 @@ export default (): RelyingParty => {
   const emitter = new EventEmitter();
 
   const portier = new PortierClient({
-    broker: "http://127.0.0.1:44133",
-    redirectUri: "http://127.0.0.1:44180/verify",
+    broker: "http://localhost:44133",
+    redirectUri: "http://localhost:44180/verify",
   });
 
   const app = express();
@@ -67,7 +67,7 @@ export default (): RelyingParty => {
     // For testing the authorization code flow.
     let token = params.id_token || "";
     if (!token && params.code) {
-      const tokenRes = await fetch("http://127.0.0.1:44133/token", {
+      const tokenRes = await fetch("http://localhost:44133/token", {
         method: "POST",
         body: querystring.stringify({
           grant_type: "authorization_code",
@@ -109,7 +109,7 @@ export default (): RelyingParty => {
     `);
   }
 
-  const server = app.listen(44180, "127.0.0.1");
+  const server = app.listen(44180, "localhost");
 
   return Object.assign(emitter, {
     portier,
