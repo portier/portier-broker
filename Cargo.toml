@@ -30,7 +30,7 @@ overflow-checks = true
 
 [dependencies]
 accept-language = "2.0.0"
-base64 = "0.21.0"
+base64 = "0.21.2"
 bytes = "1.0.1"
 docopt = "1.1.0"
 envy = "0.4.1"
