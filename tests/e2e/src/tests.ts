@@ -35,7 +35,7 @@ const RP_CONFIRMED_TITLE = "RP: Confirmed";
 const RP_GOT_ERROR_TITLE = "RP: Got error";
 
 test("successful flow with code input", async ({ mailbox, driver }) => {
-  await driver.get("http://127.0.0.1:44180/");
+  await driver.get("http://localhost:44180/");
   await driver.wait(until.titleIs(RP_LOGIN_TITLE), TIMEOUT);
 
   const emailInput = await driver.findElement(By.name("email"));
@@ -62,7 +62,7 @@ test("successful flow following the email link", async ({
   mailbox,
   driver,
 }) => {
-  await driver.get("http://127.0.0.1:44180/");
+  await driver.get("http://localhost:44180/");
   await driver.wait(until.titleIs(RP_LOGIN_TITLE), TIMEOUT);
 
   const emailInput = await driver.findElement(By.name("email"));
@@ -70,7 +70,7 @@ test("successful flow following the email link", async ({
   await driver.wait(until.titleIs(BROKER_CONFIRM_TITLE), TIMEOUT);
 
   const mail = mailbox.nextMail();
-  const match = /^http:\/\/127.0.0.1:44133\/confirm\?.+$/m.exec(mail ?? "");
+  const match = /^http:\/\/localhost:44133\/confirm\?.+$/m.exec(mail ?? "");
   if (!match) {
     throw Error("Could not find the confirmation URL in the email text");
   }
@@ -143,7 +143,7 @@ test("cannot omit openid scope", async ({ driver, relyingParty }) => {
 });
 
 postmarkTest("sends API request", async ({ httpMailer, driver }) => {
-  await driver.get("http://127.0.0.1:44180/");
+  await driver.get("http://localhost:44180/");
   await driver.wait(until.titleIs(RP_LOGIN_TITLE), TIMEOUT);
 
   const emailInput = await driver.findElement(By.name("email"));
@@ -156,7 +156,7 @@ postmarkTest("sends API request", async ({ httpMailer, driver }) => {
 });
 
 mailgunTest("sends API request", async ({ httpMailer, driver }) => {
-  await driver.get("http://127.0.0.1:44180/");
+  await driver.get("http://localhost:44180/");
   await driver.wait(until.titleIs(RP_LOGIN_TITLE), TIMEOUT);
 
   const emailInput = await driver.findElement(By.name("email"));

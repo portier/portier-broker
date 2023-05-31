@@ -183,9 +183,8 @@ impl Context {
     /// Will return `false` if the session was not started, which will also happen if another
     /// provider has already claimed the session.
     pub async fn save_session(&mut self, bridge_data: BridgeData) -> BrokerResult<bool> {
-        let data = match self.session_data.take() {
-            Some(data) => data,
-            None => return Ok(false),
+        let Some(data) = self.session_data.take() else {
+            return Ok(false);
         };
         self.app
             .store

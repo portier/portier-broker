@@ -44,7 +44,7 @@ export default ({ mailbox }: { mailbox: Mailbox }): HttpMailer => {
     });
   });
 
-  const server = app.listen(44920, "127.0.0.1");
+  const server = app.listen(44920, "localhost");
 
   return {
     destroy() {

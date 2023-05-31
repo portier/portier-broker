@@ -84,12 +84,9 @@ impl DomainValidator {
 
     /// Set the DNS resolver for email domain validation.
     pub fn set_resolver(&mut self, addr: Option<&str>) -> Result<(), io::Error> {
-        let addr = match addr {
-            Some(addr) => addr,
-            None => {
-                self.dns_resolver = None;
-                return Ok(());
-            }
+        let Some(addr) = addr else {
+            self.dns_resolver = None;
+            return Ok(());
         };
 
         let mut cfg = ResolverConfig::new();

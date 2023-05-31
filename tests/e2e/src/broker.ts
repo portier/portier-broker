@@ -25,8 +25,13 @@ export default ({ mailbox }: { mailbox: Mailbox }): Broker => {
   const env: { [key: string]: string } = {
     RUST_LOG,
     RUST_BACKTRACE: "1",
+    // TODO: On Linux, localhost sometimes resolves to IPv6, but the broker
+    // listens on IPv4 by default. This issue is probably broader than Linux,
+    // and a better solution is if we could simply specify 'localhost' in
+    // broker config, then have it bind to all addresses.
+    BROKER_LISTEN_IP: process.platform === 'linux' ? '::1' : '127.0.0.1',
     BROKER_LISTEN_PORT: "44133",
-    BROKER_PUBLIC_URL: "http://127.0.0.1:44133",
+    BROKER_PUBLIC_URL: "http://localhost:44133",
     BROKER_FROM_ADDRESS: "portier@example.com",
     BROKER_LIMITS: "100000/s",
     BROKER_ALLOWED_DOMAINS: "example.com",
@@ -70,17 +75,17 @@ export default ({ mailbox }: { mailbox: Mailbox }): Broker => {
 
   switch (TEST_MAILER) {
     case "smtp":
-      env.BROKER_SMTP_SERVER = "127.0.0.1:44125";
+      env.BROKER_SMTP_SERVER = "localhost:44125";
       break;
     case "sendmail":
       env.BROKER_SENDMAIL_COMMAND = `${__dirname}/sendmail.sh`;
       break;
     case "postmark":
       env.BROKER_POSTMARK_TOKEN = "POSTMARK_API_TEST";
-      env.BROKER_POSTMARK_API = "http://127.0.0.1:44920/postmark";
+      env.BROKER_POSTMARK_API = "http://localhost:44920/postmark";
       break;
     case "mailgun":
-      env.BROKER_MAILGUN_API = "http://127.0.0.1:44920/mailgun";
+      env.BROKER_MAILGUN_API = "http://localhost:44920/mailgun";
       env.BROKER_MAILGUN_TOKEN = "123";
       env.BROKER_MAILGUN_DOMAIN = "portier.io";
       break;
