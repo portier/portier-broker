@@ -1402,7 +1402,7 @@ dependencies = [
  "hyper-rustls",
  "hyper-staticfile",
  "hyper-tls",
- "idna 0.3.0",
+ "idna 0.4.0",
  "ipnetwork",
  "lazy_static",
  "lettre",
