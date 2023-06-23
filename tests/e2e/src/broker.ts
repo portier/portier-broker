@@ -3,8 +3,10 @@
 import crypto from "crypto";
 import path from "path";
 import readline from "readline";
-import { spawn } from "child_process";
 import { Mailbox } from "./mailbox";
+import { connect } from "node:net";
+import { setTimeout } from "node:timers/promises";
+import { spawn } from "child_process";
 
 import {
   PORTIER_BIN,
@@ -21,7 +23,7 @@ export interface Broker {
   destroy(): void;
 }
 
-export default ({ mailbox }: { mailbox: Mailbox }): Broker => {
+export default async ({ mailbox }: { mailbox: Mailbox }): Promise<Broker> => {
   const env: { [key: string]: string } = {
     RUST_LOG,
     RUST_BACKTRACE: "1",
@@ -29,7 +31,7 @@ export default ({ mailbox }: { mailbox: Mailbox }): Broker => {
     // listens on IPv4 by default. This issue is probably broader than Linux,
     // and a better solution is if we could simply specify 'localhost' in
     // broker config, then have it bind to all addresses.
-    BROKER_LISTEN_IP: process.platform === 'linux' ? '::1' : '127.0.0.1',
+    BROKER_LISTEN_IP: process.platform === "linux" ? "::1" : "127.0.0.1",
     BROKER_LISTEN_PORT: "44133",
     BROKER_PUBLIC_URL: "http://localhost:44133",
     BROKER_FROM_ADDRESS: "portier@example.com",
@@ -134,6 +136,26 @@ export default ({ mailbox }: { mailbox: Mailbox }): Broker => {
           break;
       }
     });
+
+  // Wait for broker to start.
+  let err = "unknown";
+  for (let i = 20; i--; err && i) {
+    err = await new Promise((resolve) => {
+      const sock = connect(44133, env.BROKER_LISTEN_IP)
+        .on("error", (err) => {
+          resolve(err.message);
+        })
+        .on("connect", () => {
+          sock.destroy();
+          resolve("");
+        });
+    });
+    err && (await setTimeout(500));
+  }
+  if (err) {
+    subprocess.kill();
+    throw Error("Could not start broker: " + err);
+  }
 
   return {
     destroy() {

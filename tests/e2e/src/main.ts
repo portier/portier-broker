@@ -20,7 +20,7 @@ const main = async () => {
     driver: WebDriver | undefined;
   try {
     mailbox = createMailbox();
-    broker = createBroker({ mailbox });
+    broker = await createBroker({ mailbox });
     relyingParty = createRelyingParty();
     httpMailer = createHttpMailer({ mailbox });
     driver = await createDriver();
