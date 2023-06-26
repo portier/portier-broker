@@ -4,9 +4,9 @@ version = 3
 
 [[package]]
 name = "accept-language"
-version = "2.0.0"
+version = "3.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2bc21ffc9b77e9c31e733bb7e937c11dcf6157bb74f80bf94734110aa9b9ebc"
+checksum = "ca416f09482b5346c9617b9da61fb9a6cbb6c51f162dc027c9e29e11645910f5"
 
 [[package]]
 name = "ahash"
