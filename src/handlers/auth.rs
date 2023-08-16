@@ -168,7 +168,7 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
         let display_origin = redirect_uri_.origin().unicode_serialization();
 
         let catalog = ctx.catalog();
-        let data = mustache::MapBuilder::new()
+        let mut data = mustache::MapBuilder::new()
             .insert_str("display_origin", display_origin)
             .insert_str("title", catalog.gettext("Finish logging in to"))
             .insert_str(
@@ -180,18 +180,24 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
                 catalog.gettext("Please specify the email you wish to use to login with"),
             )
             .insert_vec("params", |mut builder| {
-                for param in &original_params {
+                let mut original_params_filtered = original_params.clone();
+                original_params_filtered.retain(|k, _| !k.starts_with("_"));
+                for param in &original_params_filtered {
                     builder = builder.push_map(|builder| {
                         let (name, value) = param;
                         builder.insert_str("name", name).insert_str("value", value)
                     });
                 }
                 builder
-            })
-            .build();
+            });
+
+        let pre_login_hint = try_get_input_param!(params, "_login_hint", String::new());
+        if !pre_login_hint.is_empty() {
+            data = data.insert_str("pre_login_hint", pre_login_hint);
+        }
 
         return Ok(html_response(
-            ctx.app.templates.login_hint.render_data(&data),
+            ctx.app.templates.login_hint.render_data(&data.build()),
         ));
     }
 

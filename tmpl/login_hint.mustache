@@ -6,6 +6,7 @@
     <link rel="stylesheet" href="/static/style.css">
     <title>Portier &ndash; {{ title }} {{ display_origin }}</title>
     <link rel="icon" type="image/svg+xml" href="/static/portier_p.min.svg">
+    <script src="/static/login_hint.js" defer></script>
   </head>
   <body>
     <div class="container">
@@ -23,7 +24,7 @@
             {{# params }}
               <input type="hidden" name="{{ name }}" value="{{ value }}">
             {{/ params }}
-            <input type="email" name="login_hint" autofocus autocomplete="off" autocorrect="off" autocapitalize="off"><button type="submit">Login</button>
+            <input type="email" name="login_hint" autofocus autocomplete="off" autocorrect="off" autocapitalize="off" value="{{ pre_login_hint }}"><button type="submit">Login</button>
           </form>
         </div>
       </main>
