@@ -95,7 +95,7 @@ impl DomainValidator {
                 socket_addr,
                 protocol: Protocol::Udp,
                 tls_dns_name: None,
-                trust_nx_responses: true,
+                trust_negative_responses: true,
                 bind_addr: None,
             });
         }
@@ -118,7 +118,7 @@ impl DomainValidator {
         opts.use_hosts_file = false;
 
         // Unwrap, because this currently doesn't appear to fail ever.
-        self.dns_resolver = Some(TokioAsyncResolver::tokio(cfg, opts).unwrap());
+        self.dns_resolver = Some(TokioAsyncResolver::tokio(cfg, opts));
         Ok(())
     }
 
