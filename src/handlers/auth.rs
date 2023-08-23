@@ -181,7 +181,7 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
             )
             .insert_vec("params", |mut builder| {
                 let mut original_params_filtered = original_params.clone();
-                original_params_filtered.retain(|k, _| !k.starts_with("_"));
+                original_params_filtered.retain(|k, _| !k.starts_with('_'));
                 for param in &original_params_filtered {
                     builder = builder.push_map(|builder| {
                         let (name, value) = param;

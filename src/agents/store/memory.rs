@@ -231,7 +231,7 @@ impl Handler<IncrAndTestLimits> for MemoryStore {
             let key = message.input.build_key(config, "", "|");
             let count = match self.limits.entry(key) {
                 Entry::Occupied(mut entry) => {
-                    let mut expiring = entry.get_mut();
+                    let expiring = entry.get_mut();
                     let now = Instant::now();
                     if expiring.expires <= now {
                         *expiring = Expiring::from_duration(1, config.window);
