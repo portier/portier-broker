@@ -47,7 +47,7 @@ cargo check
 
 # Create a commit and push.
 git commit -m "Version $1" Cargo.toml Cargo.lock
-git push
+git push origin HEAD:refs/heads/main HEAD:refs/heads/stable
 
 echo
 echo "Create the release at: https://github.com/portier/portier-broker/releases/new?tag=v$1&title=v$1"
