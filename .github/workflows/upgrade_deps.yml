@@ -36,7 +36,7 @@ jobs:
       run: cargo update
 
     - name: Install Nix
-      uses: cachix/install-nix-action@v22
+      uses: cachix/install-nix-action@v23
 
     - name: Upgrade Nix flake
       run: nix flake update
