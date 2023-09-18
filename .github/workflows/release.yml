@@ -213,7 +213,7 @@ jobs:
         platforms: arm,arm64
 
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
+      uses: docker/setup-buildx-action@v3
       with:
         # Need network=host for the builder to contact our scratch registry.
         driver: docker-container
