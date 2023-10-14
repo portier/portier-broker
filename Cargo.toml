@@ -119,8 +119,8 @@ features = ["derive"]
 version = "1.13.0"
 features = ["fs", "macros", "process", "rt-multi-thread", "sync", "time"]
 
-[dependencies.trust-dns-resolver]
-version = "0.23.0"
+[dependencies.hickory-resolver]
+version = "0.24.0"
 default-features = false
 features = ["tokio-runtime"]
 

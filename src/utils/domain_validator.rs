@@ -1,3 +1,8 @@
+use hickory_resolver::{
+    config::{LookupIpStrategy, NameServerConfig, Protocol, ResolverConfig, ResolverOpts},
+    proto::{error::ProtoError, rr::rdata::MX},
+    Name, TokioAsyncResolver,
+};
 use std::{
     collections::HashSet,
     io,
@@ -5,11 +10,6 @@ use std::{
     time::Duration,
 };
 use thiserror::Error;
-use trust_dns_resolver::{
-    config::{LookupIpStrategy, NameServerConfig, Protocol, ResolverConfig, ResolverOpts},
-    proto::{error::ProtoError, rr::rdata::MX},
-    Name, TokioAsyncResolver,
-};
 
 use crate::metrics;
 
