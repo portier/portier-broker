@@ -456,19 +456,18 @@ async fn handle_error(ctx: &Context, err: BrokerError) -> Response {
 fn set_headers<B>(res: &mut hyper::Response<B>) {
     // Specify a tight content security policy. We need to be able to POST
     // redirect anywhere, and run our own scripts.
-    let csp = vec![
+    let csp = concat!(
         "sandbox allow-scripts allow-forms",
-        "default-src 'none'",
-        "script-src 'self'",
-        "style-src 'self'",
-        "form-action *",
-    ]
-    .join("; ");
+        "; default-src 'none'",
+        "; script-src 'self'",
+        "; style-src 'self'",
+        "; form-action *",
+    );
 
     res.typed_header(StrictTransportSecurity::excluding_subdomains(
         Duration::from_secs(31_536_000_u64),
     ));
-    res.header(hyper::header::CONTENT_SECURITY_POLICY, csp.clone());
+    res.header(hyper::header::CONTENT_SECURITY_POLICY, csp);
     res.header("x-content-security-policy", csp);
     res.header(hyper::header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_owned());
     res.header(hyper::header::X_XSS_PROTECTION, "1; mode=block".to_owned());
