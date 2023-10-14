@@ -22,7 +22,7 @@ jobs:
     - name: Install Rust
       uses: actions-rs/toolchain@v1
       with:
-        toolchain: '1.66'
+        toolchain: '1.67'
         profile: minimal
         default: true
 
