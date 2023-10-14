@@ -6,7 +6,7 @@ use crate::utils::{
 };
 use ring::{
     digest,
-    io::Positive,
+    rsa::PublicKeyComponents,
     signature::{self, Ed25519KeyPair, KeyPair, RsaKeyPair},
 };
 use serde_json::{json, Value as JsonValue};
@@ -123,12 +123,11 @@ impl KeyPairExt for Ed25519KeyPair {
 
 impl KeyPairExt for RsaKeyPair {
     fn generate_kid(&self) -> String {
-        let public = self.public_key();
-        let (n, e) = (public.modulus(), public.exponent());
+        let public: PublicKeyComponents<Vec<u8>> = self.public_key().into();
         let mut ctx = digest::Context::new(&digest::SHA256);
-        ctx.update(e.big_endian_without_leading_zero());
+        ctx.update(&public.n);
         ctx.update(b".");
-        ctx.update(n.big_endian_without_leading_zero());
+        ctx.update(&public.e);
         base64url::encode(&ctx.finish())
     }
 
@@ -147,7 +146,7 @@ impl KeyPairExt for RsaKeyPair {
         data.push_str(&base64url::encode(&header));
         data.push('.');
         data.push_str(&base64url::encode(&payload.to_string()));
-        let mut sig = vec![0; self.public_modulus_len()];
+        let mut sig = vec![0; self.public().modulus_len()];
         self.sign(
             &signature::RSA_PKCS1_SHA256,
             &rng.generator,
@@ -160,19 +159,14 @@ impl KeyPairExt for RsaKeyPair {
     }
 
     fn public_jwk(&self, kid: &str) -> JsonValue {
-        fn json_big_num(v: Positive) -> String {
-            base64url::encode(v.big_endian_without_leading_zero())
-        }
-
-        let public = self.public_key();
-        let (n, e) = (public.modulus(), public.exponent());
+        let public: PublicKeyComponents<Vec<u8>> = self.public_key().into();
         json!({
             "kty": "RSA",
             "alg": "RS256",
             "use": "sig",
             "kid": &kid,
-            "n": json_big_num(n),
-            "e": json_big_num(e),
+            "n": base64url::encode(&public.n),
+            "e": base64url::encode(&public.e),
         })
     }
 }
