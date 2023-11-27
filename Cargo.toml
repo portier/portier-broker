@@ -65,7 +65,7 @@ version = "0.2.3"
 default-features = false
 
 [dependencies.hyper]
-version = "0.14.16"
+version = "1.0.1"
 features = ["full"]
 
 [dependencies.hyper-rustls]
