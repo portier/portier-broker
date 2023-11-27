@@ -79,7 +79,7 @@ version = "0.5.0"
 
 [dependencies.lettre]
 optional = true
-version = "0.11.1"
+version = "0.11.2"
 default-features = false
 features = ["builder"]
 

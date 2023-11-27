@@ -908,7 +908,7 @@ dependencies = [
  "futures-channel",
  "futures-io",
  "futures-util",
- "idna",
+ "idna 0.4.0",
  "ipnet",
  "once_cell",
  "rand",
@@ -1061,6 +1061,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "idna"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "634d9b1461af396cad843f47fdba5597a4f9e6ddd4bfb6ff5d85028c25cb12f6"
+dependencies = [
+ "unicode-bidi",
+ "unicode-normalization",
+]
+
+[[package]]
 name = "indexmap"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1140,9 +1150,9 @@ dependencies = [
 
 [[package]]
 name = "lettre"
-version = "0.11.1"
+version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a466bc111374ccf4d90877dba636924a2185e67e5be4b35d32043199365097b2"
+checksum = "a48c2e9831b370bc2d7233c2620298c45f3a158ed6b4b8d7416b2ada5a268fd8"
 dependencies = [
  "async-std",
  "base64",
@@ -1151,7 +1161,7 @@ dependencies = [
  "email_address",
  "fastrand 2.0.1",
  "httpdate",
- "idna",
+ "idna 0.5.0",
  "mime",
  "native-tls",
  "nom",
@@ -1611,7 +1621,7 @@ dependencies = [
  "hyper-rustls",
  "hyper-staticfile",
  "hyper-tls",
- "idna",
+ "idna 0.4.0",
  "ipnetwork",
  "lazy_static",
  "lettre",
@@ -2366,7 +2376,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "143b538f18257fac9cad154828a57c6bf5157e1aa604d4816b5995bf6de87ae5"
 dependencies = [
  "form_urlencoded",
- "idna",
+ "idna 0.4.0",
  "percent-encoding",
  "serde",
 ]
