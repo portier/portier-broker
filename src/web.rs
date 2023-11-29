@@ -510,6 +510,7 @@ pub fn return_to_relier(ctx: &Context, params: &[(&str, &str)]) -> Response {
     let &ReturnParams {
         ref redirect_uri,
         response_mode,
+        ref state,
         ..
     } = ctx
         .return_params
@@ -522,6 +523,7 @@ pub fn return_to_relier(ctx: &Context, params: &[(&str, &str)]) -> Response {
             let mut redirect_uri = redirect_uri.clone();
             let fragment = redirect_uri.fragment().unwrap_or("").to_owned();
             let fragment = form_urlencoded::Serializer::for_suffix(fragment, 0)
+                .append_pair("state", state)
                 .extend_pairs(params)
                 .finish();
             redirect_uri.set_fragment(Some(&fragment));
@@ -535,6 +537,11 @@ pub fn return_to_relier(ctx: &Context, params: &[(&str, &str)]) -> Response {
             let data = mustache::MapBuilder::new()
                 .insert_str("redirect_uri", redirect_uri.to_string())
                 .insert_vec("params", |mut builder| {
+                    builder = builder.push_map(|builder| {
+                        builder
+                            .insert_str("name", "state")
+                            .insert_str("value", state)
+                    });
                     for &param in params {
                         builder = builder.push_map(|builder| {
                             let (name, value) = param;
@@ -550,7 +557,11 @@ pub fn return_to_relier(ctx: &Context, params: &[(&str, &str)]) -> Response {
         // Add params as query parameters and redirect.
         ResponseMode::Query => {
             let mut redirect_uri = redirect_uri.clone();
-            redirect_uri.query_pairs_mut().extend_pairs(params).finish();
+            redirect_uri
+                .query_pairs_mut()
+                .append_pair("state", state)
+                .extend_pairs(params)
+                .finish();
 
             let mut res = empty_response(StatusCode::SEE_OTHER);
             res.header(hyper::header::LOCATION, String::from(redirect_uri));
