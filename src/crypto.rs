@@ -254,6 +254,7 @@ pub async fn create_jwt(
                 "iss": &app.public_url,
                 "sub": email_addr.as_str(),
                 "nonce": nonce,
+                "auth_time": now.as_secs(),
             }),
             signing_alg,
         })
