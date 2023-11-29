@@ -90,6 +90,7 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
     let response_type = try_get_input_param!(params, "response_type");
     let response_errors = try_get_input_param!(params, "response_errors", "true".to_owned());
     let state = try_get_input_param!(params, "state", String::new());
+    let prompt = try_get_input_param!(params, "prompt", String::new());
 
     // Parse response_type and response_mode by wrapping them in a JSON Value.
     // This has minimal overhead, and saves us a separate implementation.
@@ -165,6 +166,10 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
 
     let login_hint = try_get_input_param!(params, "login_hint", String::new());
     if login_hint.is_empty() && !ctx.want_json {
+        if prompt == "none" {
+            return Err(BrokerError::InteractionRequired);
+        }
+
         let display_origin = redirect_uri_.origin().unicode_serialization();
 
         let catalog = ctx.catalog();
@@ -268,7 +273,7 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
         match link.rel {
             // Portier and Google providers share an implementation
             Relation::Portier | Relation::Google => {
-                bridges::oidc::auth(ctx, &email_addr, link).await
+                bridges::oidc::auth(ctx, &email_addr, link, &prompt).await
             }
         }
     };
@@ -309,5 +314,8 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
     }
 
     // Fall back to email loop auth.
+    if prompt == "none" {
+        return Err(BrokerError::InteractionRequired);
+    }
     bridges::email::auth(ctx, email_addr).await
 }

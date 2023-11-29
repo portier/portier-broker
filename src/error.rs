@@ -20,6 +20,8 @@ pub enum BrokerError {
     RateLimited,
     /// User session not found, results in 400
     SessionExpired,
+    /// Specified prompt=none, but interaction is required.
+    InteractionRequired,
     /// Result status used by bridges to cancel a request
     ProviderCancelled,
 }
@@ -34,6 +36,7 @@ impl BrokerError {
             | BrokerError::ProviderInput(_)
             | BrokerError::RateLimited
             | BrokerError::SessionExpired
+            | BrokerError::InteractionRequired
             | BrokerError::ProviderCancelled => {
                 debug!("{}", self);
                 None
@@ -61,9 +64,10 @@ impl BrokerError {
     /// Get the HTTP status code for this error.
     pub fn http_status_code(&self) -> StatusCode {
         match *self {
-            BrokerError::Input(_) | BrokerError::ProviderInput(_) | BrokerError::SessionExpired => {
-                StatusCode::BAD_REQUEST
-            }
+            BrokerError::Input(_)
+            | BrokerError::ProviderInput(_)
+            | BrokerError::SessionExpired
+            | BrokerError::InteractionRequired => StatusCode::BAD_REQUEST,
             BrokerError::Provider(_) => StatusCode::SERVICE_UNAVAILABLE,
             BrokerError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
             BrokerError::RateLimited => StatusCode::TOO_MANY_REQUESTS,
@@ -79,6 +83,7 @@ impl BrokerError {
             BrokerError::Provider(_) | BrokerError::ProviderInput(_) => "temporarily_unavailable",
             BrokerError::Internal(_) => "server_error",
             BrokerError::RateLimited => "access_denied",
+            BrokerError::InteractionRequired => "interaction_required",
             // Internal status that should never bubble this far
             BrokerError::ProviderCancelled => unreachable!(),
         }
@@ -96,6 +101,7 @@ impl fmt::Display for BrokerError {
             | BrokerError::Internal(ref description) => description,
             BrokerError::RateLimited => "too many requests",
             BrokerError::SessionExpired => "session has expired",
+            BrokerError::InteractionRequired => "interaction required, but prompt=none specified",
             BrokerError::ProviderCancelled => "bridge cancelled the request",
         })
     }

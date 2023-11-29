@@ -382,8 +382,10 @@ async fn handle_error(ctx: &Context, err: BrokerError) -> Response {
     match (err, can_redirect) {
         // Redirects with description.
         (
-            err
-            @ (BrokerError::Input(_) | BrokerError::Provider(_) | BrokerError::ProviderInput(_)),
+            err @ (BrokerError::Input(_)
+            | BrokerError::Provider(_)
+            | BrokerError::ProviderInput(_)
+            | BrokerError::InteractionRequired),
             true,
         ) => return_to_relier(
             ctx,
@@ -393,7 +395,7 @@ async fn handle_error(ctx: &Context, err: BrokerError) -> Response {
             ],
         ),
         // Friendly error pages for what we can't redirect.
-        (err @ BrokerError::Input(_), false) => {
+        (err @ (BrokerError::Input(_) | BrokerError::InteractionRequired), false) => {
             let mut res = html_response(ctx.app.templates.error.render(&[
                 ("error", &format!("{err}")),
                 ("intro", catalog.gettext("The request is invalid, and could not be completed.")),

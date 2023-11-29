@@ -83,7 +83,12 @@ pub struct ProviderKey {
 ///
 /// This function handles both Portier providers, which works without registration, as well as
 /// the Google provider, for which we have a preregistered `client_id`.
-pub async fn auth(ctx: &mut Context, email_addr: &EmailAddress, link: &Link) -> HandlerResult {
+pub async fn auth(
+    ctx: &mut Context,
+    email_addr: &EmailAddress,
+    link: &Link,
+    prompt: &str,
+) -> HandlerResult {
     // Generate a nonce for the provider.
     let provider_nonce = crypto::nonce(&ctx.app.rng).await;
 
@@ -158,6 +163,9 @@ pub async fn auth(ctx: &mut Context, email_addr: &EmailAddress, link: &Link) -> 
             ("client_id", &bridge_data.client_id),
             ("redirect_uri", &format!("{}/callback", &ctx.app.public_url)),
         ]);
+        if !prompt.is_empty() {
+            query.append_pair("prompt", prompt);
+        }
 
         // Prefer `form_post` response mode, otherwise use `fragment`.
         if response_modes.iter().any(|mode| mode == "form_post") {
@@ -222,11 +230,23 @@ pub async fn auth(ctx: &mut Context, email_addr: &EmailAddress, link: &Link) -> 
 pub async fn callback(ctx: &mut Context) -> HandlerResult {
     let mut params = ctx.form_params();
     let session_id = try_get_provider_param!(params, "state");
-    let id_token = try_get_provider_param!(params, "id_token");
-
     let BridgeData::Oidc(bridge_data) = ctx.load_session(&session_id).await? else {
         return Err(BrokerError::ProviderInput("invalid session".to_owned()));
     };
+
+    // Handle errors.
+    match params.get("error").map(String::as_str).unwrap_or_default() {
+        "" => {}
+        // We forward prompt=none, and expect certain errors.
+        "interaction_required" | "login_required" => return Err(BrokerError::InteractionRequired),
+        err => {
+            return Err(BrokerError::Provider(format!(
+                "provider returned error: {err}"
+            )))
+        }
+    }
+
+    let id_token = try_get_provider_param!(params, "id_token");
 
     // Retrieve the provider's configuration.
     let (_, key_set) = fetch_config(ctx, &bridge_data).await?;
