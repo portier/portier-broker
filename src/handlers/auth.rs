@@ -7,14 +7,14 @@ use crate::utils::http::ResponseExt;
 use crate::utils::DomainValidationError;
 use crate::validation::parse_redirect_uri;
 use crate::web::{
-    html_response, json_response, Context, HandlerResult, ResponseType, ReturnParams,
+    html_response, json_response, Context, HandlerResult, ResponseMode, ResponseType, ReturnParams,
 };
 use crate::webfinger::{self, Relation};
 use crate::{bridges, metrics};
 use headers::{CacheControl, Expires};
 use http::Method;
 use log::info;
-use serde_json::{from_value, json, Value};
+use serde_json::json;
 use std::collections::HashSet;
 use std::time::Duration;
 
@@ -87,27 +87,43 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
 
     let redirect_uri = try_get_input_param!(params, "redirect_uri");
     let client_id = try_get_input_param!(params, "client_id");
-    let response_type = try_get_input_param!(params, "response_type");
     let response_errors = try_get_input_param!(params, "response_errors", "true".to_owned());
     let state = try_get_input_param!(params, "state", String::new());
     let prompt = try_get_input_param!(params, "prompt", String::new());
 
-    // Parse response_type and response_mode by wrapping them in a JSON Value.
-    // This has minimal overhead, and saves us a separate implementation.
-    let response_type: ResponseType = from_value(Value::String(response_type)).map_err(|_err| {
-        BrokerError::Input("unsupported response_type, must be id_token or code".to_owned())
-    })?;
+    let nonce = try_get_input_param!(params, "nonce", String::new());
+    let nonce = if nonce.is_empty() { None } else { Some(nonce) };
 
-    let response_mode = try_get_input_param!(
-        params,
-        "response_mode",
-        response_type.default_response_mode().as_str().to_owned()
-    );
-    let response_mode = from_value(Value::String(response_mode)).map_err(|_err| {
-        BrokerError::Input(
-            "unsupported response_mode, must be fragment, form_post or query".to_owned(),
-        )
-    })?;
+    let response_type = match try_get_input_param!(params, "response_type").as_str() {
+        "id_token" => {
+            if nonce.is_none() {
+                return Err(BrokerError::Input(
+                    "missing request parameter nonce, required with response_type=id_token"
+                        .to_owned(),
+                ));
+            }
+            ResponseType::IdToken
+        }
+        "code" => ResponseType::Code,
+        _ => {
+            return Err(BrokerError::Input(
+                "unsupported response_type, must be id_token or code".to_owned(),
+            ))
+        }
+    };
+
+    let response_mode = match try_get_input_param!(params, "response_mode", String::new()).as_str()
+    {
+        "" => response_type.default_response_mode(),
+        "fragment" => ResponseMode::Fragment,
+        "form_post" => ResponseMode::FormPost,
+        "query" => ResponseMode::Query,
+        _ => {
+            return Err(BrokerError::Input(
+                "unsupported response_mode, must be fragment, form_post or query".to_owned(),
+            ))
+        }
+    };
 
     let redirect_uri = parse_redirect_uri(&redirect_uri, "redirect_uri")
         .map_err(|e| BrokerError::Input(format!("{e}")))?;
@@ -140,8 +156,6 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
             ));
         }
     }
-
-    let nonce = try_get_input_param!(params, "nonce");
 
     let scope = try_get_input_param!(params, "scope");
     let mut scope_set: HashSet<&str> = scope.split(' ').collect();
@@ -257,7 +271,7 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
         &login_hint,
         &email_addr,
         response_type,
-        &nonce,
+        nonce,
         signing_alg,
         ctx.ip,
     )

@@ -42,11 +42,9 @@ pub struct Session {
 /// Response types we support.
 #[derive(Clone, Copy, Serialize, Deserialize)]
 pub enum ResponseType {
-    #[serde(rename = "id_token")]
     IdToken,
     // NOTE: This type is outside the Portier spec, but we support it in this implementation for
     // compatibility with other OpenID Connect clients.
-    #[serde(rename = "code")]
     Code,
 }
 
@@ -63,25 +61,11 @@ impl ResponseType {
 /// Response modes we support.
 #[derive(Clone, Copy, Serialize, Deserialize)]
 pub enum ResponseMode {
-    #[serde(rename = "fragment")]
     Fragment,
-    #[serde(rename = "form_post")]
     FormPost,
     // NOTE: This mode is outside the Portier spec, but we support it in this implementation for
     // compatibility with other OpenID Connect clients.
-    #[serde(rename = "query")]
     Query,
-}
-
-impl ResponseMode {
-    /// Return the querystring value for this response mode.
-    pub fn as_str(&self) -> &str {
-        match self {
-            ResponseMode::Fragment => "fragment",
-            ResponseMode::FormPost => "form_post",
-            ResponseMode::Query => "query",
-        }
-    }
 }
 
 /// Parameters used to return to the relying party
@@ -101,7 +85,7 @@ pub struct SessionData {
     pub email: String,
     pub email_addr: EmailAddress,
     pub response_type: ResponseType,
-    pub nonce: String,
+    pub nonce: Option<String>,
     pub signing_alg: SigningAlgorithm,
 }
 
@@ -156,7 +140,7 @@ impl Context {
         email: &str,
         email_addr: &EmailAddress,
         response_type: ResponseType,
-        nonce: &str,
+        nonce: Option<String>,
         signing_alg: SigningAlgorithm,
         ip: IpAddr,
     ) {
@@ -173,7 +157,7 @@ impl Context {
             email: email.to_owned(),
             email_addr: email_addr.clone(),
             response_type,
-            nonce: nonce.to_owned(),
+            nonce,
             signing_alg,
         });
     }
