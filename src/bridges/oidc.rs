@@ -238,7 +238,12 @@ pub async fn callback(ctx: &mut Context) -> HandlerResult {
     match params.get("error").map(String::as_str).unwrap_or_default() {
         "" => {}
         // We forward prompt=none, and expect certain errors.
-        "interaction_required" | "login_required" => return Err(BrokerError::InteractionRequired),
+        "interaction_required" | "login_required" => {
+            return Err(BrokerError::SpecificInput {
+                error: params.remove("error").unwrap(),
+                error_description: params.remove("error_description").unwrap_or_default(),
+            })
+        }
         err => {
             return Err(BrokerError::Provider(format!(
                 "provider returned error: {err}"

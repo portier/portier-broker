@@ -10,6 +10,11 @@ use std::fmt;
 pub enum BrokerError {
     /// User input error, which results in 400
     Input(String),
+    /// User input error with a specific OAuth code, which results in 400.
+    SpecificInput {
+        error: String,
+        error_description: String,
+    },
     /// Identity provider error, which results in 503
     Provider(String),
     /// Identity provider request error, which results in 400
@@ -20,8 +25,6 @@ pub enum BrokerError {
     RateLimited,
     /// User session not found, results in 400
     SessionExpired,
-    /// Specified prompt=none, but interaction is required.
-    InteractionRequired,
     /// Result status used by bridges to cancel a request
     ProviderCancelled,
 }
@@ -33,10 +36,10 @@ impl BrokerError {
         match self {
             // User errors only at debug level.
             BrokerError::Input(_)
+            | BrokerError::SpecificInput { .. }
             | BrokerError::ProviderInput(_)
             | BrokerError::RateLimited
             | BrokerError::SessionExpired
-            | BrokerError::InteractionRequired
             | BrokerError::ProviderCancelled => {
                 debug!("{}", self);
                 None
@@ -65,9 +68,9 @@ impl BrokerError {
     pub fn http_status_code(&self) -> StatusCode {
         match *self {
             BrokerError::Input(_)
-            | BrokerError::ProviderInput(_)
+            | BrokerError::SpecificInput { .. }
             | BrokerError::SessionExpired
-            | BrokerError::InteractionRequired => StatusCode::BAD_REQUEST,
+            | BrokerError::ProviderInput(_) => StatusCode::BAD_REQUEST,
             BrokerError::Provider(_) => StatusCode::SERVICE_UNAVAILABLE,
             BrokerError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
             BrokerError::RateLimited => StatusCode::TOO_MANY_REQUESTS,
@@ -80,10 +83,10 @@ impl BrokerError {
     pub fn oauth_error_code(&self) -> &str {
         match *self {
             BrokerError::Input(_) | BrokerError::SessionExpired => "invalid_request",
+            BrokerError::SpecificInput { ref error, .. } => error,
             BrokerError::Provider(_) | BrokerError::ProviderInput(_) => "temporarily_unavailable",
             BrokerError::Internal(_) => "server_error",
             BrokerError::RateLimited => "access_denied",
-            BrokerError::InteractionRequired => "interaction_required",
             // Internal status that should never bubble this far
             BrokerError::ProviderCancelled => unreachable!(),
         }
@@ -99,9 +102,12 @@ impl fmt::Display for BrokerError {
             | BrokerError::Provider(ref description)
             | BrokerError::ProviderInput(ref description)
             | BrokerError::Internal(ref description) => description,
+            BrokerError::SpecificInput {
+                ref error_description,
+                ..
+            } => error_description,
             BrokerError::RateLimited => "too many requests",
             BrokerError::SessionExpired => "session has expired",
-            BrokerError::InteractionRequired => "interaction required, but prompt=none specified",
             BrokerError::ProviderCancelled => "bridge cancelled the request",
         })
     }

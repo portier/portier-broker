@@ -181,7 +181,11 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
     let login_hint = try_get_input_param!(params, "login_hint", String::new());
     if login_hint.is_empty() && !ctx.want_json {
         if prompt == "none" {
-            return Err(BrokerError::InteractionRequired);
+            return Err(BrokerError::SpecificInput {
+                error: "interaction_required".to_owned(),
+                error_description: "prompt disabled, but no email specified in login_hint"
+                    .to_owned(),
+            });
         }
 
         let display_origin = redirect_uri_.origin().unicode_serialization();
@@ -329,7 +333,10 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
 
     // Fall back to email loop auth.
     if prompt == "none" {
-        return Err(BrokerError::InteractionRequired);
+        return Err(BrokerError::SpecificInput {
+            error: "interaction_required".to_owned(),
+            error_description: "prompt disabled, but email verification is required".to_owned(),
+        });
     }
     bridges::email::auth(ctx, email_addr).await
 }

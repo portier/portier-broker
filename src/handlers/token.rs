@@ -31,7 +31,10 @@ pub async fn token(ctx: &mut Context) -> HandlerResult {
         .map_err(|e| {
             BrokerError::Internal(format!("could not lookup the authorization code: {e}"))
         })?
-        .ok_or_else(|| BrokerError::ProviderInput("invalid authorization code".to_owned()))?;
+        .ok_or_else(|| BrokerError::SpecificInput {
+            error: "invalid_grant".to_owned(),
+            error_description: "invalid authorization code".to_owned(),
+        })?;
 
     if data.return_params.redirect_uri.as_str() != redirect_uri {
         return Err(BrokerError::ProviderInput(
