@@ -57,7 +57,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Defines the program's usage string.
 ///
 /// [Docopt](http://docopt.org) parses this and generates a custom argv parser.
-const USAGE: &str = r#"
+const USAGE: &str = r"
 Portier Broker
 
 Usage:
@@ -75,7 +75,7 @@ Options:
   --dry-run           Parse PEM to be imported, but don't apply changes
 
   --export-keys FILE  Export currently active private keys as PEM
-"#;
+";
 
 /// Holds parsed command line parameters.
 #[derive(Deserialize)]
