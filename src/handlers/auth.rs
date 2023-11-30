@@ -91,19 +91,8 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
     let state = try_get_input_param!(params, "state", String::new());
     let prompt = try_get_input_param!(params, "prompt", String::new());
 
-    let nonce = try_get_input_param!(params, "nonce", String::new());
-    let nonce = if nonce.is_empty() { None } else { Some(nonce) };
-
     let response_type = match try_get_input_param!(params, "response_type").as_str() {
-        "id_token" => {
-            if nonce.is_none() {
-                return Err(BrokerError::Input(
-                    "missing request parameter nonce, required with response_type=id_token"
-                        .to_owned(),
-                ));
-            }
-            ResponseType::IdToken
-        }
+        "id_token" => ResponseType::IdToken,
         "code" => ResponseType::Code,
         _ => {
             return Err(BrokerError::Input(
@@ -148,6 +137,31 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
         response_errors,
         state,
     });
+
+    if params.contains_key("request") {
+        return Err(BrokerError::SpecificInput {
+            error: "request_not_supported".to_owned(),
+            error_description: "passing request parameters as JWTs is not supported".to_owned(),
+        });
+    }
+    if params.contains_key("request_uri") {
+        return Err(BrokerError::SpecificInput {
+            error: "request_uri_not_supported".to_owned(),
+            error_description: "passing request parameters as JWTs is not supported".to_owned(),
+        });
+    }
+
+    let nonce = try_get_input_param!(params, "nonce", String::new());
+    let nonce = if nonce.is_empty() {
+        if response_type == ResponseType::IdToken {
+            return Err(BrokerError::Input(
+                "missing request parameter nonce, required with response_type=id_token".to_owned(),
+            ));
+        }
+        None
+    } else {
+        Some(nonce)
+    };
 
     if let Some(ref whitelist) = ctx.app.allowed_origins {
         if !whitelist.contains(&client_id) {

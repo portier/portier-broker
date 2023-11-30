@@ -40,7 +40,7 @@ pub struct Session {
 }
 
 /// Response types we support.
-#[derive(Clone, Copy, Serialize, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ResponseType {
     IdToken,
     // NOTE: This type is outside the Portier spec, but we support it in this implementation for
