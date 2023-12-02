@@ -29,7 +29,6 @@ pub async fn complete_auth(ctx: &mut Context) -> HandlerResult {
         .await
         .map_err(|e| BrokerError::Internal(format!("could not remove a session: {e}")))?;
 
-    let state = data.return_params.state.clone();
     let origin = data
         .return_params
         .redirect_uri
@@ -79,13 +78,10 @@ pub async fn complete_auth(ctx: &mut Context) -> HandlerResult {
     if ctx.want_json {
         Ok(json_response(&json!({
             auth_field: &auth_value,
-            "state": &state,
+            "state": &ctx.return_params.as_ref().unwrap().state,
         })))
     } else {
-        Ok(return_to_relier(
-            ctx,
-            &[(auth_field, &auth_value), ("state", &state)],
-        ))
+        Ok(return_to_relier(ctx, &[(auth_field, &auth_value)]))
     }
 }
 

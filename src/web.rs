@@ -40,13 +40,11 @@ pub struct Session {
 }
 
 /// Response types we support.
-#[derive(Clone, Copy, Serialize, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ResponseType {
-    #[serde(rename = "id_token")]
     IdToken,
     // NOTE: This type is outside the Portier spec, but we support it in this implementation for
     // compatibility with other OpenID Connect clients.
-    #[serde(rename = "code")]
     Code,
 }
 
@@ -63,25 +61,11 @@ impl ResponseType {
 /// Response modes we support.
 #[derive(Clone, Copy, Serialize, Deserialize)]
 pub enum ResponseMode {
-    #[serde(rename = "fragment")]
     Fragment,
-    #[serde(rename = "form_post")]
     FormPost,
     // NOTE: This mode is outside the Portier spec, but we support it in this implementation for
     // compatibility with other OpenID Connect clients.
-    #[serde(rename = "query")]
     Query,
-}
-
-impl ResponseMode {
-    /// Return the querystring value for this response mode.
-    pub fn as_str(&self) -> &str {
-        match self {
-            ResponseMode::Fragment => "fragment",
-            ResponseMode::FormPost => "form_post",
-            ResponseMode::Query => "query",
-        }
-    }
 }
 
 /// Parameters used to return to the relying party
@@ -101,7 +85,7 @@ pub struct SessionData {
     pub email: String,
     pub email_addr: EmailAddress,
     pub response_type: ResponseType,
-    pub nonce: String,
+    pub nonce: Option<String>,
     pub signing_alg: SigningAlgorithm,
 }
 
@@ -156,7 +140,7 @@ impl Context {
         email: &str,
         email_addr: &EmailAddress,
         response_type: ResponseType,
-        nonce: &str,
+        nonce: Option<String>,
         signing_alg: SigningAlgorithm,
         ip: IpAddr,
     ) {
@@ -173,7 +157,7 @@ impl Context {
             email: email.to_owned(),
             email_addr: email_addr.clone(),
             response_type,
-            nonce: nonce.to_owned(),
+            nonce,
             signing_alg,
         });
     }
@@ -382,8 +366,10 @@ async fn handle_error(ctx: &Context, err: BrokerError) -> Response {
     match (err, can_redirect) {
         // Redirects with description.
         (
-            err
-            @ (BrokerError::Input(_) | BrokerError::Provider(_) | BrokerError::ProviderInput(_)),
+            err @ (BrokerError::Input(_)
+            | BrokerError::SpecificInput { .. }
+            | BrokerError::Provider(_)
+            | BrokerError::ProviderInput(_)),
             true,
         ) => return_to_relier(
             ctx,
@@ -393,7 +379,7 @@ async fn handle_error(ctx: &Context, err: BrokerError) -> Response {
             ],
         ),
         // Friendly error pages for what we can't redirect.
-        (err @ BrokerError::Input(_), false) => {
+        (err @ (BrokerError::Input(_) | BrokerError::SpecificInput { .. }), false) => {
             let mut res = html_response(ctx.app.templates.error.render(&[
                 ("error", &format!("{err}")),
                 ("intro", catalog.gettext("The request is invalid, and could not be completed.")),
@@ -510,6 +496,7 @@ pub fn return_to_relier(ctx: &Context, params: &[(&str, &str)]) -> Response {
     let &ReturnParams {
         ref redirect_uri,
         response_mode,
+        ref state,
         ..
     } = ctx
         .return_params
@@ -522,6 +509,7 @@ pub fn return_to_relier(ctx: &Context, params: &[(&str, &str)]) -> Response {
             let mut redirect_uri = redirect_uri.clone();
             let fragment = redirect_uri.fragment().unwrap_or("").to_owned();
             let fragment = form_urlencoded::Serializer::for_suffix(fragment, 0)
+                .append_pair("state", state)
                 .extend_pairs(params)
                 .finish();
             redirect_uri.set_fragment(Some(&fragment));
@@ -535,6 +523,11 @@ pub fn return_to_relier(ctx: &Context, params: &[(&str, &str)]) -> Response {
             let data = mustache::MapBuilder::new()
                 .insert_str("redirect_uri", redirect_uri.to_string())
                 .insert_vec("params", |mut builder| {
+                    builder = builder.push_map(|builder| {
+                        builder
+                            .insert_str("name", "state")
+                            .insert_str("value", state)
+                    });
                     for &param in params {
                         builder = builder.push_map(|builder| {
                             let (name, value) = param;
@@ -550,7 +543,11 @@ pub fn return_to_relier(ctx: &Context, params: &[(&str, &str)]) -> Response {
         // Add params as query parameters and redirect.
         ResponseMode::Query => {
             let mut redirect_uri = redirect_uri.clone();
-            redirect_uri.query_pairs_mut().extend_pairs(params).finish();
+            redirect_uri
+                .query_pairs_mut()
+                .append_pair("state", state)
+                .extend_pairs(params)
+                .finish();
 
             let mut res = empty_response(StatusCode::SEE_OTHER);
             res.header(hyper::header::LOCATION, String::from(redirect_uri));

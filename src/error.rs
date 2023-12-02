@@ -10,6 +10,11 @@ use std::fmt;
 pub enum BrokerError {
     /// User input error, which results in 400
     Input(String),
+    /// User input error with a specific OAuth code, which results in 400.
+    SpecificInput {
+        error: String,
+        error_description: String,
+    },
     /// Identity provider error, which results in 503
     Provider(String),
     /// Identity provider request error, which results in 400
@@ -31,6 +36,7 @@ impl BrokerError {
         match self {
             // User errors only at debug level.
             BrokerError::Input(_)
+            | BrokerError::SpecificInput { .. }
             | BrokerError::ProviderInput(_)
             | BrokerError::RateLimited
             | BrokerError::SessionExpired
@@ -61,9 +67,10 @@ impl BrokerError {
     /// Get the HTTP status code for this error.
     pub fn http_status_code(&self) -> StatusCode {
         match *self {
-            BrokerError::Input(_) | BrokerError::ProviderInput(_) | BrokerError::SessionExpired => {
-                StatusCode::BAD_REQUEST
-            }
+            BrokerError::Input(_)
+            | BrokerError::SpecificInput { .. }
+            | BrokerError::SessionExpired
+            | BrokerError::ProviderInput(_) => StatusCode::BAD_REQUEST,
             BrokerError::Provider(_) => StatusCode::SERVICE_UNAVAILABLE,
             BrokerError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
             BrokerError::RateLimited => StatusCode::TOO_MANY_REQUESTS,
@@ -76,6 +83,7 @@ impl BrokerError {
     pub fn oauth_error_code(&self) -> &str {
         match *self {
             BrokerError::Input(_) | BrokerError::SessionExpired => "invalid_request",
+            BrokerError::SpecificInput { ref error, .. } => error,
             BrokerError::Provider(_) | BrokerError::ProviderInput(_) => "temporarily_unavailable",
             BrokerError::Internal(_) => "server_error",
             BrokerError::RateLimited => "access_denied",
@@ -94,6 +102,10 @@ impl fmt::Display for BrokerError {
             | BrokerError::Provider(ref description)
             | BrokerError::ProviderInput(ref description)
             | BrokerError::Internal(ref description) => description,
+            BrokerError::SpecificInput {
+                ref error_description,
+                ..
+            } => error_description,
             BrokerError::RateLimited => "too many requests",
             BrokerError::SessionExpired => "session has expired",
             BrokerError::ProviderCancelled => "bridge cancelled the request",
