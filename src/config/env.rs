@@ -6,6 +6,7 @@ use serde::Deserialize;
 use std::borrow::ToOwned;
 use std::path::PathBuf;
 use std::time::Duration;
+use url::Url;
 
 /// Intermediate structure for deserializing environment variables
 ///
@@ -56,7 +57,7 @@ pub struct EnvConfig {
     sendmail_command: Option<String>,
 
     postmark_token: Option<String>,
-    postmark_api: Option<String>,
+    postmark_api: Option<Url>,
 
     mailgun_token: Option<String>,
     mailgun_api: Option<String>,

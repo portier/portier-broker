@@ -17,9 +17,9 @@ lettre_smtp = ["lettre", "lettre/smtp-transport"]
 lettre_sendmail = ["lettre", "lettre/sendmail-transport"]
 postmark = []
 mailgun = []
-native-tls = ["hyper-tls", "lettre?/native-tls"]
+native-tls = ["hyper-tls", "reqwest/native-tls", "lettre?/native-tls"]
 rsa = ["dep:rsa", "rand_core"]
-rustls = ["hyper-rustls", "lettre?/rustls-tls", "lettre?/rustls-native-certs"]
+rustls = ["dep:rustls", "hyper-rustls", "reqwest/rustls-tls-native-roots", "lettre?/rustls-tls", "lettre?/rustls-native-certs"]
 
 [[bin]]
 name = "portier-broker"
@@ -30,15 +30,16 @@ overflow-checks = true
 
 [dependencies]
 accept-language = "3.0.1"
-base64 = "0.21.0"
+base64 = "0.22.0"
 bytes = "1.0.1"
 docopt = "1.1.0"
 envy = "0.4.1"
 futures-util = "0.3.16"
 gettext = "0.4.0"
-headers = "0.3.2"
-http = "0.2.1"
-hyper-staticfile = "0.9.0"
+headers = "0.4.0"
+http = "1.0.0"
+http-body-util = "0.1.0"
+hyper-staticfile = "0.10.0"
 idna = "0.5.0"
 ipnetwork = "0.20.0"
 lazy_static = "1.4.0"
@@ -65,17 +66,21 @@ version = "0.2.3"
 default-features = false
 
 [dependencies.hyper]
-version = "0.14.16"
+version = "1.0.0"
 features = ["full"]
 
 [dependencies.hyper-rustls]
 optional = true
-version = "0.24.0"
+version = "0.27.0"
 features = ["http2"]
 
 [dependencies.hyper-tls]
 optional = true
-version = "0.5.0"
+version = "0.6.0"
+
+[dependencies.hyper-util]
+version = "0.1.1"
+features = ["tokio"]
 
 [dependencies.lettre]
 optional = true
@@ -97,9 +102,14 @@ version = "0.6.4"
 
 [dependencies.redis]
 optional = true
-version = "0.24.0"
+version = "0.25.3"
 default-features = false
 features = ["script", "tokio-comp"]
+
+[dependencies.reqwest]
+version = "0.12.3"
+default-features = false
+features = ["http2", "macos-system-configuration"]
 
 [dependencies.rsa]
 optional = true
@@ -108,8 +118,12 @@ default-features = false
 
 [dependencies.rusqlite]
 optional = true
-version = "0.30.0"
+version = "0.31.0"
 features = ["bundled"]
+
+[dependencies.rustls]
+optional = true
+version = "0.23.4"
 
 [dependencies.serde]
 version = "1.0.139"

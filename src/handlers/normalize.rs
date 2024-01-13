@@ -1,9 +1,7 @@
 use crate::email_address::EmailAddress;
 use crate::utils::http::ResponseExt;
-use crate::web::{Context, HandlerResult};
+use crate::web::{data_response, Context, HandlerResult};
 use headers::{CacheControl, ContentType};
-use http::Response;
-use hyper::Body;
 
 /// Request handler for the email normalization endpoint.
 ///
@@ -19,7 +17,7 @@ pub async fn normalize(ctx: &mut Context) -> HandlerResult {
         .collect::<Vec<_>>()
         .join("\n");
 
-    let mut res = Response::new(Body::from(result));
+    let mut res = data_response(result);
     res.typed_header(ContentType::text_utf8());
     res.typed_header(CacheControl::new().with_no_cache().with_no_store());
     Ok(res)
