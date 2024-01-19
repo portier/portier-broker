@@ -164,7 +164,7 @@ impl Handler<SaveSession> for RedisStore {
         cx.reply_later(async move {
             let key = Self::format_session_key(&message.session_id);
             let data = serde_json::to_string(&message.data)?;
-            conn.set_ex(&key, data, ttl.as_secs() as usize).await?;
+            conn.set_ex(&key, data, ttl.as_secs()).await?;
             Ok(())
         });
     }
@@ -203,7 +203,7 @@ impl Handler<SaveAuthCode> for RedisStore {
         cx.reply_later(async move {
             let key = Self::format_auth_code_key(&message.code);
             let data = serde_json::to_string(&message.data)?;
-            conn.set_ex(&key, data, ttl.as_secs() as usize).await?;
+            conn.set_ex(&key, data, ttl.as_secs()).await?;
             Ok(())
         });
     }
@@ -247,8 +247,7 @@ impl Handler<FetchUrlCached> for RedisStore {
                     .send(FetchUrl::get(&message.url, message.metric))
                     .await?;
                 let ttl = std::cmp::max(expire_cache, result.max_age);
-                conn.set_ex(key, result.data.clone(), ttl.as_secs() as usize)
-                    .await?;
+                conn.set_ex(key, result.data.clone(), ttl.as_secs()).await?;
                 Ok(result.data)
             }
         });
