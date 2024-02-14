@@ -4,6 +4,7 @@ use http::{Method, StatusCode};
 
 /// Route the request, returning a handler
 pub async fn router(ctx: &mut Context) -> HandlerResult {
+    #[allow(clippy::match_same_arms)]
     match (&ctx.method, ctx.uri.path()) {
         // Relying party endpoints
         (&Method::GET, "/.well-known/openid-configuration") => handlers::auth::discovery(ctx).await,

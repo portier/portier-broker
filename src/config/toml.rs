@@ -85,6 +85,7 @@ struct TomlServerTable {
     allowed_origins: Option<Vec<String>>,
 }
 
+#[allow(clippy::struct_field_names)]
 #[derive(Deserialize)]
 struct TomlHeadersTable {
     static_ttl: Option<u64>,
