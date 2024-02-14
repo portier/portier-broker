@@ -20,11 +20,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Install Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: '1.72'
-        profile: minimal
-        default: true
+      uses: dtolnay/rust-toolchain@1.72
 
     - name: Cache Rust
       uses: actions/cache@v4

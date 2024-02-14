@@ -83,11 +83,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Install Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        profile: minimal
-        default: true
+      uses: dtolnay/rust-toolchain@stable
 
     - name: Add targets
       run: |
@@ -139,11 +135,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Install Rust
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        profile: minimal
-        default: true
+      uses: dtolnay/rust-toolchain@stable
 
     - name: Add targets
       run: |
