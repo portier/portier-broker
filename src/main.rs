@@ -6,11 +6,12 @@
     clippy::cast_sign_loss,
     clippy::enum_glob_use,
     clippy::module_name_repetitions,
-    clippy::single_match_else,
     clippy::too_many_arguments,
     clippy::too_many_lines,
     clippy::unused_async,
-    clippy::wildcard_imports
+    clippy::wildcard_imports,
+    // https://github.com/rust-lang/rust-clippy/issues/12279
+    clippy::no_effect_underscore_binding,
 )]
 
 #[macro_use]
@@ -160,9 +161,10 @@ async fn start_server(builder: ConfigBuilder) {
         let unix = UnixListener::from_std(unix).expect("Socket activation failed");
         let addr = unix.local_addr().expect("Socket activation failed");
         listener = Some(Listener::Unix(unix));
-        match addr.as_pathname() {
-            Some(path) => log::info!("Listening on Unix {:?} (via service manager)", path),
-            None => log::info!("Listening on unnamed Unix socket (via service manager)"),
+        if let Some(path) = addr.as_pathname() {
+            log::info!("Listening on Unix {:?} (via service manager)", path);
+        } else {
+            log::info!("Listening on unnamed Unix socket (via service manager)");
         }
     }
 
@@ -184,20 +186,19 @@ async fn start_server(builder: ConfigBuilder) {
     }
 
     // No socket activation, bind on the configured TCP port.
-    let mut listener = match listener {
-        Some(listener) => listener,
-        None => {
-            let ip_addr = app
-                .listen_ip
-                .parse()
-                .expect("Unable to parse listen address");
-            let addr = SocketAddr::new(ip_addr, app.listen_port);
-            let tcp = TcpListener::bind(&addr)
-                .await
-                .expect("Unable to bind to listen address");
-            log::info!("Listening on TCP {}", addr);
-            Listener::Tcp(tcp)
-        }
+    let mut listener = if let Some(listener) = listener {
+        listener
+    } else {
+        let ip_addr = app
+            .listen_ip
+            .parse()
+            .expect("Unable to parse listen address");
+        let addr = SocketAddr::new(ip_addr, app.listen_port);
+        let tcp = TcpListener::bind(&addr)
+            .await
+            .expect("Unable to bind to listen address");
+        log::info!("Listening on TCP {}", addr);
+        Listener::Tcp(tcp)
     };
 
     let mut http = Http::new();
