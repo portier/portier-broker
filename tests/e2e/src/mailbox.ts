@@ -2,6 +2,7 @@
 import { SMTPServer } from "smtp-server";
 import { simpleParser } from "mailparser";
 import { TEST_MAILER } from "./env";
+import type { Stream } from "stream";
 
 const parseOptions = {
   skipHtmlToText: true,
@@ -10,7 +11,7 @@ const parseOptions = {
 
 export interface Mailbox {
   pushRawMail(
-    input: string | NodeJS.ReadableStream,
+    input: string | Stream,
     callback?: (err?: Error | undefined) => void
   ): void;
   pushMail(mail: string): void;
@@ -28,7 +29,7 @@ export default (): Mailbox => {
   // Exported API.
   const api: Mailbox = {
     pushRawMail(
-      input: string | NodeJS.ReadableStream,
+      input: string | Stream,
       callback?: (err?: Error) => void
     ): void {
       simpleParser(input, parseOptions as any, (err, parsed) => {
