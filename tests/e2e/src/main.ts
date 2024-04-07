@@ -52,8 +52,8 @@ const createDriver = async () => {
   const firefoxOptions = new firefox.Options().windowSize(windowSize);
   const chromeOptions = new chrome.Options().windowSize(windowSize);
   if (HEADLESS === "1") {
-    firefoxOptions.headless();
-    chromeOptions.headless();
+    firefoxOptions.addArguments("-headless");
+    chromeOptions.addArguments("--headless=new");
   }
 
   const builder = new Builder();
