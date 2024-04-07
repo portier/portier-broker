@@ -110,27 +110,35 @@ jobs:
 
     - name: E2E test deps
       run: cd tests/e2e/ && yarn --frozen-lockfile
+      timeout-minutes: 10
 
     - name: E2E test Firefox
       run: cd tests/e2e/ && SELENIUM_BROWSER=firefox ./main.js
+      timeout-minutes: 10
 
     - name: E2E test Chrome
       run: cd tests/e2e/ && SELENIUM_BROWSER=chrome ./main.js
+      timeout-minutes: 10
 
     - name: E2E test Redis
       run: cd tests/e2e/ && TEST_STORE=redis TEST_KEY_MANAGER=rotating ./main.js
+      timeout-minutes: 10
 
     - name: E2E test SQLite
       run: cd tests/e2e/ && TEST_STORE=sqlite TEST_KEY_MANAGER=rotating ./main.js
+      timeout-minutes: 10
 
     - name: E2E test sendmail
       run: cd tests/e2e/ && TEST_MAILER=sendmail ./main.js
+      timeout-minutes: 10
 
     - name: E2E test Postmark
       run: cd tests/e2e/ && TEST_MAILER=postmark ./main.js
+      timeout-minutes: 10
 
     - name: E2E test Mailgun
       run: cd tests/e2e/ && TEST_MAILER=mailgun ./main.js
+      timeout-minutes: 10
 
   macos-build:
     runs-on: macos-latest
@@ -171,12 +179,13 @@ jobs:
 
     - name: E2E test deps
       run: cd tests/e2e/ && yarn --frozen-lockfile
+      timeout-minutes: 10
 
     - name: E2E test Safari
       run: cd tests/e2e/ && SELENIUM_BROWSER=safari ./main.js
+      timeout-minutes: 10
       # TODO: fails sporadically
       continue-on-error: true
-      timeout-minutes: 1
 
   windows-build:
     runs-on: windows-latest
