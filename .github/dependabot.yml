@@ -16,3 +16,6 @@ updates:
   directory: '/'
   schedule:
     interval: 'daily'
+  ignore:
+    # Specific version pinned for testing toolchain compatibility.
+    - dependency-name: "dtolnay/rust-toolchain"
