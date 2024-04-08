@@ -215,7 +215,7 @@ impl Handler<FetchUrlCached> for MemoryStore {
                 return Ok(entry.value.clone());
             }
             let result = fetcher
-                .send(FetchUrl::get(&message.url, message.metric))
+                .send(FetchUrl::get(message.url, message.metric))
                 .await?;
             let ttl = std::cmp::max(expire_cache, result.max_age);
             *slot = Some(Expiring::from_duration(result.data.clone(), ttl));

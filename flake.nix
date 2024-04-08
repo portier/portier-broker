@@ -11,16 +11,15 @@
     forEachSystem = f: lib.mapAttrs (system: f) nixpkgs.legacyPackages;
 
     makeBrokerPackage = pkgs: buildType:
-      with pkgs;
-      rustPlatform.buildRustPackage {
+      pkgs.darwin.apple_sdk_11_0.rustPlatform.buildRustPackage {
         name = "portier-broker";
 
         src = ./.;
         cargoLock.lockFile = ./Cargo.lock;
 
-        nativeBuildInputs = [ makeWrapper ];
-        buildInputs = lib.optional stdenv.isDarwin (
-          with darwin.apple_sdk.frameworks; [ Security ]
+        nativeBuildInputs = [ pkgs.makeWrapper ];
+        buildInputs = lib.optional pkgs.stdenv.isDarwin (
+          with pkgs.darwin.apple_sdk_11_0.frameworks; [ Security SystemConfiguration ]
         );
 
         doCheck = true;
@@ -44,9 +43,11 @@
     });
 
     devShells = forEachSystem (pkgs: {
-      default = with pkgs; mkShell {
-        nativeBuildInputs = [ git cargo-audit cargo-outdated ]
-          ++ (with rustPackages; [ rustc cargo rustfmt clippy ]);
+      default = pkgs.mkShell.override {
+        inherit (pkgs.darwin.apple_sdk_11_0) stdenv;
+      } {
+        nativeBuildInputs = (with pkgs; [ git cmake cargo-audit cargo-outdated ])
+          ++ (with pkgs.rustPackages; [ rustc cargo rustfmt clippy ]);
         buildInputs = self.packages.${pkgs.system}.default.buildInputs;
       };
     });

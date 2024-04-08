@@ -35,12 +35,12 @@ use crate::agents::{Expiring, ExportKeySet, ImportKeySet, KeySet};
 use crate::config::{ConfigBuilder, ConfigRc};
 use crate::utils::pem;
 use crate::web::Service;
-use hyper::server::conn::Http;
+use hyper::server::conn::http1;
+use hyper_util::rt::TokioIo;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufReader, Write};
-use std::time::Duration;
 use std::{
     net::SocketAddr,
     path::{Path, PathBuf},
@@ -92,6 +92,11 @@ struct Args {
 #[tokio::main]
 async fn main() {
     crate::utils::logger::init();
+
+    #[cfg(feature = "rustls")]
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .expect("Failed to initialize rustls");
 
     // We spawn a bunch of background tasks on the Tokio executor. If these panic, we want to exit
     // instead of continuing on without the task.
@@ -201,9 +206,7 @@ async fn start_server(builder: ConfigBuilder) {
         Listener::Tcp(tcp)
     };
 
-    let mut http = Http::new();
-    http.http1_only(true)
-        .http1_header_read_timeout(Duration::from_secs(5));
+    let http = http1::Builder::new();
 
     let (exit_tx, mut exit_rx) = tokio::sync::mpsc::channel(1);
     ctrlc::set_handler(move || {
@@ -239,13 +242,13 @@ async fn start_server(builder: ConfigBuilder) {
             Ok(Socket::Tcp((socket, addr))) => {
                 metrics::HTTP_CONNECTIONS.inc();
                 let service = Service::new(&app, Some(addr));
-                connections.spawn(http.serve_connection(socket, service));
+                connections.spawn(http.serve_connection(TokioIo::new(socket), service));
             }
             #[cfg(not(windows))]
             Ok(Socket::Unix((socket, _))) => {
                 metrics::HTTP_CONNECTIONS.inc();
                 let service = Service::new(&app, None);
-                connections.spawn(http.serve_connection(socket, service));
+                connections.spawn(http.serve_connection(TokioIo::new(socket), service));
             }
             Err(err) => match err.kind() {
                 io::ErrorKind::ConnectionRefused

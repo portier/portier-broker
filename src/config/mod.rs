@@ -7,11 +7,22 @@ mod toml;
 
 pub use limits::*;
 pub use string_list::*;
+use url::Url;
 
-use self::env::EnvConfig;
-use self::i18n::I18n;
-use self::templates::Templates;
-use self::toml::TomlConfig;
+use std::{
+    borrow::ToOwned,
+    collections::HashMap,
+    env::var as env_var,
+    io::Error as IoError,
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Duration,
+};
+
+use hyper_staticfile::Resolver;
+use ipnetwork::IpNetwork;
+use thiserror::Error;
+
 use crate::agents::{
     self, FetchAgent, KeyManagerSender, ManualKeys, ManualKeysError, RotatingKeys, SendMail,
     StoreSender,
@@ -24,17 +35,11 @@ use crate::utils::{
     DomainValidator, SecureRandom,
 };
 use crate::webfinger::{Link, ParseLinkError, Relation};
-use ipnetwork::IpNetwork;
-use std::{
-    borrow::ToOwned,
-    collections::HashMap,
-    env::var as env_var,
-    io::Error as IoError,
-    path::{Path, PathBuf},
-    sync::Arc,
-    time::Duration,
-};
-use thiserror::Error;
+
+use self::env::EnvConfig;
+use self::i18n::I18n;
+use self::templates::Templates;
+use self::toml::TomlConfig;
 
 /// Union of all possible error types seen while parsing.
 #[derive(Debug, Error)]
@@ -81,7 +86,7 @@ pub struct Config {
     pub google_client_id: Option<String>,
     pub domain_overrides: HashMap<String, Vec<Link>>,
 
-    pub res_dir: PathBuf,
+    pub static_resolver: Resolver,
     pub templates: Templates,
     pub i18n: I18n,
     pub rng: SecureRandom,
@@ -203,7 +208,7 @@ enum MailerConfig {
     #[cfg(feature = "lettre_sendmail")]
     LettreSendmail { command: String },
     #[cfg(feature = "postmark")]
-    Postmark { token: String, api: String },
+    Postmark { token: String, api: Url },
     #[cfg(feature = "mailgun")]
     Mailgun {
         token: String,
@@ -222,7 +227,7 @@ impl MailerConfig {
         #[allow(unused)] smtp_password: Option<String>,
         sendmail_command: Option<String>,
         postmark_token: Option<String>,
-        postmark_api: String,
+        postmark_api: Url,
         mailgun_api: String,
         mailgun_token: Option<String>,
         mailgun_domain: Option<String>,
@@ -311,7 +316,7 @@ impl MailerConfig {
                 Box::new(spawn_agent(mailer).await)
             }
             #[cfg(feature = "postmark")]
-            MailerConfig::Postmark { token, api } => {
+            MailerConfig::Postmark { ref token, api } => {
                 let mailer = agents::PostmarkMailer::new(
                     params.fetcher,
                     token,
@@ -322,7 +327,11 @@ impl MailerConfig {
                 Box::new(spawn_agent(mailer).await)
             }
             #[cfg(feature = "mailgun")]
-            MailerConfig::Mailgun { token, api, domain } => {
+            MailerConfig::Mailgun {
+                ref token,
+                ref api,
+                ref domain,
+            } => {
                 let mailer = agents::MailgunMailer::new(
                     params.fetcher,
                     token,
@@ -374,7 +383,7 @@ pub struct ConfigBuilder {
     pub sendmail_command: Option<String>,
 
     pub postmark_token: Option<String>,
-    pub postmark_api: String,
+    pub postmark_api: Url,
 
     pub mailgun_token: Option<String>,
     pub mailgun_api: String,
@@ -435,7 +444,7 @@ impl ConfigBuilder {
             sendmail_command: None,
 
             postmark_token: None,
-            postmark_api: "https://api.postmarkapp.com/email".to_owned(),
+            postmark_api: "https://api.postmarkapp.com/email".parse().unwrap(),
 
             mailgun_token: None,
             mailgun_api: "https://api.mailgun.net/v3".to_owned(),
@@ -620,7 +629,7 @@ impl ConfigBuilder {
             google_client_id: self.google_client_id,
             domain_overrides,
 
-            res_dir,
+            static_resolver: Resolver::new(res_dir),
             templates,
             i18n,
             rng,

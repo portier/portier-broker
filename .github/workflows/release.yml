@@ -137,6 +137,10 @@ jobs:
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
 
+    # Required for building AWS Libcrypto
+    - name: Install NASM
+      uses: ilammy/setup-nasm@v1
+
     - name: Add targets
       run: |
         rustup target add $build_targets

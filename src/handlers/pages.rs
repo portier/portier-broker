@@ -1,10 +1,9 @@
 use crate::error::BrokerError;
 use crate::utils::http::ResponseExt;
-use crate::web::{empty_response, Context, HandlerResult};
+use crate::web::{data_response, empty_response, Context, HandlerResult, ResponseBody};
 use headers::{ContentType, Header};
-use http::{Response, StatusCode};
-use hyper::Body;
-use hyper_staticfile::{resolve_path, ResponseBuilder};
+use http::StatusCode;
+use hyper_staticfile::{AcceptEncoding, ResponseBuilder};
 use prometheus::{Encoder, TextEncoder};
 use std::env;
 
@@ -27,7 +26,7 @@ pub async fn version(_ctx: &mut Context) -> HandlerResult {
         body.push_str(&format!(" (git commit {commit})"));
     }
 
-    let mut res = Response::new(Body::from(body));
+    let mut res = data_response(body);
     res.typed_header(ContentType::text_utf8());
     Ok(res)
 }
@@ -39,14 +38,21 @@ pub async fn metrics(_ctx: &mut Context) -> HandlerResult {
     let encoder = TextEncoder::new();
     encoder.encode(&metric_families, &mut buffer).unwrap();
 
-    let mut res = Response::new(Body::from(buffer));
+    let mut res = data_response(buffer);
     res.header(ContentType::name(), encoder.format_type());
     Ok(res)
 }
 
 /// Static serving of resources.
 pub async fn static_(ctx: &mut Context) -> HandlerResult {
-    let result = resolve_path(&ctx.app.res_dir, ctx.uri.path())
+    let accept_encoding = ctx
+        .headers
+        .get(http::header::ACCEPT_ENCODING)
+        .map_or(AcceptEncoding::none(), AcceptEncoding::from_header_value);
+    let result = ctx
+        .app
+        .static_resolver
+        .resolve_path(ctx.uri.path(), accept_encoding)
         .await
         .map_err(|e| BrokerError::Internal(format!("static serving failed: {e}")))?;
     let res = ResponseBuilder::new()
@@ -54,5 +60,5 @@ pub async fn static_(ctx: &mut Context) -> HandlerResult {
         .cache_headers(Some(ctx.app.static_ttl.as_secs() as u32))
         .build(result)
         .expect("could not build static serving response");
-    Ok(res)
+    Ok(res.map(ResponseBody::Static))
 }

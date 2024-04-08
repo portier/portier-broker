@@ -7,21 +7,23 @@ use crate::error::{BrokerError, BrokerResult};
 use crate::metrics;
 use crate::router::router;
 use crate::utils::{http::ResponseExt, real_ip, BoxError, BoxFuture};
-use bytes::{Bytes, BytesMut};
-use futures_util::stream::StreamExt;
+use bytes::Bytes;
 use gettext::Catalog;
 use headers::{CacheControl, ContentType, Header, StrictTransportSecurity};
 use http::{HeaderMap, Method, StatusCode, Uri};
-use hyper::service::Service as HyperService;
-use hyper::Body;
+use http_body_util::BodyExt;
+use hyper::body::{Body, Frame, Incoming};
+use hyper_staticfile::Body as StaticBody;
 use log::info;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::{
     collections::HashMap,
+    io::Error as IoError,
     net::{IpAddr, SocketAddr},
+    pin::Pin,
     sync::Arc,
-    task::Poll,
+    task::{Context as TaskContext, Poll},
     time::Duration,
 };
 use thiserror::Error;
@@ -202,10 +204,31 @@ impl Context {
     }
 }
 
+/// Hyper Body implementation for responses.
+pub enum ResponseBody {
+    Data(Option<Bytes>),
+    Static(StaticBody),
+}
+
+impl Body for ResponseBody {
+    type Data = Bytes;
+    type Error = IoError;
+
+    fn poll_frame(
+        mut self: Pin<&mut Self>,
+        cx: &mut TaskContext,
+    ) -> Poll<Option<Result<Frame<Bytes>, IoError>>> {
+        match *self {
+            Self::Data(ref mut data) => Poll::Ready(Ok(data.take().map(Frame::data)).transpose()),
+            Self::Static(ref mut inner) => Pin::new(inner).poll_frame(cx),
+        }
+    }
+}
+
 /// Standard request type.
-pub type Request = hyper::Request<Body>;
+pub type Request = hyper::Request<Incoming>;
 /// Standard response type.
-pub type Response = hyper::Response<Body>;
+pub type Response = hyper::Response<ResponseBody>;
 /// Result type of handlers.
 pub type HandlerResult = Result<Response, BrokerError>;
 
@@ -234,9 +257,9 @@ impl Service {
         }
 
         // Read the request body.
-        let (parts, mut body) = req.into_parts();
+        let (parts, body) = req.into_parts();
         let body = match parts.method {
-            Method::POST => read_body(&mut body).await?,
+            Method::POST => body.collect().await?.to_bytes(),
             _ => Bytes::from(vec![]),
         };
 
@@ -302,16 +325,12 @@ impl Service {
     }
 }
 
-impl HyperService<Request> for Service {
+impl hyper::service::Service<Request> for Service {
     type Response = Response;
     type Error = BoxError;
     type Future = BoxFuture<Result<Response, BoxError>>;
 
-    fn poll_ready(&mut self, _cx: &mut std::task::Context) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, req: Request) -> Self::Future {
+    fn call(&self, req: Request) -> Self::Future {
         let ip = real_ip(self.remote_addr, &req, &self.app.trusted_proxies);
         info!("{} - {} {}", ip, req.method(), req.uri());
 
@@ -474,19 +493,6 @@ pub fn parse_form_encoded(input: &[u8]) -> HashMap<String, String> {
     map
 }
 
-/// Read the request or response body up to a fixed size.
-pub async fn read_body(body: &mut Body) -> Result<Bytes, BoxError> {
-    let mut acc = BytesMut::new();
-    while let Some(result) = body.next().await {
-        let chunk = result.map_err(Box::new)?;
-        if acc.len() + chunk.len() > 8096 {
-            return Err(Box::new(SizeLimitExceeded));
-        }
-        acc.extend(chunk);
-    }
-    Ok(acc.freeze())
-}
-
 /// Helper function for returning a result to the Relying Party.
 ///
 /// Takes an array of `(name, value)` parameter pairs and returns a response
@@ -556,27 +562,32 @@ pub fn return_to_relier(ctx: &Context, params: &[(&str, &str)]) -> Response {
     }
 }
 
+/// Build a new response.
+pub fn data_response<T: Into<Bytes>>(data: T) -> Response {
+    Response::new(ResponseBody::Data(Some(data.into())))
+}
+
 /// Helper function for returning a response with JSON data.
 ///
 /// Serializes the argument value to JSON and returns a HTTP 200 response
 /// code with the serialized JSON as the body.
 pub fn json_response(obj: &serde_json::Value) -> Response {
     let body = serde_json::to_string_pretty(&obj).expect("unable to coerce JSON Value into string");
-    let mut res = Response::new(Body::from(body));
+    let mut res = data_response(body);
     res.typed_header(ContentType::json());
     res
 }
 
 /// Create a response with an HTML body.
 pub fn html_response(html: String) -> Response {
-    let mut res = Response::new(Body::from(html));
+    let mut res = data_response(html);
     res.typed_header(ContentType::html());
     res
 }
 
 /// Create a response with an empty body and a specific status code.
 pub fn empty_response(status: StatusCode) -> Response {
-    let mut res = Response::new(Body::empty());
+    let mut res = Response::new(ResponseBody::Static(StaticBody::Empty));
     *res.status_mut() = status;
     res
 }
