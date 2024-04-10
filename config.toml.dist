@@ -128,6 +128,11 @@ from_address = "" # Required
 #mailgun_api = "https://api.mailgun.net/v3"
 #mailgun_domain = ""
 
+# Setting `sendgrid_token` enables sending mail using the SendGrid API. The
+# value is a SendGrid API token.
+
+#sendgrid_token = ""
+
 ################################################################
 # Access control
 

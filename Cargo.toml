@@ -11,7 +11,7 @@ rust-version = "1.72"
 edition = "2021"
 
 [features]
-default = ["rustls", "rsa", "redis", "rusqlite", "lettre_smtp", "lettre_sendmail", "postmark", "mailgun"]
+default = ["rustls", "rsa", "redis", "rusqlite", "lettre_smtp", "lettre_sendmail", "postmark", "mailgun", "sendgrid"]
 insecure = []
 lettre_smtp = ["lettre", "lettre/smtp-transport"]
 lettre_sendmail = ["lettre", "lettre/sendmail-transport"]
@@ -20,6 +20,7 @@ mailgun = []
 native-tls = ["hyper-tls", "reqwest/native-tls", "lettre?/native-tls"]
 rsa = ["dep:rsa", "rand_core"]
 rustls = ["dep:rustls", "hyper-rustls", "reqwest/rustls-tls-native-roots", "lettre?/rustls-tls", "lettre?/rustls-native-certs"]
+sendgrid = []
 
 [[bin]]
 name = "portier-broker"

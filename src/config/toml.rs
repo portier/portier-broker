@@ -61,6 +61,8 @@ pub struct TomlConfig {
     mailgun_api: Option<String>,
     mailgun_domain: Option<String>,
 
+    sendgrid_token: Option<String>,
+
     limits: Option<Vec<LimitConfig>>,
     limit_per_email: Option<LegacyLimitPerEmail>,
 
@@ -377,6 +379,10 @@ impl TomlConfig {
         }
         if let Some(val) = parsed.mailgun_api {
             builder.mailgun_api = val;
+        }
+
+        if let Some(val) = parsed.sendgrid_token {
+            builder.sendgrid_token = Some(val);
         }
 
         if let Some(val) = parsed.limits {

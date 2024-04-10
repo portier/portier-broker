@@ -91,6 +91,10 @@ export default async ({ mailbox }: { mailbox: Mailbox }): Promise<Broker> => {
       env.BROKER_MAILGUN_TOKEN = "123";
       env.BROKER_MAILGUN_DOMAIN = "portier.io";
       break;
+    case "sendgrid":
+      env.BROKER_SENDGRID_TOKEN = "SENDGRID_API_TEST";
+      env.BROKER_SENDGRID_API = "http://localhost:44920/sendgrid";
+      break;
     default:
       throw Error(`Invalid TEST_MAILER: ${TEST_MAILER}`);
   }
