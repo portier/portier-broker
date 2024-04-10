@@ -1,10 +1,10 @@
 use crate::agents::key_manager::rotating::{KeySet, RotatingKeys};
 use crate::config::LimitInput;
 use crate::crypto::SigningAlgorithm;
+use crate::metrics::Histogram;
 use crate::utils::agent::{Addr, Message, Sender};
 use crate::utils::BoxError;
 use crate::web::{Session, SessionData};
-use prometheus::Histogram;
 use std::collections::HashSet;
 use url::Url;
 
