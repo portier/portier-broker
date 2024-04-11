@@ -27,8 +27,6 @@ jobs:
         # See: https://github.com/briansmith/ring/blob/main/mk/cargo.sh
         target:
         - aarch64-musl
-        - armv7-musleabihf
-        - i686-musl
         - x86_64-musl
     runs-on: ubuntu-latest
     container: "ghcr.io/rust-cross/rust-musl-cross:${{ matrix.target }}"
@@ -206,7 +204,7 @@ jobs:
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v3
       with:
-        platforms: arm,arm64
+        platforms: arm64
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
@@ -219,10 +217,8 @@ jobs:
       run: |
         # Map Docker arch to package name
         declare -A build_targets
-        build_targets['386']='i686'
         build_targets['amd64']='x86_64'
         build_targets['arm64/v8']='aarch64'
-        build_targets['arm/v7']='armv7'
 
         declare -a scratch_tags
         for docker_arch in "${!build_targets[@]}"; do
