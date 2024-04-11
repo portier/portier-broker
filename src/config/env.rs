@@ -63,6 +63,9 @@ pub struct EnvConfig {
     mailgun_api: Option<String>,
     mailgun_domain: Option<String>,
 
+    sendgrid_token: Option<String>,
+    sendgrid_api: Option<Url>,
+
     limits: Option<Vec<LimitConfig>>,
     limit_per_email: Option<LegacyLimitPerEmail>,
 
@@ -243,6 +246,13 @@ impl EnvConfig {
         }
         if let Some(val) = parsed.mailgun_domain {
             builder.mailgun_domain = Some(val);
+        }
+
+        if let Some(val) = parsed.sendgrid_token {
+            builder.sendgrid_token = Some(val);
+        }
+        if let Some(val) = parsed.sendgrid_api {
+            builder.sendgrid_api = val;
         }
 
         if let Some(val) = parsed.limits {

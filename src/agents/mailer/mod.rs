@@ -69,3 +69,8 @@ pub use self::postmark::PostmarkMailer;
 pub mod mailgun;
 #[cfg(feature = "mailgun")]
 pub use self::mailgun::MailgunMailer;
+
+#[cfg(feature = "sendgrid")]
+pub mod sendgrid;
+#[cfg(feature = "sendgrid")]
+pub use self::sendgrid::SendgridMailer;

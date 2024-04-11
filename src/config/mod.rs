@@ -215,6 +215,8 @@ enum MailerConfig {
         api: String,
         domain: String,
     },
+    #[cfg(feature = "sendgrid")]
+    Sendgrid { token: String, api: Url },
 }
 
 impl MailerConfig {
@@ -231,10 +233,12 @@ impl MailerConfig {
         mailgun_api: String,
         mailgun_token: Option<String>,
         mailgun_domain: Option<String>,
+        sendgrid_token: Option<String>,
+        sendgrid_api: Url,
     ) -> Result<Self, ConfigError> {
-        match (smtp_server, sendmail_command, postmark_token, mailgun_token, mailgun_domain) {
+        match (smtp_server, sendmail_command, postmark_token, mailgun_token, mailgun_domain, sendgrid_token) {
             #[cfg(feature = "lettre_smtp")]
-            (Some(server), None, None, None, None) => {
+            (Some(server), None, None, None, None, None) => {
                 let credentials = match (smtp_username, smtp_password) {
                     (Some(username), Some(password)) => Some((username, password)),
                     (None, None) => None,
@@ -249,44 +253,54 @@ impl MailerConfig {
                 })
             }
             #[cfg(not(feature = "lettre_smtp"))]
-            (Some(_), None, None, None, None) => {
+            (Some(_), None, None, None, None, None) => {
                 Err("SMTP mailer requested, but this build does not support it.".into())
             }
 
             #[cfg(feature = "lettre_sendmail")]
-            (None, Some(command), None, None, None) => Ok(MailerConfig::LettreSendmail { command }),
+            (None, Some(command), None, None, None, None) => Ok(MailerConfig::LettreSendmail { command }),
             #[cfg(not(feature = "lettre_sendmail"))]
-            (None, Some(_), None, None, None) => {
+            (None, Some(_), None, None, None, None) => {
                 Err("sendmail mailer requested, but this build does not support it.".into())
             }
 
             #[cfg(feature = "postmark")]
-            (None, None, Some(token), None, None) => Ok(MailerConfig::Postmark {
+            (None, None, Some(token), None, None, None) => Ok(MailerConfig::Postmark {
                 token,
                 api: postmark_api,
             }),
             #[cfg(not(feature = "postmark"))]
-            (None, None, Some(_), None, None) => {
+            (None, None, Some(_), None, None, None) => {
                 Err("Postmark mailer requested, but this build does not support it.".into())
             }
 
             #[cfg(feature = "mailgun")]
-            (None, None, None, Some(token), Some(domain)) => Ok(MailerConfig::Mailgun {
+            (None, None, None, Some(token), Some(domain), None) => Ok(MailerConfig::Mailgun {
                 token,
                 api: mailgun_api,
                 domain,
             }),
             #[cfg(not(feature = "mailgun"))]
-            (None, None, None, Some(_), Some(_)) => {
+            (None, None, None, Some(_), Some(_), None) => {
                 Err("Mailgun mailer requested, but this build does not support it.".into())
             }
 
-            (None, None, None, None, None) => {
-                Err("Must specify one of smtp_server, sendmail_command, postmark_token, or mailgun_token and mailgun_domain".into())
+            #[cfg(feature = "sendgrid")]
+            (None, None, None, None, None, Some(token)) => Ok(MailerConfig::Sendgrid {
+                token,
+                api: sendgrid_api,
+            }),
+            #[cfg(not(feature = "sendgrid"))]
+            (None, None, None, None, None, Some(_)) => {
+                Err("Sendgrid mailer requested, but this build does not support it.".into())
+            }
+
+            (None, None, None, None, None, None) => {
+                Err("Must specify one of smtp_server, sendmail_command, postmark_token, sendgrid_token, or mailgun_token and mailgun_domain".into())
             }
 
             _ => Err(
-                "Can only specify one of smtp_server, sendmail_command or postmark_token".into(),
+                "Can only specify one of smtp_server, sendmail_command, postmark_token, sendgrid_token, or mailgun_token".into(),
             ),
         }
     }
@@ -342,6 +356,17 @@ impl MailerConfig {
                 );
                 Box::new(spawn_agent(mailer).await)
             }
+            #[cfg(feature = "sendgrid")]
+            MailerConfig::Sendgrid { ref token, api } => {
+                let mailer = agents::SendgridMailer::new(
+                    params.fetcher,
+                    token,
+                    api,
+                    &params.from_address,
+                    &params.from_name,
+                );
+                Box::new(spawn_agent(mailer).await)
+            }
         }
     }
 }
@@ -388,6 +413,9 @@ pub struct ConfigBuilder {
     pub mailgun_token: Option<String>,
     pub mailgun_api: String,
     pub mailgun_domain: Option<String>,
+
+    pub sendgrid_token: Option<String>,
+    pub sendgrid_api: Url,
 
     pub limits: Vec<LimitConfig>,
 
@@ -449,6 +477,9 @@ impl ConfigBuilder {
             mailgun_token: None,
             mailgun_api: "https://api.mailgun.net/v3".to_owned(),
             mailgun_domain: None,
+
+            sendgrid_token: None,
+            sendgrid_api: "https://api.sendgrid.com/v3/mail/send".parse().unwrap(),
 
             limits: [
                 "ip:50/s",
@@ -528,6 +559,8 @@ impl ConfigBuilder {
             self.mailgun_api,
             self.mailgun_token,
             self.mailgun_domain,
+            self.sendgrid_token,
+            self.sendgrid_api,
         )?;
 
         // Assign IDs to limit configs.

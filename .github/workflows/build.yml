@@ -140,6 +140,10 @@ jobs:
       run: cd tests/e2e/ && TEST_MAILER=mailgun ./main.js
       timeout-minutes: 10
 
+    - name: E2E test SendGrid
+      run: cd tests/e2e/ && TEST_MAILER=sendgrid ./main.js
+      timeout-minutes: 10
+
   macos-build:
     runs-on: macos-latest
     steps:

@@ -44,6 +44,12 @@ export default ({ mailbox }: { mailbox: Mailbox }): HttpMailer => {
     });
   });
 
+  app.post("/sendgrid", jsonParser, (req, res) => {
+    requests.push({ headers: req.headers, body: req.body });
+    mailbox.pushMail(req.body.content[1].value);
+    return res.status(202).end();
+  });
+
   const server = app.listen(44920, "localhost");
 
   return {

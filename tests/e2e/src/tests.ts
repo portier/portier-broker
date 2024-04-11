@@ -24,6 +24,8 @@ const postmarkTest = (name: string, fn: (ctx: TestContext) => void) =>
   TEST_MAILER === "postmark" && test(`postmark -> ${name}`, fn);
 const mailgunTest = (name: string, fn: (ctx: TestContext) => void) =>
   TEST_MAILER === "mailgun" && test(`mailgun -> ${name}`, fn);
+const sendgridTest = (name: string, fn: (ctx: TestContext) => void) =>
+  TEST_MAILER === "sendgrid" && test(`sendgrid -> ${name}`, fn);
 
 const TIMEOUT = 10000;
 const OVERALL_TIMEOUT = 30000;
@@ -186,6 +188,19 @@ mailgunTest("sends API request", async ({ httpMailer, driver }) => {
     Object.prototype.hasOwnProperty.call(requests[0].body, "text"),
     true
   );
+});
+
+sendgridTest("sends API request", async ({ httpMailer, driver }) => {
+  await driver.get("http://localhost:44180/");
+  await driver.wait(until.titleIs(RP_LOGIN_TITLE), TIMEOUT);
+
+  const emailInput = await driver.findElement(By.name("email"));
+  await emailInput.sendKeys(JOHN_EMAIL, Key.RETURN);
+  await driver.wait(until.titleIs(BROKER_CONFIRM_TITLE), TIMEOUT);
+
+  const requests = httpMailer.getRequests();
+  assert.strictEqual(requests.length, 1);
+  assert.strictEqual(requests[0].body.personalizations[0].to[0].email, JOHN_EMAIL);
 });
 
 export default async (ctx: TestContext) => {
