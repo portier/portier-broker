@@ -4,53 +4,57 @@
   };
 
   outputs = { self, nixpkgs }:
-  let
+    let
 
-    inherit (nixpkgs) lib;
+      inherit (nixpkgs) lib;
 
-    forEachSystem = f: lib.mapAttrs (system: f) nixpkgs.legacyPackages;
+      forEachSystem = f: lib.mapAttrs (system: f) nixpkgs.legacyPackages;
 
-    makeBrokerPackage = pkgs: buildType:
-      pkgs.darwin.apple_sdk_11_0.rustPlatform.buildRustPackage {
-        name = "portier-broker";
+      makeBrokerPackage = pkgs: buildType:
+        (if pkgs.stdenv.isDarwin
+        then pkgs.darwin.apple_sdk_11_0
+        else pkgs
+        ).rustPlatform.buildRustPackage {
+          name = "portier-broker";
 
-        src = ./.;
-        cargoLock.lockFile = ./Cargo.lock;
+          src = ./.;
+          cargoLock.lockFile = ./Cargo.lock;
 
-        nativeBuildInputs = [ pkgs.makeWrapper ];
-        buildInputs = lib.optional pkgs.stdenv.isDarwin (
-          with pkgs.darwin.apple_sdk_11_0.frameworks; [ Security SystemConfiguration ]
-        );
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+          buildInputs = lib.optional pkgs.stdenv.isDarwin (
+            with pkgs.darwin.apple_sdk_11_0.frameworks; [ Security SystemConfiguration ]
+          );
 
-        doCheck = true;
-        inherit buildType;
+          doCheck = true;
+          inherit buildType;
 
-        postInstall = ''
-          mkdir $out/data
-          cp -r ./res ./tmpl ./lang $out/data/
-          rm $out/data/lang/*.po
+          postInstall = ''
+            mkdir $out/data
+            cp -r ./res ./tmpl ./lang $out/data/
+            rm $out/data/lang/*.po
 
-          wrapProgram $out/bin/portier-broker \
-            --set-default BROKER_DATA_DIR $out/data
-        '';
-      };
+            wrapProgram $out/bin/portier-broker \
+              --set-default BROKER_DATA_DIR $out/data
+          '';
+        };
 
-  in {
+    in
+    {
 
-    packages = forEachSystem (pkgs: rec {
-      default = makeBrokerPackage pkgs "release";
-      debug = makeBrokerPackage pkgs "debug";
-    });
+      packages = forEachSystem (pkgs: rec {
+        default = makeBrokerPackage pkgs "release";
+        debug = makeBrokerPackage pkgs "debug";
+      });
 
-    devShells = forEachSystem (pkgs: {
-      default = pkgs.mkShell.override {
-        inherit (pkgs.darwin.apple_sdk_11_0) stdenv;
-      } {
-        nativeBuildInputs = (with pkgs; [ git cmake cargo-audit cargo-outdated ])
-          ++ (with pkgs.rustPackages; [ rustc cargo rustfmt clippy ]);
-        buildInputs = self.packages.${pkgs.system}.default.buildInputs;
-      };
-    });
+      devShells = forEachSystem (pkgs: {
+        default = pkgs.mkShell.override
+          { inherit (pkgs.darwin.apple_sdk_11_0) stdenv; }
+          {
+            nativeBuildInputs = (with pkgs; [ git cmake cargo-audit cargo-outdated ])
+              ++ (with pkgs.rustPackages; [ rustc cargo rustfmt clippy ]);
+            buildInputs = self.packages.${pkgs.system}.default.buildInputs;
+          };
+      });
 
-  };
+    };
 }
