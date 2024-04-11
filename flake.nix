@@ -3,27 +3,29 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
   };
 
-  outputs = { self, nixpkgs }:
+  outputs = { nixpkgs, ... }:
     let
 
       inherit (nixpkgs) lib;
 
-      forEachSystem = f: lib.mapAttrs (system: f) nixpkgs.legacyPackages;
-
-      makeBrokerPackage = pkgs: buildType:
-        (if pkgs.stdenv.isDarwin
-        then pkgs.darwin.apple_sdk_11_0
-        else pkgs
-        ).rustPlatform.buildRustPackage {
+      package =
+        { lib
+        , stdenv
+        , rustPlatform
+        , cmake
+        , makeWrapper
+        , Security
+        , SystemConfiguration
+        , buildType ? "release"
+        }:
+        rustPlatform.buildRustPackage {
           name = "portier-broker";
 
           src = ./.;
           cargoLock.lockFile = ./Cargo.lock;
 
-          nativeBuildInputs = [ pkgs.makeWrapper ];
-          buildInputs = lib.optional pkgs.stdenv.isDarwin (
-            with pkgs.darwin.apple_sdk_11_0.frameworks; [ Security SystemConfiguration ]
-          );
+          nativeBuildInputs = [ cmake makeWrapper ];
+          buildInputs = lib.optionals stdenv.isDarwin [ Security SystemConfiguration ];
 
           doCheck = true;
           inherit buildType;
@@ -38,21 +40,48 @@
           '';
         };
 
+      overlay = final: prev: {
+        portier-broker =
+          # TODO: aws-lc-rs still seems to build with the wrong SDK.
+          let appleSdk = final.darwin.apple_sdk_11_0;
+          in appleSdk.callPackage package {
+            inherit (appleSdk.frameworks) Security SystemConfiguration;
+          };
+      };
+
+      pkgs = lib.listToAttrs (map
+        (system: {
+          name = system;
+          value = import nixpkgs {
+            inherit system;
+            overlays = [ overlay ];
+          };
+        })
+        [
+          "x86_64-linux"
+          "aarch64-linux"
+          "x86_64-darwin"
+          "aarch64-darwin"
+        ]);
+
+      forEachSystem = f: lib.mapAttrs (system: f) pkgs;
+
     in
     {
 
-      packages = forEachSystem (pkgs: rec {
-        default = makeBrokerPackage pkgs "release";
-        debug = makeBrokerPackage pkgs "debug";
+      packages = forEachSystem (pkgs: {
+        default = pkgs.portier-broker;
+        debug = pkgs.portier-broker.override { buildType = "debug"; };
       });
 
       devShells = forEachSystem (pkgs: {
         default = pkgs.mkShell.override
-          { inherit (pkgs.darwin.apple_sdk_11_0) stdenv; }
+          { inherit (pkgs.portier-broker) stdenv; }
           {
-            nativeBuildInputs = (with pkgs; [ git cmake cargo-audit cargo-outdated ])
-              ++ (with pkgs.rustPackages; [ rustc cargo rustfmt clippy ]);
-            buildInputs = self.packages.${pkgs.system}.default.buildInputs;
+            nativeBuildInputs = pkgs.portier-broker.nativeBuildInputs
+              ++ (with pkgs; [ git cargo-audit cargo-outdated ])
+              ++ (with pkgs.rustPackages; [ rustfmt clippy ]);
+            buildInputs = pkgs.portier-broker.buildInputs;
           };
       });
 
