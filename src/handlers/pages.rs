@@ -4,7 +4,6 @@ use crate::web::{data_response, empty_response, Context, HandlerResult, Response
 use headers::{ContentType, Header};
 use http::StatusCode;
 use hyper_staticfile::{AcceptEncoding, ResponseBuilder};
-use prometheus::{Encoder, TextEncoder};
 use std::env;
 
 /// Handler for the root path, redirects to the Portier homepage.
@@ -33,13 +32,11 @@ pub async fn version(_ctx: &mut Context) -> HandlerResult {
 
 /// Metrics route. (Prometheus-compatible)
 pub async fn metrics(_ctx: &mut Context) -> HandlerResult {
-    let mut buffer = vec![];
-    let metric_families = prometheus::gather();
-    let encoder = TextEncoder::new();
-    encoder.encode(&metric_families, &mut buffer).unwrap();
+    let mut buffer = String::new();
+    crate::metrics::write_metrics(&mut buffer).unwrap();
 
     let mut res = data_response(buffer);
-    res.header(ContentType::name(), encoder.format_type());
+    res.header(ContentType::name(), "text/plain; version=0.0.4");
     Ok(res)
 }
 

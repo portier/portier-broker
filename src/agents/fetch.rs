@@ -1,7 +1,7 @@
+use crate::metrics::Histogram;
 use crate::utils::agent::{Agent, Context, Handler, Message};
 use headers::{CacheControl, HeaderMapExt};
 use http::StatusCode;
-use prometheus::Histogram;
 use reqwest::{Client, Method, Request};
 use std::time::Duration;
 use thiserror::Error;

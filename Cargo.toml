@@ -93,10 +93,6 @@ features = ["builder"]
 version = "0.4.11"
 features = ["std", "release_max_level_info"]
 
-[dependencies.prometheus]
-version = "0.13.0"
-default-features = false
-
 [dependencies.rand_core]
 optional = true
 version = "0.6.4"
