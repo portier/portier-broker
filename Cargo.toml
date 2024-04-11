@@ -1,6 +1,6 @@
 [package]
 name = "portier_broker"
-version = "0.8.5"
+version = "0.9.0"
 authors = ["The Portier project contributors"]
 description = "Reference implementation of the Portier broker protocol"
 homepage = "http://portier.io"
