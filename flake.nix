@@ -69,6 +69,8 @@
     in
     {
 
+      overlays.default = overlay;
+
       packages = forEachSystem (pkgs: {
         default = pkgs.portier-broker;
         debug = pkgs.portier-broker.override { buildType = "debug"; };
