@@ -44,12 +44,12 @@ impl Handler<SendMail> for SendgridMailer {
             "subject": message.subject,
             "content": [
                 {
-                    "type": "text/html",
-                    "value": message.html_body,
-                },
-                {
                     "type": "text/plain",
                     "value": message.text_body,
+                },
+                {
+                    "type": "text/html",
+                    "value": message.html_body,
                 },
             ],
         }))
