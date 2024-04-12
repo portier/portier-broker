@@ -30,6 +30,9 @@
           doCheck = true;
           inherit buildType;
 
+          # On Linux, release builds fail without this on a memcpy.
+          hardeningDisable = [ "strictoverflow" ];
+
           postInstall = ''
             mkdir $out/data
             cp -r ./res ./tmpl ./lang $out/data/
