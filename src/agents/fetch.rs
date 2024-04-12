@@ -11,10 +11,10 @@ use url::Url;
 pub enum FetchError {
     #[error("HTTP request failed: {0}")]
     Reqwest(#[from] reqwest::Error),
-    #[error("unexpected HTTP status code: {0}")]
-    BadStatus(StatusCode),
     #[error("invalid UTF-8 in HTTP response body: {0}")]
     Utf8(#[from] std::string::FromUtf8Error),
+    #[error("unexpected HTTP status code {status}, response: {data}")]
+    BadStatus { status: StatusCode, data: String },
 }
 
 /// The result of fetching a URL.
@@ -67,9 +67,7 @@ impl Handler<FetchUrl> for FetchAgent {
         let future = self.client.execute(message.request);
         cx.reply_later(async {
             let res = future.await?;
-            if !res.status().is_success() {
-                return Err(FetchError::BadStatus(res.status()));
-            }
+            let status = res.status();
 
             // Grab the max-age directive from the Cache-Control header.
             let max_age = res
@@ -79,6 +77,10 @@ impl Handler<FetchUrl> for FetchAgent {
                 .unwrap_or_else(|| Duration::from_secs(0));
 
             let data = res.text().await?;
+            if !status.is_success() {
+                let data = data.escape_default().take(200).collect();
+                return Err(FetchError::BadStatus { status, data });
+            }
 
             timer.observe_duration();
 
