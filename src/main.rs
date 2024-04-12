@@ -36,11 +36,12 @@ use crate::config::{ConfigBuilder, ConfigRc};
 use crate::utils::pem;
 use crate::web::Service;
 use hyper::server::conn::http1;
-use hyper_util::rt::TokioIo;
+use hyper_util::rt::{TokioIo, TokioTimer};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufReader, Write};
+use std::pin::pin;
 use std::{
     net::SocketAddr,
     path::{Path, PathBuf},
@@ -206,13 +207,12 @@ async fn start_server(builder: ConfigBuilder) {
         Listener::Tcp(tcp)
     };
 
-    let http = http1::Builder::new();
+    let mut http = http1::Builder::new();
+    http.timer(TokioTimer::new());
 
-    let (exit_tx, mut exit_rx) = tokio::sync::mpsc::channel(1);
+    let (exit_tx, mut exit_rx) = tokio::sync::watch::channel(false);
     ctrlc::set_handler(move || {
-        exit_tx
-            .blocking_send(())
-            .expect("Could not send the exit signal");
+        exit_tx.send(true).expect("Could not send the exit signal");
     })
     .expect("Could not install the exit signal handler");
 
@@ -222,6 +222,27 @@ async fn start_server(builder: ConfigBuilder) {
     sd_notify::notify(true, &[sd_notify::NotifyState::Ready])
         .expect("Failed to signal ready to the service manager");
 
+    // Snippet for the connection loop with graceful shutdown.
+    // This is shared between TCP and Unix socket code.
+    macro_rules! serve_connection {
+        ($socket: expr, $addr:expr) => {{
+            metrics::HTTP_CONNECTIONS.inc();
+            let service = Service::new(&app, $addr);
+            let conn = http.serve_connection(TokioIo::new($socket), service);
+            let mut exit_rx = exit_rx.clone();
+            connections.spawn(async move {
+                let mut conn = pin!(conn);
+                loop {
+                    tokio::select! {
+                        res = conn.as_mut() => break res,
+                        _ = exit_rx.changed() => conn.as_mut().graceful_shutdown(),
+                    }
+                }
+            });
+        }};
+    }
+
+    // Main loop.
     let mut accepting = true;
     loop {
         let res = tokio::select! {
@@ -236,20 +257,12 @@ async fn start_server(builder: ConfigBuilder) {
             // Accept new connections.
             res = listener.accept(), if accepting => res,
             // Exit the loop on the exit signal.
-            _ = exit_rx.recv() => break,
+            _ = exit_rx.changed() => break,
         };
         match res {
-            Ok(Socket::Tcp((socket, addr))) => {
-                metrics::HTTP_CONNECTIONS.inc();
-                let service = Service::new(&app, Some(addr));
-                connections.spawn(http.serve_connection(TokioIo::new(socket), service));
-            }
+            Ok(Socket::Tcp((socket, addr))) => serve_connection!(socket, Some(addr)),
             #[cfg(not(windows))]
-            Ok(Socket::Unix((socket, _))) => {
-                metrics::HTTP_CONNECTIONS.inc();
-                let service = Service::new(&app, None);
-                connections.spawn(http.serve_connection(TokioIo::new(socket), service));
-            }
+            Ok(Socket::Unix((socket, _))) => serve_connection!(socket, None),
             Err(err) => match err.kind() {
                 io::ErrorKind::ConnectionRefused
                 | io::ErrorKind::ConnectionAborted
