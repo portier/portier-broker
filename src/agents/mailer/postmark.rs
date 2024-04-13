@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::email_address::EmailAddress;
 use crate::utils::agent::*;
 use crate::{agents::*, metrics};
@@ -21,6 +23,7 @@ pub struct PostmarkMailer {
     token: HeaderValue,
     api: Url,
     from: String,
+    timeout: Duration,
 }
 
 impl PostmarkMailer {
@@ -30,12 +33,14 @@ impl PostmarkMailer {
         api: Url,
         from_address: &EmailAddress,
         from_name: &str,
+        timeout: Duration,
     ) -> Self {
         PostmarkMailer {
             fetcher,
             token: HeaderValue::from_str(token).expect("Invalid Postmark token"),
             api,
             from: format!("{from_name} <{from_address}>"),
+            timeout,
         }
     }
 }
@@ -62,6 +67,7 @@ impl Handler<SendMail> for PostmarkMailer {
             .headers_mut()
             .append("X-Postmark-Server-Token", self.token.clone());
         *request.body_mut() = Some(body.into());
+        *request.timeout_mut() = Some(self.timeout);
 
         let future = self.fetcher.send(FetchUrl {
             request,

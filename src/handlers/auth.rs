@@ -298,6 +298,7 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
     .await;
 
     // Discover the authentication endpoints based on the email domain.
+    let discovery_timeout = ctx.app.discovery_timeout;
     let discovery_future = async {
         let links = webfinger::query(&ctx.app, &email_addr).await?;
 
@@ -313,7 +314,7 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
     };
 
     // Apply a timeout to discovery.
-    match tokio::time::timeout(Duration::from_secs(5), discovery_future).await {
+    match tokio::time::timeout(discovery_timeout, discovery_future).await {
         Err(_) => {
             // Timeout causes fall back to email loop auth.
             info!("discovery timed out for {}", email_addr);

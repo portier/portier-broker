@@ -124,6 +124,7 @@ pub async fn query(app: &ConfigRc, email_addr: &EmailAddress) -> Result<Vec<Link
         .store
         .send(FetchUrlCached {
             url,
+            timeout: app.webfinger_timeout,
             metric: is_counted.then_some(&metrics::AUTH_WEBFINGER_DURATION),
         })
         .await

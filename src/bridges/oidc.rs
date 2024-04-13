@@ -348,6 +348,7 @@ async fn fetch_config(
         .store
         .send(FetchUrlCached {
             url: config_url,
+            timeout: ctx.app.oidc_config_timeout,
             metric: is_counted.then_some(&metrics::AUTH_OIDC_FETCH_CONFIG_DURATION),
         })
         .await
@@ -386,6 +387,7 @@ async fn fetch_config(
         .store
         .send(FetchUrlCached {
             url: provider_config.jwks_uri.clone(),
+            timeout: ctx.app.oidc_jwks_timeout,
             metric: is_counted.then_some(&metrics::AUTH_OIDC_FETCH_JWKS_DURATION),
         })
         .await

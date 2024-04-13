@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::email_address::EmailAddress;
 use crate::utils::agent::*;
 use crate::{agents::*, metrics};
@@ -18,6 +20,7 @@ impl SmtpMailer {
         credentials: Option<(String, String)>,
         from_address: EmailAddress,
         from_name: String,
+        timeout: Duration,
     ) -> Self {
         // Extract domain, and build an address with a default port.
         // Split the same way `to_socket_addrs` does.
@@ -36,7 +39,8 @@ impl SmtpMailer {
             TlsParameters::new(domain.clone()).expect("Could not initialize TLS for SMTP client");
         let mut builder = SmtpTransport::builder_dangerous(&domain)
             .port(port)
-            .tls(Tls::Opportunistic(tls_parameters));
+            .tls(Tls::Opportunistic(tls_parameters))
+            .timeout(Some(timeout));
         if let Some((username, password)) = credentials {
             builder = builder.credentials(Credentials::new(username, password));
         }
