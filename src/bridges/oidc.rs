@@ -89,6 +89,8 @@ pub async fn auth(
     link: &Link,
     prompt: &str,
 ) -> HandlerResult {
+    let is_counted = !ctx.app.uncounted_emails.contains(email_addr);
+
     // Generate a nonce for the provider.
     let provider_nonce = crypto::nonce(&ctx.app.rng).await;
 
@@ -98,7 +100,9 @@ pub async fn auth(
     })?;
     let mut bridge_data = match link.rel {
         Relation::Portier => {
-            metrics::AUTH_OIDC_REQUESTS_PORTIER.inc();
+            if is_counted {
+                metrics::AUTH_OIDC_REQUESTS_PORTIER.inc();
+            }
             #[cfg(not(feature = "insecure"))]
             {
                 if link.href.scheme() != "https" {
@@ -118,7 +122,9 @@ pub async fn auth(
         }
         // Delegate to the OpenID Connect bridge for Google, if configured.
         Relation::Google => {
-            metrics::AUTH_OIDC_REQUESTS_GOOGLE.inc();
+            if is_counted {
+                metrics::AUTH_OIDC_REQUESTS_GOOGLE.inc();
+            }
             let client_id = ctx
                 .app
                 .google_client_id
@@ -149,7 +155,7 @@ pub async fn auth(
             ..
         },
         key_set,
-    ) = fetch_config(ctx, &bridge_data).await?;
+    ) = fetch_config(ctx, &bridge_data, is_counted).await?;
 
     {
         // Create the URL to redirect to.
@@ -234,6 +240,11 @@ pub async fn callback(ctx: &mut Context) -> HandlerResult {
         return Err(BrokerError::ProviderInput("invalid session".to_owned()));
     };
 
+    let is_counted = {
+        let data = ctx.session_data.as_ref().expect("session vanished");
+        !ctx.app.uncounted_emails.contains(&data.email_addr)
+    };
+
     // Handle errors.
     match params.get("error").map(String::as_str).unwrap_or_default() {
         "" => {}
@@ -254,7 +265,7 @@ pub async fn callback(ctx: &mut Context) -> HandlerResult {
     let id_token = try_get_provider_param!(params, "id_token");
 
     // Retrieve the provider's configuration.
-    let (_, key_set) = fetch_config(ctx, &bridge_data).await?;
+    let (_, key_set) = fetch_config(ctx, &bridge_data, is_counted).await?;
 
     // Verify the signature.
     let jwt_payload = crypto::verify_jws(&id_token, &key_set.keys, bridge_data.signing_alg)
@@ -313,7 +324,9 @@ pub async fn callback(ctx: &mut Context) -> HandlerResult {
     }
 
     // Everything is okay. Build a new identity token and send it to the relying party.
-    metrics::AUTH_OIDC_COMPLETED.inc();
+    if is_counted {
+        metrics::AUTH_OIDC_COMPLETED.inc();
+    }
     complete_auth(ctx).await
 }
 
@@ -321,6 +334,7 @@ pub async fn callback(ctx: &mut Context) -> HandlerResult {
 async fn fetch_config(
     ctx: &mut Context,
     bridge_data: &OidcBridgeData,
+    is_counted: bool,
 ) -> Result<(ProviderConfig, ProviderKeys), BrokerError> {
     let config_url = format!("{}/.well-known/openid-configuration", bridge_data.origin)
         .parse()
@@ -331,7 +345,7 @@ async fn fetch_config(
         .store
         .send(FetchUrlCached {
             url: config_url,
-            metric: &metrics::AUTH_OIDC_FETCH_CONFIG_DURATION,
+            metric: is_counted.then_some(&metrics::AUTH_OIDC_FETCH_CONFIG_DURATION),
         })
         .await
         .map_err(|e| {
@@ -369,7 +383,7 @@ async fn fetch_config(
         .store
         .send(FetchUrlCached {
             url: provider_config.jwks_uri.clone(),
-            metric: &metrics::AUTH_OIDC_FETCH_JWKS_DURATION,
+            metric: is_counted.then_some(&metrics::AUTH_OIDC_FETCH_JWKS_DURATION),
         })
         .await
         .map_err(|e| {

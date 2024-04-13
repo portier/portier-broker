@@ -11,7 +11,7 @@ use url::Url;
 
 use std::{
     borrow::ToOwned,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     env::var as env_var,
     io::Error as IoError,
     path::{Path, PathBuf},
@@ -85,6 +85,7 @@ pub struct Config {
 
     pub google_client_id: Option<String>,
     pub domain_overrides: HashMap<String, Vec<Link>>,
+    pub uncounted_emails: HashSet<EmailAddress>,
 
     pub static_resolver: Resolver,
     pub templates: Templates,
@@ -421,6 +422,7 @@ pub struct ConfigBuilder {
 
     pub google_client_id: Option<String>,
     pub domain_overrides: HashMap<String, Vec<Link>>,
+    pub uncounted_emails: HashSet<EmailAddress>,
 }
 
 impl ConfigBuilder {
@@ -494,6 +496,7 @@ impl ConfigBuilder {
 
             google_client_id: None,
             domain_overrides: HashMap::new(),
+            uncounted_emails: HashSet::new(),
         }
     }
 
@@ -661,6 +664,7 @@ impl ConfigBuilder {
 
             google_client_id: self.google_client_id,
             domain_overrides,
+            uncounted_emails: self.uncounted_emails,
 
             static_resolver: Resolver::new(res_dir),
             templates,

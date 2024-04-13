@@ -269,7 +269,9 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
     }
 
     // At this point, we've done all the local input verification.
-    metrics::AUTH_REQUESTS.inc();
+    if !ctx.app.uncounted_emails.contains(&email_addr) {
+        metrics::AUTH_REQUESTS.inc();
+    }
 
     // Verify the email domain.
     if let Err(err) = ctx.app.domain_validator.validate(email_addr.domain()).await {

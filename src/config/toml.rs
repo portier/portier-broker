@@ -1,6 +1,7 @@
 use super::{ConfigBuilder, LegacyLimitPerEmail, LimitConfig};
 use crate::config::StringList;
 use crate::crypto::SigningAlgorithm;
+use crate::email_address::EmailAddress;
 use crate::webfinger::Link;
 use ipnetwork::IpNetwork;
 use serde::Deserialize;
@@ -68,6 +69,8 @@ pub struct TomlConfig {
 
     google_client_id: Option<String>,
     domain_overrides: Option<HashMap<String, Vec<Link>>>,
+    #[serde(default)]
+    uncounted_emails: Vec<EmailAddress>,
 
     // Deprecated.
     server: Option<TomlServerTable>,
@@ -400,6 +403,9 @@ impl TomlConfig {
             for (domain, links) in val {
                 builder.domain_overrides.insert(domain, links);
             }
+        }
+        for email in parsed.uncounted_emails {
+            builder.uncounted_emails.insert(email);
         }
     }
 }

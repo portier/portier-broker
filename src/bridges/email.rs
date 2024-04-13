@@ -27,7 +27,9 @@ pub struct EmailBridgeData {
 /// A form is rendered as an alternative way to confirm, without following the link. Submitting the
 /// form results in the same callback as the email link.
 pub async fn auth(ctx: &mut Context, email_addr: EmailAddress) -> HandlerResult {
-    metrics::AUTH_EMAIL_REQUESTS.inc();
+    if !ctx.app.uncounted_emails.contains(&email_addr) {
+        metrics::AUTH_EMAIL_REQUESTS.inc();
+    }
 
     // Generate a 12-character one-time pad.
     let code = random_zbase32(12, &ctx.app.rng).await;
@@ -144,6 +146,10 @@ pub async fn confirmation(ctx: &mut Context) -> HandlerResult {
         return Err(BrokerError::ProviderInput("incorrect code".to_owned()));
     }
 
-    metrics::AUTH_EMAIL_COMPLETED.inc();
+    let data = &ctx.session_data.as_ref().expect("session vanished");
+    if !ctx.app.uncounted_emails.contains(&data.email_addr) {
+        metrics::AUTH_EMAIL_COMPLETED.inc();
+    }
+
     complete_auth(ctx).await
 }

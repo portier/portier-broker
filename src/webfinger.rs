@@ -119,11 +119,12 @@ pub async fn query(app: &ConfigRc, email_addr: &EmailAddress) -> Result<Vec<Link
     .map_err(|e| BrokerError::Internal(format!("could not build webfinger query url: {e}")))?;
 
     // Make the request.
+    let is_counted = !app.uncounted_emails.contains(email_addr);
     let descriptor = app
         .store
         .send(FetchUrlCached {
             url,
-            metric: &metrics::AUTH_WEBFINGER_DURATION,
+            metric: is_counted.then_some(&metrics::AUTH_WEBFINGER_DURATION),
         })
         .await
         .map_err(|e| BrokerError::Provider(format!("webfinger request failed: {e}")))?;

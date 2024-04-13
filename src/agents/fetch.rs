@@ -30,14 +30,14 @@ pub struct FetchUrl {
     /// The request to make.
     pub request: Request,
     /// Latency metric to use.
-    pub metric: &'static Histogram,
+    pub metric: Option<&'static Histogram>,
 }
 impl Message for FetchUrl {
     type Reply = Result<FetchUrlResult, FetchError>;
 }
 impl FetchUrl {
     /// Create a simple GET request message.
-    pub fn get(url: Url, metric: &'static Histogram) -> Self {
+    pub fn get(url: Url, metric: Option<&'static Histogram>) -> Self {
         let request = Request::new(Method::GET, url);
         FetchUrl { request, metric }
     }
@@ -63,7 +63,7 @@ impl Agent for FetchAgent {}
 
 impl Handler<FetchUrl> for FetchAgent {
     fn handle(&mut self, message: FetchUrl, cx: Context<Self, FetchUrl>) {
-        let timer = message.metric.start_timer();
+        let timer = message.metric.map(Histogram::start_timer);
         let future = self.client.execute(message.request);
         cx.reply_later(async {
             let res = future.await?;
@@ -82,7 +82,9 @@ impl Handler<FetchUrl> for FetchAgent {
                 return Err(FetchError::BadStatus { status, data });
             }
 
-            timer.observe_duration();
+            if let Some(timer) = timer {
+                timer.observe_duration();
+            }
 
             Ok(FetchUrlResult { data, max_age })
         });
