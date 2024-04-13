@@ -341,12 +341,11 @@ impl Handler<FetchUrlCached> for RusqliteStore {
         let fetcher = self.fetcher.clone();
         let expire_cache = self.expire_cache;
         cx.reply_later(async move {
-            let result = fetcher
-                .send(FetchUrl::get(message.url.clone(), message.metric))
-                .await?;
+            let url = message.url.clone();
+            let result = fetcher.send(FetchUrl::from(message)).await?;
             let ttl = std::cmp::max(expire_cache, result.max_age);
             me.send(SaveCache {
-                url: message.url,
+                url,
                 data: result.data.clone(),
                 expires: (unix_timestamp() + ttl.as_secs()) as i64,
             })

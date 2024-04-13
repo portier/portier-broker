@@ -243,9 +243,7 @@ impl Handler<FetchUrlCached> for RedisStore {
                 Ok(data)
             } else {
                 let key = message.url.as_str().to_owned();
-                let result = fetcher
-                    .send(FetchUrl::get(message.url, message.metric))
-                    .await?;
+                let result = fetcher.send(FetchUrl::from(message)).await?;
                 let ttl = std::cmp::max(expire_cache, result.max_age);
                 conn.set_ex(key, result.data.clone(), ttl.as_secs()).await?;
                 Ok(result.data)

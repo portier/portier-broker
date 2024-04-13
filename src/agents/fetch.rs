@@ -1,3 +1,4 @@
+use crate::agents::store::FetchUrlCached;
 use crate::metrics::Histogram;
 use crate::utils::agent::{Agent, Context, Handler, Message};
 use headers::{CacheControl, HeaderMapExt};
@@ -40,6 +41,13 @@ impl FetchUrl {
     pub fn get(url: Url, metric: Option<&'static Histogram>) -> Self {
         let request = Request::new(Method::GET, url);
         FetchUrl { request, metric }
+    }
+}
+impl From<FetchUrlCached> for FetchUrl {
+    fn from(value: FetchUrlCached) -> Self {
+        let mut message = FetchUrl::get(value.url, value.metric);
+        *message.request.timeout_mut() = Some(value.timeout);
+        message
     }
 }
 

@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::email_address::EmailAddress;
 use crate::utils::agent::*;
 use crate::{agents::*, metrics};
@@ -14,6 +16,7 @@ pub struct SendgridMailer {
     auth: HeaderValue,
     api: Url,
     from: serde_json::Value,
+    timeout: Duration,
 }
 
 impl SendgridMailer {
@@ -23,6 +26,7 @@ impl SendgridMailer {
         api: Url,
         from_address: &EmailAddress,
         from_name: &str,
+        timeout: Duration,
     ) -> Self {
         SendgridMailer {
             fetcher,
@@ -30,6 +34,7 @@ impl SendgridMailer {
                 .expect("Invalid Sendgrid token"),
             api,
             from: json!({ "name": from_name, "email": from_address }),
+            timeout,
         }
     }
 }
@@ -63,6 +68,7 @@ impl Handler<SendMail> for SendgridMailer {
             .headers_mut()
             .append("Authorization", self.auth.clone());
         *request.body_mut() = Some(body.into());
+        *request.timeout_mut() = Some(self.timeout);
 
         let future = self.fetcher.send(FetchUrl {
             request,
