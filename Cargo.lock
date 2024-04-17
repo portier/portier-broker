@@ -261,6 +261,7 @@ dependencies = [
  "aws-lc-sys",
  "mirai-annotations",
  "paste",
+ "untrusted 0.7.1",
  "zeroize",
 ]
 
@@ -1861,6 +1862,7 @@ name = "portier_broker"
 version = "0.9.1"
 dependencies = [
  "accept-language",
+ "aws-lc-rs",
  "base64 0.22.0",
  "bytes",
  "combine",
@@ -1891,7 +1893,6 @@ dependencies = [
  "rand_core",
  "redis",
  "reqwest",
- "ring",
  "rsa",
  "rusqlite",
  "rustls 0.23.4",
@@ -2098,7 +2099,7 @@ dependencies = [
  "getrandom",
  "libc",
  "spin 0.9.8",
- "untrusted",
+ "untrusted 0.9.0",
  "windows-sys 0.52.0",
 ]
 
@@ -2243,7 +2244,7 @@ dependencies = [
  "aws-lc-rs",
  "ring",
  "rustls-pki-types",
- "untrusted",
+ "untrusted 0.9.0",
 ]
 
 [[package]]
@@ -2767,6 +2768,12 @@ checksum = "a56d1686db2308d901306f92a263857ef59ea39678a5458e7cb17f01415101f5"
 dependencies = [
  "tinyvec",
 ]
+
+[[package]]
+name = "untrusted"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a156c684c91ea7d62626509bce3cb4e1d9ed5c4d978f7b4352658f96a4c26b4a"
 
 [[package]]
 name = "untrusted"
