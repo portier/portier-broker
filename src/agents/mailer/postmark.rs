@@ -65,7 +65,7 @@ impl Handler<SendMail> for PostmarkMailer {
 
         let future = self.fetcher.send(FetchUrl {
             request,
-            metric: &metrics::AUTH_EMAIL_SEND_DURATION,
+            metric: Some(&metrics::AUTH_EMAIL_SEND_DURATION),
         });
         cx.reply_later(async move {
             let data = match future.await {

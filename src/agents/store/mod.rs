@@ -62,7 +62,7 @@ pub struct FetchUrlCached {
     /// The URL to fetch.
     pub url: Url,
     /// Latency metric to use on cache miss.
-    pub metric: &'static Histogram,
+    pub metric: Option<&'static Histogram>,
 }
 impl Message for FetchUrlCached {
     type Reply = Result<String, BoxError>;

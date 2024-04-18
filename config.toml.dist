@@ -317,6 +317,17 @@ limits = [
 ]
 
 ################################################################
+# Metrics
+
+# The broker exposes a Prometheus-compatible `GET /metrics` endpoint:
+# https://prometheus.io/docs/instrumenting/exposition_formats/#text-based-format
+
+# Email addresses that are not counted towards metrics.
+# This is useful for ignoring automated tests from monitoring systems.
+# Note that only success metrics are skipped. Errors are always counted.
+#uncounted_emails = ["autotest@example.com"]
+
+################################################################
 # WebFinger overrides
 
 # The broker uses WebFinger to discover domains that provide custom

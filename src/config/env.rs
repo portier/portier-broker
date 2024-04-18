@@ -1,6 +1,7 @@
 use super::{ConfigBuilder, LegacyLimitPerEmail, LimitConfig};
 use crate::config::StringList;
 use crate::crypto::SigningAlgorithm;
+use crate::email_address::EmailAddress;
 use ipnetwork::IpNetwork;
 use serde::Deserialize;
 use std::borrow::ToOwned;
@@ -70,6 +71,8 @@ pub struct EnvConfig {
     limit_per_email: Option<LegacyLimitPerEmail>,
 
     google_client_id: Option<String>,
+    #[serde(default)]
+    uncounted_emails: Vec<EmailAddress>,
 
     // Deprecated
     ip: Option<String>,
@@ -265,6 +268,9 @@ impl EnvConfig {
 
         if let Some(val) = parsed.google_client_id {
             builder.google_client_id = Some(val);
+        }
+        for email in parsed.uncounted_emails {
+            builder.uncounted_emails.insert(email);
         }
     }
 }
