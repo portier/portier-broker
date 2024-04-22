@@ -20,5 +20,10 @@ pub use real_ip::*;
 pub use rng::*;
 pub use time::*;
 
+#[cfg(unix)]
+mod sd_notify;
+#[cfg(unix)]
+pub use sd_notify::*;
+
 pub type BoxError = Box<dyn Error + Send + Sync>;
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;

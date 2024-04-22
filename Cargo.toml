@@ -143,9 +143,6 @@ features = ["tokio-runtime"]
 version = "2.1.1"
 features = ["serde"]
 
-[target.'cfg(unix)'.dependencies]
-sd-notify = "0.4.0"
-
 # Per `rsa` crate docs, significantly speeds up key generation for debug builds.
 [profile.dev.package.num-bigint-dig]
 opt-level = 3

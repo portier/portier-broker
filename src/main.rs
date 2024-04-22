@@ -219,8 +219,9 @@ async fn start_server(builder: ConfigBuilder) {
     let mut connections = JoinSet::new();
 
     #[cfg(unix)]
-    sd_notify::notify(true, &[sd_notify::NotifyState::Ready])
-        .expect("Failed to signal ready to the service manager");
+    let sd_notify = utils::SdNotify::new();
+    #[cfg(unix)]
+    sd_notify.notify_ready();
 
     // Snippet for the connection loop with graceful shutdown.
     // This is shared between TCP and Unix socket code.
@@ -281,9 +282,8 @@ async fn start_server(builder: ConfigBuilder) {
     }
 
     #[cfg(unix)]
-    if let Err(err) = sd_notify::notify(true, &[sd_notify::NotifyState::Stopping]) {
-        log::error!("Failed to signal stopping to the service manager: {}", err);
-    }
+    sd_notify.notify_stopping();
+
     while connections.join_next().await.is_some() {}
     log::info!("Shutdown complete");
 }
