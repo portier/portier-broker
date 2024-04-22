@@ -67,12 +67,12 @@ default-features = false
 
 [dependencies.hyper]
 version = "1.0.0"
-features = ["full"]
+default-features = false
+features = ["http1", "server"]
 
 [dependencies.hyper-rustls]
 optional = true
 version = "0.27.0"
-features = ["http2"]
 
 [dependencies.hyper-tls]
 optional = true
@@ -105,7 +105,7 @@ features = ["script", "tokio-comp"]
 [dependencies.reqwest]
 version = "0.12.3"
 default-features = false
-features = ["http2", "macos-system-configuration"]
+features = ["macos-system-configuration"]
 
 # Alias ring -> aws-lc-rs.
 # Both are nearly API compatible, and Rustls also switched backends.
