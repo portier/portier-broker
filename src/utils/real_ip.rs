@@ -2,9 +2,7 @@ use http::{header::HeaderName, Request};
 use ipnetwork::IpNetwork;
 use std::net::{IpAddr, SocketAddr};
 
-lazy_static::lazy_static! {
-    static ref X_FORWARDED_FOR: HeaderName = HeaderName::from_static("x-forwarded-for");
-}
+static X_FORWARDED_FOR: HeaderName = HeaderName::from_static("x-forwarded-for");
 
 /// Get the real IP-address of the client.
 ///
@@ -20,7 +18,7 @@ pub fn real_ip<B>(
 ) -> IpAddr {
     let list: Vec<_> = req
         .headers()
-        .get(&*X_FORWARDED_FOR)
+        .get(&X_FORWARDED_FOR)
         .and_then(|input| input.to_str().ok())
         .and_then(|input| {
             input
@@ -134,7 +132,7 @@ mod tests {
         let mut req = http::Request::new(());
         if !header.is_empty() {
             req.headers_mut()
-                .insert(&*X_FORWARDED_FOR, HeaderValue::from_static(header));
+                .insert(&X_FORWARDED_FOR, HeaderValue::from_static(header));
         }
 
         let ip = real_ip(received_from, &req, &trusted);
