@@ -98,11 +98,10 @@ pub async fn auth(
     let provider_origin = validation::parse_oidc_href(&link.href).ok_or_else(|| {
         BrokerError::Provider(format!("invalid href (validation failed): {}", link.href))
     })?;
-    let mut bridge_data = match link.rel {
+    let metric;
+    let mut bridge_data;
+    match link.rel {
         Relation::Portier => {
-            if is_counted {
-                metrics::AUTH_OIDC_REQUESTS_PORTIER.inc();
-            }
             #[cfg(not(feature = "insecure"))]
             {
                 if link.href.scheme() != "https" {
@@ -112,19 +111,17 @@ pub async fn auth(
                     )));
                 }
             }
-            OidcBridgeData {
+            metric = &metrics::AUTH_OIDC_REQUESTS_PORTIER;
+            bridge_data = OidcBridgeData {
                 link: link.clone(),
                 origin: provider_origin,
                 client_id: ctx.app.public_url.clone(),
                 nonce: provider_nonce,
                 signing_alg: SigningAlgorithm::Rs256,
-            }
+            };
         }
         // Delegate to the OpenID Connect bridge for Google, if configured.
         Relation::Google => {
-            if is_counted {
-                metrics::AUTH_OIDC_REQUESTS_GOOGLE.inc();
-            }
             let client_id = ctx
                 .app
                 .google_client_id
@@ -135,15 +132,16 @@ pub async fn auth(
                     "invalid href: Google provider only supports {GOOGLE_IDP_ORIGIN}"
                 )));
             }
-            OidcBridgeData {
+            metric = &metrics::AUTH_OIDC_REQUESTS_GOOGLE;
+            bridge_data = OidcBridgeData {
                 link: link.clone(),
                 origin: provider_origin,
                 client_id: client_id.clone(),
                 nonce: provider_nonce,
                 signing_alg: SigningAlgorithm::Rs256,
-            }
+            };
         }
-    };
+    }
 
     // Retrieve the provider's configuration.
     let (
@@ -214,6 +212,11 @@ pub async fn auth(
     // If this fails, another auth mechanism has already claimed the session.
     if !ctx.save_session(BridgeData::Oidc(bridge_data)).await? {
         return Err(BrokerError::ProviderCancelled);
+    }
+
+    // Increment the counter only after the session was claimed.
+    if is_counted {
+        metric.inc();
     }
 
     if ctx.want_json {
