@@ -3,7 +3,7 @@ use std::hash::{Hash, Hasher};
 use thiserror::Error;
 
 fn is_invalid_domain_char(c: char) -> bool {
-    matches::matches!(
+    matches!(
         c,
         '\0' | '\t' | '\n' | '\r' | ' ' | '#' | '%' | '/' | ':' | '?' | '@' | '[' | '\\' | ']'
     )
