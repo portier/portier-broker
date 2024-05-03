@@ -27,10 +27,6 @@ pub struct EmailBridgeData {
 /// A form is rendered as an alternative way to confirm, without following the link. Submitting the
 /// form results in the same callback as the email link.
 pub async fn auth(ctx: &mut Context, email_addr: EmailAddress) -> HandlerResult {
-    if !ctx.app.uncounted_emails.contains(&email_addr) {
-        metrics::AUTH_EMAIL_REQUESTS.inc();
-    }
-
     // Generate a 12-character one-time pad.
     let code = random_zbase32(12, &ctx.app.rng).await;
     // For display, we split it in two groups of 6.
@@ -79,6 +75,11 @@ pub async fn auth(ctx: &mut Context, email_addr: EmailAddress) -> HandlerResult 
         return Err(BrokerError::Internal(
             "email fallback failed to claim session".to_owned(),
         ));
+    }
+
+    // Increment the counter only after the session was claimed.
+    if !ctx.app.uncounted_emails.contains(&email_addr) {
+        metrics::AUTH_EMAIL_REQUESTS.inc();
     }
 
     // Send the mail.
