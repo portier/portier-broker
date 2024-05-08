@@ -1,7 +1,6 @@
 use crate::agents::mailer::SendMail;
-use crate::bridges::{complete_auth, BridgeData};
+use crate::bridges::{complete_auth, AuthContext, BridgeData};
 use crate::crypto::random_zbase32;
-use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
 use crate::metrics;
 use crate::web::{html_response, json_response, Context, HandlerResult};
@@ -26,7 +25,7 @@ pub struct EmailBridgeData {
 ///
 /// A form is rendered as an alternative way to confirm, without following the link. Submitting the
 /// form results in the same callback as the email link.
-pub async fn auth(ctx: &mut Context, email_addr: EmailAddress) -> HandlerResult {
+pub async fn auth(mut ctx: AuthContext) -> HandlerResult {
     // Generate a 12-character one-time pad.
     let code = random_zbase32(12, &ctx.app.rng).await;
     // For display, we split it in two groups of 6.
@@ -78,7 +77,7 @@ pub async fn auth(ctx: &mut Context, email_addr: EmailAddress) -> HandlerResult 
     }
 
     // Increment the counter only after the session was claimed.
-    if !ctx.app.uncounted_emails.contains(&email_addr) {
+    if !ctx.app.uncounted_emails.contains(&ctx.email_addr) {
         metrics::AUTH_EMAIL_REQUESTS.inc();
     }
 
@@ -87,7 +86,7 @@ pub async fn auth(ctx: &mut Context, email_addr: EmailAddress) -> HandlerResult 
         .app
         .mailer
         .send(SendMail {
-            to: email_addr,
+            to: ctx.email_addr.clone(),
             subject,
             html_body,
             text_body,
@@ -138,7 +137,7 @@ pub async fn confirmation(ctx: &mut Context) -> HandlerResult {
         .replace(char::is_whitespace, "")
         .to_lowercase();
 
-    let BridgeData::Email(bridge_data) = ctx.load_session(&session_id).await? else {
+    let (data, BridgeData::Email(bridge_data)) = ctx.load_session(&session_id).await? else {
         return Err(BrokerError::ProviderInput("invalid session".to_owned()));
     };
 
@@ -147,10 +146,9 @@ pub async fn confirmation(ctx: &mut Context) -> HandlerResult {
         return Err(BrokerError::ProviderInput("incorrect code".to_owned()));
     }
 
-    let data = &ctx.session_data.as_ref().expect("session vanished");
     if !ctx.app.uncounted_emails.contains(&data.email_addr) {
         metrics::AUTH_EMAIL_COMPLETED.inc();
     }
 
-    complete_auth(ctx).await
+    complete_auth(ctx, data).await
 }

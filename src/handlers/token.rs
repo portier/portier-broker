@@ -10,7 +10,7 @@ use crate::{
 pub async fn token(ctx: &mut Context) -> HandlerResult {
     // Per OAuth2, an Accept header is not necessary, but this is a server-to-server request that
     // should always return a JSON response.
-    ctx.want_json = true;
+    ctx.get_mut_req().want_json = true;
 
     let mut params = ctx.form_params();
 

@@ -1,8 +1,10 @@
 use crate::agents::{GetPublicJwks, IncrAndTestLimits};
+use crate::bridges::{self, AuthContext};
 use crate::config::LimitInput;
 use crate::crypto::SigningAlgorithm;
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
+use crate::metrics;
 use crate::utils::http::ResponseExt;
 use crate::utils::DomainValidationError;
 use crate::validation::parse_redirect_uri;
@@ -10,7 +12,6 @@ use crate::web::{
     html_response, json_response, Context, HandlerResult, ResponseMode, ResponseType, ReturnParams,
 };
 use crate::webfinger::{self, Relation};
-use crate::{bridges, metrics};
 use headers::{CacheControl, Expires};
 use http::Method;
 use log::info;
@@ -131,7 +132,7 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
     // Per the OAuth2 spec, we may redirect to the RP once we have validated client_id and
     // redirect_uri. In our case, this means we make redirect_uri available to error handling.
     let redirect_uri_ = redirect_uri.clone();
-    ctx.return_params = Some(ReturnParams {
+    ctx.get_mut_req().return_params = Some(ReturnParams {
         redirect_uri,
         response_mode,
         response_errors,
@@ -298,54 +299,43 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
     .await;
 
     // Discover the authentication endpoints based on the email domain.
-    let discovery_timeout = ctx.app.discovery_timeout;
-    let discovery_future = async {
-        let links = webfinger::query(&ctx.app, &email_addr).await?;
+    let discovery_future = tokio::time::timeout(ctx.app.discovery_timeout, {
+        let auth_ctx = AuthContext::new(ctx, email_addr.clone());
+        let prompt = prompt.clone();
+        // This future is spawned so that it can continue in the background,
+        // even if we hit the discovery timeout.
+        tokio::spawn(async {
+            let res = async move {
+                let links = webfinger::query(&auth_ctx.app, &auth_ctx.email_addr).await?;
 
-        // Try to authenticate with the first provider.
-        // TODO: Queue discovery of links and process in order, with individual timeouts.
-        let link = links.first().ok_or(BrokerError::ProviderCancelled)?;
-        match link.rel {
-            // Portier and Google providers share an implementation
-            Relation::Portier | Relation::Google => {
-                bridges::oidc::auth(ctx, &email_addr, link, &prompt).await
-            }
-        }
-    };
-
-    // Apply a timeout to discovery.
-    match tokio::time::timeout(discovery_timeout, discovery_future).await {
-        Err(_) => {
-            // Timeout causes fall back to email loop auth.
-            info!("discovery timed out for {}", email_addr);
-
-            // TODO: We used to (before async) continue discovery in the background, using shared
-            // access to Context through RefCell. We could bring that back by decoupling auth
-            // mechanisms from Context.
-            //
-            // (The original idea was also for auth mechanisms to have a 'commit' action, to
-            // indicate a side-effect is about the happen. From this side, it'd effectively abort
-            // the timeout and bubble all errors. An intermediate AuthContext could provide this.)
-            /*
-            tokio::spawn(async {
-                if let Err(e) = f.await {
-                    e.log();
+                // Try to authenticate with the first provider.
+                // TODO: Queue discovery of links and process in order, with individual timeouts.
+                let link = links.first().ok_or(BrokerError::ProviderCancelled)?;
+                match link.rel {
+                    // Portier and Google providers share an implementation
+                    Relation::Portier | Relation::Google => {
+                        bridges::oidc::auth(auth_ctx, link, &prompt).await
+                    }
                 }
-            });
-            */
-        }
-        Ok(Ok(v)) => {
+            }
+            .await;
+            // Ensure we always log errors, even if in the backgroud.
+            if let Err(ref e) = res {
+                e.log(None).await;
+            }
+            res
+        })
+    });
+    if let Ok(res) = discovery_future.await {
+        if let Ok(v) = res.unwrap() {
             // Discovery succeeded, simply return the response.
             return Ok(v);
         }
-        Ok(Err(e @ (BrokerError::Provider(_) | BrokerError::ProviderCancelled))) => {
-            // Provider errors cause fallback to email loop auth.
-            e.log(None).await;
-        }
-        Ok(Err(e)) => {
-            // Other errors during discovery are bubbled.
-            return Err(e);
-        }
+        // Errors cause fallback to the email bridge.
+        // The error itself is already logged above, inside the spawned task.
+    } else {
+        // Timeout causes fallback to the email bridge.
+        info!("discovery timed out for {}", email_addr);
     }
 
     // Fall back to email loop auth.
@@ -355,5 +345,5 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
             error_description: "prompt disabled, but email verification is required".to_owned(),
         });
     }
-    bridges::email::auth(ctx, email_addr).await
+    bridges::email::auth(AuthContext::new(ctx, email_addr)).await
 }

@@ -1,4 +1,4 @@
-use crate::agents::{GetSession, SaveSession};
+use crate::agents::GetSession;
 use crate::bridges::BridgeData;
 use crate::config::ConfigRc;
 use crate::crypto::{self, SigningAlgorithm};
@@ -17,12 +17,13 @@ use hyper_staticfile::Body as StaticBody;
 use log::info;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::ops::Deref;
 use std::{
     collections::HashMap,
     io::Error as IoError,
     net::{IpAddr, SocketAddr},
     pin::Pin,
-    sync::Arc,
+    sync::{Arc, Mutex},
     task::{Context as TaskContext, Poll},
     time::Duration,
 };
@@ -93,9 +94,15 @@ pub struct SessionData {
 
 /// Context for a request
 pub struct Context {
-    /// The application configuration
+    /// Request data, also accessible via `Deref`
+    pub req: Arc<RequestData>,
+}
+
+/// Request data
+pub struct RequestData {
+    /// The application configuration.
     pub app: ConfigRc,
-    /// The IP address the request came from.
+    /// The IP address the request came from
     pub ip: IpAddr,
     /// Request method
     pub method: Method,
@@ -107,8 +114,8 @@ pub struct Context {
     pub body: Bytes,
     /// Session ID
     pub session_id: String,
-    /// Session data (must be explicitely loaded)
-    pub session_data: Option<SessionData>,
+    /// Session data
+    pub session_data: Mutex<Option<SessionData>>,
     /// Index into the config catalogs of the language to use
     pub catalog_idx: usize,
     /// Parameters used to return to the relying party
@@ -117,7 +124,14 @@ pub struct Context {
     pub want_json: bool,
 }
 
-impl Context {
+impl Deref for Context {
+    type Target = RequestData;
+    fn deref(&self) -> &Self::Target {
+        &self.req
+    }
+}
+
+impl RequestData {
     /// Get a reference to the language catalog to use
     pub fn catalog(&self) -> &Catalog {
         &self.app.i18n.catalogs[self.catalog_idx].1
@@ -134,6 +148,16 @@ impl Context {
     pub fn form_params(&self) -> HashMap<String, String> {
         parse_form_encoded(&self.body)
     }
+}
+
+impl Context {
+    /// Get mutable access to `RequestData`
+    ///
+    /// Can only be called with exclusive access to `Context`, e.g. before parallel processing of
+    /// bridges, or in handlers other than `auth`.
+    pub fn get_mut_req(&mut self) -> &mut RequestData {
+        Arc::get_mut(&mut self.req).expect("invalid call to Context::get_mut_req")
+    }
 
     /// Start a session by filling out the common part.
     pub async fn start_session(
@@ -146,14 +170,21 @@ impl Context {
         signing_alg: SigningAlgorithm,
         ip: IpAddr,
     ) {
-        assert!(self.session_id.is_empty());
-        assert!(self.session_data.is_none());
-        let return_params = self
+        let session_id = crypto::session_id(email_addr, client_id, &self.app.rng).await;
+
+        let req = self.get_mut_req();
+        assert!(req.session_id.is_empty());
+
+        let return_params = req
             .return_params
             .as_ref()
             .expect("start_session called without return parameters");
-        self.session_id = crypto::session_id(email_addr, client_id, &self.app.rng).await;
-        self.session_data = Some(SessionData {
+
+        let mut session_data = req.session_data.lock().expect("session mutex poisoned");
+        assert!(session_data.is_none());
+
+        req.session_id = session_id;
+        *session_data = Some(SessionData {
             original_ip: ip,
             return_params: return_params.clone(),
             email: email.to_owned(),
@@ -164,30 +195,8 @@ impl Context {
         });
     }
 
-    /// Try to save the session with the given bridge data.
-    ///
-    /// Will return `false` if the session was not started, which will also happen if another
-    /// provider has already claimed the session.
-    pub async fn save_session(&mut self, bridge_data: BridgeData) -> BrokerResult<bool> {
-        let Some(data) = self.session_data.take() else {
-            return Ok(false);
-        };
-        self.app
-            .store
-            .send(SaveSession {
-                session_id: self.session_id.clone(),
-                data: Session { data, bridge_data },
-            })
-            .await
-            .map_err(|e| BrokerError::Internal(format!("could not save a session: {e}")))?;
-        Ok(true)
-    }
-
     /// Load a session from storage.
-    pub async fn load_session(&mut self, id: &str) -> BrokerResult<BridgeData> {
-        assert!(self.session_id.is_empty());
-        assert!(self.session_data.is_none());
-        assert!(self.return_params.is_none());
+    pub async fn load_session(&mut self, id: &str) -> BrokerResult<(SessionData, BridgeData)> {
         let Session { data, bridge_data } = self
             .app
             .store
@@ -197,10 +206,14 @@ impl Context {
             .await
             .map_err(|e| BrokerError::Internal(format!("could not load a session: {e}")))?
             .ok_or(BrokerError::SessionExpired)?;
-        self.return_params = Some(data.return_params.clone());
-        self.session_id = id.to_owned();
-        self.session_data = Some(data);
-        Ok(bridge_data)
+
+        let req = self.get_mut_req();
+        assert!(req.session_id.is_empty());
+        assert!(req.return_params.is_none());
+
+        req.session_id = id.to_owned();
+        req.return_params = Some(data.return_params.clone());
+        Ok((data, bridge_data))
     }
 }
 
@@ -286,17 +299,19 @@ impl Service {
             .get(hyper::header::ACCEPT)
             .map_or(false, |accept| accept == "application/json");
         let mut ctx = Context {
-            app,
-            ip,
-            method: parts.method,
-            uri: parts.uri,
-            headers: parts.headers,
-            body,
-            session_id: String::default(),
-            session_data: None,
-            catalog_idx,
-            return_params: None,
-            want_json,
+            req: Arc::new(RequestData {
+                app,
+                ip,
+                method: parts.method,
+                uri: parts.uri,
+                headers: parts.headers,
+                body,
+                session_id: String::default(),
+                session_data: Mutex::new(None),
+                catalog_idx,
+                return_params: None,
+                want_json,
+            }),
         };
 
         // Call the route handler.
