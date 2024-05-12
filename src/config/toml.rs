@@ -37,6 +37,12 @@ pub struct TomlConfig {
     auth_code_ttl: Option<u64>,
     cache_ttl: Option<u64>,
 
+    send_email_timeout: Option<u64>,
+    webfinger_timeout: Option<u64>,
+    oidc_config_timeout: Option<u64>,
+    oidc_jwks_timeout: Option<u64>,
+    discovery_timeout: Option<u64>,
+
     keyfiles: Option<Vec<PathBuf>>,
     keytext: Option<String>,
     signing_algs: Option<Vec<SigningAlgorithm>>,
@@ -321,6 +327,22 @@ impl TomlConfig {
         }
         if let Some(val) = parsed.cache_ttl {
             builder.cache_ttl = Duration::from_secs(val);
+        }
+
+        if let Some(val) = parsed.send_email_timeout {
+            builder.send_email_timeout = Duration::from_secs(val);
+        }
+        if let Some(val) = parsed.webfinger_timeout {
+            builder.webfinger_timeout = Duration::from_secs(val);
+        }
+        if let Some(val) = parsed.oidc_config_timeout {
+            builder.oidc_config_timeout = Duration::from_secs(val);
+        }
+        if let Some(val) = parsed.oidc_jwks_timeout {
+            builder.oidc_jwks_timeout = Duration::from_secs(val);
+        }
+        if let Some(val) = parsed.discovery_timeout {
+            builder.discovery_timeout = Duration::from_secs(val);
         }
 
         if let Some(mut val) = parsed.keyfiles {

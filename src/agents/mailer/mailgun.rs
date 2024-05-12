@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use base64::prelude::*;
 use http::HeaderValue;
 use reqwest::{Method, Request};
@@ -14,6 +16,7 @@ pub struct MailgunMailer {
     auth: HeaderValue,
     messages_api: Url,
     from: String,
+    timeout: Duration,
 }
 
 impl MailgunMailer {
@@ -24,6 +27,7 @@ impl MailgunMailer {
         domain: &str,
         from_address: &EmailAddress,
         from_name: &str,
+        timeout: Duration,
     ) -> Self {
         let messages_api = format!("{api}/{domain}/messages")
             .parse()
@@ -38,6 +42,7 @@ impl MailgunMailer {
             auth,
             messages_api,
             from: format!("{from_name} <{from_address}>"),
+            timeout,
         }
     }
 }
@@ -63,6 +68,7 @@ impl Handler<SendMail> for MailgunMailer {
             .headers_mut()
             .append("Authorization", self.auth.clone());
         *request.body_mut() = Some(body.into());
+        *request.timeout_mut() = Some(self.timeout);
 
         let future = self.fetcher.send(FetchUrl {
             request,

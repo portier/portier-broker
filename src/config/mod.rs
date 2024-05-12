@@ -77,6 +77,11 @@ pub struct Config {
     pub keys_ttl: Duration,
     pub token_ttl: Duration,
 
+    pub webfinger_timeout: Duration,
+    pub oidc_config_timeout: Duration,
+    pub oidc_jwks_timeout: Duration,
+    pub discovery_timeout: Duration,
+
     pub key_manager: Box<dyn KeyManagerSender>,
     pub signing_algs: Vec<SigningAlgorithm>,
 
@@ -197,6 +202,8 @@ struct MailerParams {
     from_address: EmailAddress,
     #[allow(unused)]
     from_name: String,
+    #[allow(unused)]
+    timeout: Duration,
 }
 
 /// Mailer configuration is first translated into this intermediate enum.
@@ -321,6 +328,7 @@ impl MailerConfig {
                     credentials,
                     params.from_address,
                     params.from_name,
+                    params.timeout,
                 );
                 Box::new(spawn_agent(mailer).await)
             }
@@ -338,6 +346,7 @@ impl MailerConfig {
                     api,
                     &params.from_address,
                     &params.from_name,
+                    params.timeout,
                 );
                 Box::new(spawn_agent(mailer).await)
             }
@@ -354,6 +363,7 @@ impl MailerConfig {
                     domain,
                     &params.from_address,
                     &params.from_name,
+                    params.timeout,
                 );
                 Box::new(spawn_agent(mailer).await)
             }
@@ -365,6 +375,7 @@ impl MailerConfig {
                     api,
                     &params.from_address,
                     &params.from_name,
+                    params.timeout,
                 );
                 Box::new(spawn_agent(mailer).await)
             }
@@ -388,6 +399,12 @@ pub struct ConfigBuilder {
     pub session_ttl: Duration,
     pub auth_code_ttl: Duration,
     pub cache_ttl: Duration,
+
+    pub send_email_timeout: Duration,
+    pub webfinger_timeout: Duration,
+    pub oidc_config_timeout: Duration,
+    pub oidc_jwks_timeout: Duration,
+    pub discovery_timeout: Duration,
 
     pub keyfiles: Vec<PathBuf>,
     pub keytext: Option<String>,
@@ -446,6 +463,12 @@ impl ConfigBuilder {
             session_ttl: Duration::from_secs(900),
             auth_code_ttl: Duration::from_secs(600),
             cache_ttl: Duration::from_secs(3600),
+
+            send_email_timeout: Duration::from_secs(5),
+            webfinger_timeout: Duration::from_secs(5),
+            oidc_config_timeout: Duration::from_secs(5),
+            oidc_jwks_timeout: Duration::from_secs(5),
+            discovery_timeout: Duration::from_secs(5),
 
             keyfiles: Vec::new(),
             keytext: None,
@@ -618,6 +641,7 @@ impl ConfigBuilder {
                     .parse()
                     .expect("Invalid mail 'From' address configured"),
                 from_name: self.from_name,
+                timeout: self.send_email_timeout,
             })
             .await;
 
@@ -655,6 +679,11 @@ impl ConfigBuilder {
             discovery_ttl: self.discovery_ttl,
             keys_ttl: self.keys_ttl,
             token_ttl: self.token_ttl,
+
+            webfinger_timeout: self.webfinger_timeout,
+            oidc_config_timeout: self.oidc_config_timeout,
+            oidc_jwks_timeout: self.oidc_jwks_timeout,
+            discovery_timeout: self.discovery_timeout,
 
             key_manager,
             signing_algs: self.signing_algs,

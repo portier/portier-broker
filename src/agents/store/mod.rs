@@ -6,6 +6,7 @@ use crate::utils::agent::{Addr, Message, Sender};
 use crate::utils::BoxError;
 use crate::web::{Session, SessionData};
 use std::collections::HashSet;
+use std::time::Duration;
 use url::Url;
 
 /// Message requesting a session be saved.
@@ -61,6 +62,8 @@ impl Message for ConsumeAuthCode {
 pub struct FetchUrlCached {
     /// The URL to fetch.
     pub url: Url,
+    /// Timeout for the HTTP request, on cache miss.
+    pub timeout: Duration,
     /// Latency metric to use on cache miss.
     pub metric: Option<&'static Histogram>,
 }
