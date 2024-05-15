@@ -4,7 +4,10 @@ use crate::email_address::EmailAddress;
 use crate::utils::agent::Message;
 
 #[cfg(feature = "lettre")]
-use ::lettre::message::{Mailbox, Message as LettreMessage, MultiPart};
+use ::lettre::message::{
+    header::{HeaderName, HeaderValue},
+    Mailbox, Message as LettreMessage, MultiPart,
+};
 
 /// Message requesting a mail be sent.
 ///
@@ -28,7 +31,7 @@ impl SendMail {
         from_address: &EmailAddress,
         from_name: &str,
     ) -> LettreMessage {
-        LettreMessage::builder()
+        let mut msg = LettreMessage::builder()
             .from(
                 (from_name, from_address.as_str())
                     .try_into()
@@ -46,7 +49,15 @@ impl SendMail {
                 self.text_body,
                 self.html_body,
             ))
-            .expect("Could not build mail")
+            .expect("Could not build mail");
+
+        // Add a List-Id header to prevent autoresponders.
+        msg.headers_mut().insert_raw(HeaderValue::new(
+            HeaderName::new_from_ascii_str("List-Id"),
+            format!("Authentication <auth.{}>", from_address.domain()),
+        ));
+
+        msg
     }
 }
 

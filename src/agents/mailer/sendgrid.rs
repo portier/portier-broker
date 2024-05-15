@@ -16,6 +16,7 @@ pub struct SendgridMailer {
     auth: HeaderValue,
     api: Url,
     from: serde_json::Value,
+    headers: serde_json::Value,
     timeout: Duration,
 }
 
@@ -34,6 +35,9 @@ impl SendgridMailer {
                 .expect("Invalid Sendgrid token"),
             api,
             from: json!({ "name": from_name, "email": from_address }),
+            headers: json!({
+                "List-Id": format!("Authentication <auth.{}>", from_address.domain()),
+            }),
             timeout,
         }
     }
@@ -57,6 +61,7 @@ impl Handler<SendMail> for SendgridMailer {
                     "value": message.html_body,
                 },
             ],
+            "headers": &self.headers,
         }))
         .expect("Could not build Sendgrid request JSON body");
 
