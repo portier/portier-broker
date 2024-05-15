@@ -223,6 +223,9 @@ impl EnvConfig {
         }
         if let Some(val) = parsed.generate_rsa_command {
             builder.generate_rsa_command = val.split_whitespace().map(ToOwned::to_owned).collect();
+            log::warn!(
+                "BROKER_GENERATE_RSA_COMMAND is deprecated and will be removed in a future release.",
+            );
         }
 
         if let Some(val) = parsed.redis_url {

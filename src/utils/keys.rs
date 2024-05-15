@@ -6,15 +6,14 @@ use crate::utils::{
 };
 use ring::{
     digest,
+    encoding::AsDer,
+    rsa,
     signature::{self, Ed25519KeyPair, KeyPair, RsaKeyPair},
 };
 use serde_json::{json, Value as JsonValue};
 use std::ffi::OsString;
 use std::process::{Command, Stdio};
 use thiserror::Error;
-
-#[cfg(feature = "rsa")]
-use rsa::pkcs8::EncodePrivateKey;
 
 #[derive(Debug, Error)]
 pub enum SignError {
@@ -211,14 +210,20 @@ pub struct GenerateRsaConfig {
 impl GeneratedKeyPair for RsaKeyPair {
     type Config = GenerateRsaConfig;
 
-    fn generate(mut config: GenerateRsaConfig) -> String {
-        #[cfg(feature = "rsa")]
+    fn generate(config: GenerateRsaConfig) -> String {
         if config.command.is_empty() {
-            let der = rsa::RsaPrivateKey::new(&mut config.rng, config.modulus_bits)
+            let key_size = match config.modulus_bits {
+                2048 => rsa::KeySize::Rsa2048,
+                3072 => rsa::KeySize::Rsa3072,
+                4096 => rsa::KeySize::Rsa4096,
+                8192 => rsa::KeySize::Rsa8192,
+                _ => panic!("Invalid RSA key size: {}", config.modulus_bits),
+            };
+            let der = rsa::KeyPair::generate(key_size)
                 .expect("Failed to generate RSA key")
-                .to_pkcs8_der()
+                .as_der()
                 .expect("Failed to serialize generated RSA key as PKCS8");
-            return pem::encode(der.as_bytes(), pem::PKCS8);
+            return pem::encode(der.as_ref(), pem::PKCS8);
         }
 
         let mut args: Vec<OsString> = config.command.iter().map(Into::into).collect();

@@ -11,14 +11,13 @@ rust-version = "1.72"
 edition = "2021"
 
 [features]
-default = ["rustls", "rsa", "redis", "rusqlite", "lettre_smtp", "lettre_sendmail", "postmark", "mailgun", "sendgrid"]
+default = ["rustls", "redis", "rusqlite", "lettre_smtp", "lettre_sendmail", "postmark", "mailgun", "sendgrid"]
 insecure = []
 lettre_smtp = ["lettre", "lettre/smtp-transport"]
 lettre_sendmail = ["lettre", "lettre/sendmail-transport"]
 postmark = []
 mailgun = []
 native-tls = ["hyper-tls", "reqwest/native-tls", "lettre?/native-tls"]
-rsa = ["dep:rsa", "rand_core"]
 rustls = ["dep:rustls", "hyper-rustls", "reqwest/rustls-tls-native-roots", "lettre?/rustls-tls", "lettre?/rustls-native-certs"]
 sendgrid = []
 
@@ -90,10 +89,6 @@ features = ["builder"]
 version = "0.4.11"
 features = ["std", "release_max_level_info"]
 
-[dependencies.rand_core]
-optional = true
-version = "0.6.4"
-
 [dependencies.redis]
 optional = true
 version = "0.25.3"
@@ -111,11 +106,6 @@ features = ["macos-system-configuration"]
 [dependencies.ring]
 package = "aws-lc-rs"
 version = "1.6.4"
-
-[dependencies.rsa]
-optional = true
-version = "0.9.0"
-default-features = false
 
 [dependencies.rusqlite]
 optional = true
@@ -142,7 +132,3 @@ features = ["tokio-runtime"]
 [dependencies.url]
 version = "2.1.1"
 features = ["serde"]
-
-# Per `rsa` crate docs, significantly speeds up key generation for debug builds.
-[profile.dev.package.num-bigint-dig]
-opt-level = 3

@@ -359,6 +359,9 @@ impl TomlConfig {
         }
         if let Some(val) = parsed.generate_rsa_command {
             builder.generate_rsa_command = val;
+            log::warn!(
+                "generate_rsa_command is deprecated and will be removed in a future release.",
+            );
         }
 
         if let Some(val) = parsed.redis_url {

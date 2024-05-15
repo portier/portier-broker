@@ -474,14 +474,7 @@ impl ConfigBuilder {
             keytext: None,
             signing_algs: vec![SigningAlgorithm::Rs256],
             rsa_modulus_bits: 2048,
-            generate_rsa_command: if cfg!(feature = "rsa") {
-                vec![]
-            } else {
-                "openssl genrsa 2048"
-                    .split_whitespace()
-                    .map(ToOwned::to_owned)
-                    .collect()
-            },
+            generate_rsa_command: vec![],
 
             redis_url: None,
             sqlite_db: None,
@@ -616,12 +609,6 @@ impl ConfigBuilder {
             )?;
             Box::new(spawn_agent(key_manager).await)
         } else {
-            if !cfg!(feature = "rsa")
-                && self.signing_algs.contains(&SigningAlgorithm::Rs256)
-                && self.generate_rsa_command.is_empty()
-            {
-                return Err("generate_rsa_command is required for rotating RSA keys".into());
-            }
             let key_manager = RotatingKeys::new(
                 store.clone(),
                 self.keys_ttl,
