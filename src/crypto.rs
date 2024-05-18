@@ -3,7 +3,7 @@ use crate::bridges::oidc::ProviderKey;
 use crate::config::Config;
 use crate::email_address::EmailAddress;
 use crate::utils::{base64url, keys::SignError, unix_duration, SecureRandom};
-use ring::{
+use aws_lc_rs::{
     digest,
     error::Unspecified,
     signature::{self, UnparsedPublicKey},
