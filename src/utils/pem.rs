@@ -2,11 +2,11 @@
 
 use std::io::{BufRead, Error as IoError, Read};
 
-use base64::prelude::*;
-use ring::{
+use aws_lc_rs::{
     digest::{digest, SHA256},
     signature::{Ed25519KeyPair, RsaKeyPair},
 };
+use base64::prelude::*;
 use thiserror::Error;
 
 use crate::{crypto::SigningAlgorithm, utils::keys::KeyPairExt};
@@ -76,7 +76,7 @@ pub enum ParseError {
     #[error("invalid base64: {0}")]
     Base64(#[from] base64::DecodeError),
     #[error("invalid private key: {0}")]
-    KeyRejected(ring::error::KeyRejected),
+    KeyRejected(aws_lc_rs::error::KeyRejected),
 }
 
 enum State {

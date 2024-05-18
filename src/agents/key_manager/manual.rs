@@ -6,8 +6,8 @@ use crate::utils::{
     pem::{self, ParsedKeyPair},
     SecureRandom,
 };
+use aws_lc_rs::signature::{Ed25519KeyPair, RsaKeyPair};
 use log::{info, warn};
-use ring::signature::{Ed25519KeyPair, RsaKeyPair};
 use std::fs::File;
 use std::io::{BufReader, Error as IoError};
 use std::path::PathBuf;

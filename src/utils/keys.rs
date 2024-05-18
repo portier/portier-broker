@@ -4,7 +4,7 @@ use crate::utils::{
     pem::{self, ParsedKeyPair},
     SecureRandom,
 };
-use ring::{
+use aws_lc_rs::{
     digest,
     encoding::AsDer,
     rsa,
@@ -23,8 +23,8 @@ pub enum SignError {
     Unspecified,
 }
 
-impl From<ring::error::Unspecified> for SignError {
-    fn from(_: ring::error::Unspecified) -> Self {
+impl From<aws_lc_rs::error::Unspecified> for SignError {
+    fn from(_: aws_lc_rs::error::Unspecified) -> Self {
         Self::Unspecified
     }
 }

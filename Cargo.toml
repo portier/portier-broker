@@ -100,11 +100,7 @@ version = "0.12.3"
 default-features = false
 features = ["macos-system-configuration"]
 
-# Alias ring -> aws-lc-rs.
-# Both are nearly API compatible, and Rustls also switched backends.
-# Going along with rustls means we can drop the ring dependency.
-[dependencies.ring]
-package = "aws-lc-rs"
+[dependencies.aws-lc-rs]
 version = "1.6.4"
 
 [dependencies.rusqlite]

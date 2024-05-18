@@ -1,4 +1,4 @@
-use ring::rand::{SecureRandom as GeneratorTrait, SystemRandom};
+use aws_lc_rs::rand::{SecureRandom as GeneratorTrait, SystemRandom};
 use tokio::task::spawn_blocking;
 
 #[derive(Clone)]
