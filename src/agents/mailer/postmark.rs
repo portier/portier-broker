@@ -23,6 +23,7 @@ pub struct PostmarkMailer {
     token: HeaderValue,
     api: Url,
     from: String,
+    headers: serde_json::Value,
     timeout: Duration,
 }
 
@@ -40,6 +41,12 @@ impl PostmarkMailer {
             token: HeaderValue::from_str(token).expect("Invalid Postmark token"),
             api,
             from: format!("{from_name} <{from_address}>"),
+            headers: json!([
+                {
+                    "Name": "List-Id",
+                    "Value": format!("Authentication <auth.{}>", from_address.domain()),
+                },
+            ]),
             timeout,
         }
     }
@@ -55,6 +62,7 @@ impl Handler<SendMail> for PostmarkMailer {
             "Subject": message.subject,
             "HtmlBody": message.html_body,
             "TextBody": message.text_body,
+            "Headers": &self.headers,
         }))
         .expect("Could not build Postmark request JSON body");
 

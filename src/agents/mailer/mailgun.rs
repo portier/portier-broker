@@ -16,6 +16,7 @@ pub struct MailgunMailer {
     auth: HeaderValue,
     messages_api: Url,
     from: String,
+    list_id: String,
     timeout: Duration,
 }
 
@@ -42,6 +43,7 @@ impl MailgunMailer {
             auth,
             messages_api,
             from: format!("{from_name} <{from_address}>"),
+            list_id: format!("Authentication <auth.{}>", from_address.domain()),
             timeout,
         }
     }
@@ -57,6 +59,7 @@ impl Handler<SendMail> for MailgunMailer {
             .append_pair("subject", &message.subject)
             .append_pair("html", &message.html_body)
             .append_pair("text", &message.text_body)
+            .append_pair("h:List-Id", &self.list_id)
             .finish();
 
         let mut request = Request::new(Method::POST, self.messages_api.clone());
