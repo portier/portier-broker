@@ -1897,7 +1897,7 @@ dependencies = [
  "hyper-staticfile",
  "hyper-tls",
  "hyper-util",
- "idna 0.5.0",
+ "idna 1.0.0",
  "ipnetwork",
  "lettre",
  "listenfd",
