@@ -36,6 +36,7 @@ impl SendgridMailer {
             api,
             from: json!({ "name": from_name, "email": from_address }),
             headers: json!({
+                "X-Auto-Response-Suppress": "All",
                 "List-Id": format!("Authentication <auth.{}>", from_address.domain()),
             }),
             timeout,

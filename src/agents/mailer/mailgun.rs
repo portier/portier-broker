@@ -59,6 +59,7 @@ impl Handler<SendMail> for MailgunMailer {
             .append_pair("subject", &message.subject)
             .append_pair("html", &message.html_body)
             .append_pair("text", &message.text_body)
+            .append_pair("h:X-Auto-Response-Suppress", "All")
             .append_pair("h:List-Id", &self.list_id)
             .finish();
 
