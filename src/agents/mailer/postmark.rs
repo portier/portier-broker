@@ -43,6 +43,10 @@ impl PostmarkMailer {
             from: format!("{from_name} <{from_address}>"),
             headers: json!([
                 {
+                    "Name": "X-Auto-Response-Suppress",
+                    "Value": "All",
+                },
+                {
                     "Name": "List-Id",
                     "Value": format!("Authentication <auth.{}>", from_address.domain()),
                 },

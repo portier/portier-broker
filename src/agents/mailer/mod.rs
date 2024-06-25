@@ -51,7 +51,11 @@ impl SendMail {
             ))
             .expect("Could not build mail");
 
-        // Add a List-Id header to prevent autoresponders.
+        // Add headers to hint autoresponders.
+        msg.headers_mut().insert_raw(HeaderValue::new(
+            HeaderName::new_from_ascii_str("X-Auto-Response-Suppress"),
+            "All".to_string(),
+        ));
         msg.headers_mut().insert_raw(HeaderValue::new(
             HeaderName::new_from_ascii_str("List-Id"),
             format!("Authentication <auth.{}>", from_address.domain()),
