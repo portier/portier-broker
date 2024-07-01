@@ -1858,7 +1858,7 @@ dependencies = [
 
 [[package]]
 name = "portier_broker"
-version = "0.10.0"
+version = "0.10.1"
 dependencies = [
  "accept-language",
  "aws-lc-rs",
