@@ -1134,9 +1134,9 @@ dependencies = [
 
 [[package]]
 name = "hyper-staticfile"
-version = "0.10.0"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "847250e0ccf0c0537daf49fc5c5ff69d43a752edbabc5274bc8322e8b092c55e"
+checksum = "bc4bce64c32578957926e75f832032f81ebb30bcee74f86c5848b13a69e547eb"
 dependencies = [
  "futures-util",
  "http",
