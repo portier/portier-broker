@@ -76,7 +76,7 @@ optional = true
 version = "0.6.0"
 
 [dependencies.hyper-util]
-version = "0.1.1"
+version = "0.1.6"
 features = ["tokio"]
 
 [dependencies.lettre]
