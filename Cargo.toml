@@ -59,7 +59,7 @@ version = "3.2.1"
 features = ["termination"]
 
 [dependencies.email_address]
-version = "0.2.3"
+version = "0.2.5"
 default-features = false
 
 [dependencies.hyper]
