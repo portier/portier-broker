@@ -1,0 +1,62 @@
+msgid "Finish logging in to"
+msgstr "Finir de se connecter à"
+
+msgid "You received this email so that we may confirm your email address and finish your login to:"
+msgstr "Vous avez reçu cet e-mail afin que nous puissions confirmer votre adresse e-mail et terminer votre connexion :"
+
+msgid "Click here to login"
+msgstr "Cliquez ici pour vous connecter"
+
+msgid "Alternatively, enter the following code on the login page:"
+msgstr "Vous pouvez également saisir le code suivant sur la page de connexion :"
+
+msgid "Confirm your address"
+msgstr "Confirmez votre adresse"
+
+msgid "We've sent you an email to confirm your address."
+msgstr "Nous vous avons envoyé un e-mail pour confirmer votre adresse."
+
+msgid "Use the link in that email to login to"
+msgstr "Utilisez le lien contenu dans cet e-mail pour vous connecter à"
+
+msgid "Alternatively, enter the code from the email to continue in this browser tab:"
+msgstr "Vous pouvez également saisir le code figurant dans l'e-mail pour continuer dans cet onglet du navigateur :"
+
+msgid "The request is invalid, and could not be completed."
+msgstr "La demande n'est pas valide et n'a pas pu être traitée."
+
+msgid "This indicates an issue with the site you're trying to login to. Contact the site administrator to get the issue resolved."
+msgstr "Ceci indique un problème avec le site sur lequel vous essayez de vous connecter. Contactez l'administrateur du site pour résoudre le problème."
+
+msgid "Failed to connect with your email domain."
+msgstr "Échec de la connexion avec votre domaine de messagerie."
+
+msgid "Contact the administrator of your email domain to get the issue resolved."
+msgstr "Contactez l'administrateur de votre domaine de messagerie pour résoudre le problème."
+
+msgid "Something went wrong, and we cannot complete your request at this time."
+msgstr "Un problème s'est produit et nous ne pouvons pas répondre à votre demande pour le moment."
+
+msgid "An internal error occurred, which has been logged with the below reference number."
+msgstr "Une erreur interne s'est produite, qui a été enregistrée sous le numéro de référence ci-dessous."
+
+msgid "Too many login attempts."
+msgstr "Trop de tentatives de connexion."
+
+msgid "We've received too many requests in a short amount of time. Please try again later."
+msgstr "Nous avons reçu trop de demandes en peu de temps. Veuillez réessayer plus tard."
+
+msgid "The session has expired."
+msgstr "La session a expiré."
+
+msgid "Your login attempt may have taken too long, or you tried to follow an old link. Please try again."
+msgstr "Votre tentative de connexion a peut-être duré trop longtemps, ou vous avez essayé de suivre un ancien lien. Veuillez réessayer."
+
+msgid "Technical description"
+msgstr "Description technique"
+
+msgid "Login with your email address."
+msgstr "Connectez-vous avec votre adresse e-mail."
+
+msgid "Please specify the email you wish to use to login with"
+msgstr "Veuillez indiquer l'adresse e-mail que vous souhaitez utiliser pour vous connecter."
