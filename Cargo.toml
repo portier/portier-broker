@@ -63,7 +63,7 @@ version = "0.2.3"
 default-features = false
 
 [dependencies.hyper]
-version = "1.0.0"
+version = "1.4.1"
 default-features = false
 features = ["http1", "server"]
 
