@@ -37,19 +37,20 @@ impl From<email_address::Error> for ParseEmailError {
     fn from(err: email_address::Error) -> Self {
         use email_address::Error as Raw;
         match err {
-            Raw::InvalidCharacter => Self::InvalidChars,
+            Raw::InvalidCharacter
+            | Raw::UnsupportedDisplayName
+            | Raw::MissingEndBracket
+            | Raw::MissingDisplayName
+            | Raw::UnbalancedQuotes
+            | Raw::InvalidComment
+            | Raw::InvalidIPAddress => Self::InvalidChars,
             Raw::MissingSeparator => Self::NoSeparator,
             Raw::LocalPartEmpty => Self::EmptyLocal,
             Raw::LocalPartTooLong => Self::LocalPartTooLong,
-            Raw::DomainEmpty => Self::EmptyDomain,
+            Raw::DomainEmpty | Raw::DomainTooFew | Raw::SubDomainEmpty => Self::EmptyDomain,
             Raw::DomainTooLong => Self::DomainTooLong,
             Raw::SubDomainTooLong => Self::DomainComponentTooLong,
-            // It appears these are never produced.
-            Raw::DomainTooFew
-            | Raw::DomainInvalidSeparator
-            | Raw::UnbalancedQuotes
-            | Raw::InvalidComment
-            | Raw::InvalidIPAddress => unreachable!(),
+            Raw::UnsupportedDomainLiteral | Raw::DomainInvalidSeparator => Self::InvalidDomainChars,
         }
     }
 }
@@ -99,7 +100,14 @@ impl std::str::FromStr for EmailAddress {
         // ensures we don't encounter any unexpected errors when sending mail
         // using Lettre.
         let result = EmailAddress::from_parts(&local, &domain);
-        email_address::EmailAddress::from_str(&result.serialization)?;
+        email_address::EmailAddress::parse_with_options(
+            &result.serialization,
+            email_address::Options {
+                minimum_sub_domains: 2,
+                allow_domain_literal: false,
+                allow_display_text: false,
+            },
+        )?;
         Ok(result)
     }
 }
