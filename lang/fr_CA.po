@@ -1,3 +1,10 @@
+msgid ""
+msgstr ""
+"Language: fr_CA\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
 msgid "Finish logging in to"
 msgstr "Finir de se connecter à"
 
