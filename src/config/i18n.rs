@@ -2,12 +2,15 @@ use gettext::Catalog;
 use std::fs::File;
 use std::path::PathBuf;
 
-// Contains all gettext catalogs we use in compiled form.
+/// Contains all gettext catalogs we use in compiled form.
 pub struct I18n {
-    pub catalogs: Vec<(&'static str, Catalog)>,
+    pub catalogs: Vec<(String, Catalog)>,
 }
 
-const SUPPORTED_LANGUAGES: &[&str] = &["en", "de", "nl"];
+/// List of languages. Matches the contents of `lang/`.
+///
+/// NOTE: The list is matched in order, so list regional variants first.
+const SUPPORTED_LANGUAGES: &[&str] = &["en", "de", "nl", "fr_CA", "fr"];
 
 impl I18n {
     pub fn new(data_dir: &str) -> I18n {
@@ -21,7 +24,11 @@ impl I18n {
                 path.set_extension("mo");
                 let file = File::open(path).expect("could not open catalog file");
                 let catalog = Catalog::parse(file).expect("could not parse catalog file");
-                (*lang, catalog)
+
+                // `Accept-Language` header uses IETF format.
+                let lang = lang.replace("_", "-");
+
+                (lang, catalog)
             })
             .collect();
         I18n { catalogs }

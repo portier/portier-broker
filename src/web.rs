@@ -284,10 +284,24 @@ impl Service {
             .and_then(|value| value.to_str().ok())
         {
             'lang: for user_language in &accept_language::parse(user_languages) {
-                for (idx, &(lang, _)) in app.i18n.catalogs.iter().enumerate() {
+                // If the user requested a regional variant,
+                // we also match without the regional subtag.
+                let mut iter = user_languages.split('-');
+                let user_language_primary = match (iter.next(), iter.next()) {
+                    (Some(lang), Some(_)) => Some(lang),
+                    _ => None,
+                };
+
+                for (idx, &(ref lang, _)) in app.i18n.catalogs.iter().enumerate() {
                     if lang == user_language {
                         catalog_idx = idx;
                         break 'lang;
+                    }
+                    if let Some(user_language_primary) = user_language_primary {
+                        if lang == user_language_primary {
+                            catalog_idx = idx;
+                            break 'lang;
+                        }
                     }
                 }
             }
