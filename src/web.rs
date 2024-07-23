@@ -292,7 +292,7 @@ impl Service {
                     _ => None,
                 };
 
-                for (idx, &(ref lang, _)) in app.i18n.catalogs.iter().enumerate() {
+                for (idx, (lang, _)) in app.i18n.catalogs.iter().enumerate() {
                     if lang == user_language {
                         catalog_idx = idx;
                         break 'lang;

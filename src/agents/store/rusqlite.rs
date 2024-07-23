@@ -49,7 +49,7 @@ pub struct RusqliteStore {
     expire_cache: Duration,
     /// Rate limit configuration.
     limit_configs: Vec<LimitConfig>,
-    /// SQLite connection.
+    /// Database connection.
     conn: Connection,
     /// The agent used for fetching on cache miss.
     fetcher: Addr<FetchAgent>,

@@ -26,7 +26,7 @@ impl I18n {
                 let catalog = Catalog::parse(file).expect("could not parse catalog file");
 
                 // `Accept-Language` header uses IETF format.
-                let lang = lang.replace("_", "-");
+                let lang = lang.replace('_', "-");
 
                 (lang, catalog)
             })

@@ -10,8 +10,8 @@
     clippy::too_many_lines,
     clippy::unused_async,
     clippy::wildcard_imports,
-    // https://github.com/rust-lang/rust-clippy/issues/12279
-    clippy::no_effect_underscore_binding,
+    // https://github.com/rust-lang/rust-clippy/issues/12799
+    clippy::assigning_clones,
 )]
 
 #[macro_use]

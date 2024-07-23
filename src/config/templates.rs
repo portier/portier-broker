@@ -38,7 +38,7 @@ impl Template {
 pub struct Templates {
     /// Page displayed when the confirmation email was sent.
     pub confirm_email: Template,
-    /// Page displayed when the login_hint is missing.
+    /// Page displayed when the `login_hint` is missing.
     pub login_hint: Template,
     /// HTML formatted email containing the one-type pad.
     pub email_html: Template,
