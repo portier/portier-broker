@@ -31,7 +31,7 @@ overflow-checks = true
 [dependencies]
 accept-language = "3.0.1"
 base64 = "0.22.0"
-bytes = "1.0.1"
+bytes = "1.7.1"
 docopt = "1.1.0"
 envy = "0.4.1"
 futures-util = "0.3.16"
