@@ -7,9 +7,10 @@
 .direnv
 
 # Build products
-target
+.yarn
 node_modules
 result
+target
 
 # Runtime files
 *.pem
