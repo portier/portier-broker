@@ -39,7 +39,7 @@ jobs:
 
     - name: Create PR
       id: cpr
-      uses: peter-evans/create-pull-request@v6
+      uses: peter-evans/create-pull-request@v7
       with:
         # Use a bot token, so checks run on the PR.
         token: ${{ secrets.BOT_GITHUB_TOKEN }}
