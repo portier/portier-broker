@@ -287,8 +287,8 @@ pub async fn callback(ctx: &mut Context) -> HandlerResult {
     check_token_field!(nonce == bridge_data.nonce, "nonce", descr);
 
     let now = unix_timestamp();
-    let exp = exp.checked_add(LEEWAY).unwrap_or(u64::min_value());
-    let iat = iat.checked_sub(LEEWAY).unwrap_or(u64::max_value());
+    let exp = exp.checked_add(LEEWAY).unwrap_or(u64::MIN);
+    let iat = iat.checked_sub(LEEWAY).unwrap_or(u64::MAX);
     check_token_field!(now < exp, "exp", descr);
     check_token_field!(iat <= now, "iat", descr);
 
