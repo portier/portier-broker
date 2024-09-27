@@ -148,12 +148,6 @@ jobs:
     runs-on: macos-latest
     steps:
 
-    # Workaround for: https://github.com/actions/cache/issues/403
-    - name: Install GNU tar
-      run: |
-        brew install gnu-tar
-        echo PATH="/usr/local/opt/gnu-tar/libexec/gnubin:$PATH" >> $GITHUB_ENV
-
     - name: Checkout
       uses: actions/checkout@v4
 
