@@ -60,7 +60,7 @@ features = ["termination"]
 
 # TODO: https://github.com/johnstonskj/rust-email_address/issues/30
 [dependencies.email_address]
-version = "=0.2.8"
+version = "=0.2.9"
 default-features = false
 
 [dependencies.hyper]
