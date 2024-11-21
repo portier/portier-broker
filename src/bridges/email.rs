@@ -1,9 +1,12 @@
 use crate::agents::mailer::SendMail;
 use crate::bridges::{complete_auth, AuthContext, BridgeData};
+use crate::config::Config;
 use crate::crypto::random_zbase32;
 use crate::error::BrokerError;
 use crate::metrics;
-use crate::web::{html_response, json_response, Context, HandlerResult};
+use crate::web::{html_response, json_response, Context, HandlerResult, Response};
+use gettext::Catalog;
+use http::StatusCode;
 use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -39,13 +42,7 @@ pub async fn auth(mut ctx: AuthContext) -> HandlerResult {
         utf8_percent_encode(&code, QUERY_ESCAPE)
     );
 
-    let display_origin = ctx
-        .return_params
-        .as_ref()
-        .expect("email::request called without redirect_uri set")
-        .redirect_uri
-        .origin()
-        .unicode_serialization();
+    let display_origin = ctx.display_origin();
 
     let catalog = ctx.catalog();
     let subject = format!(
@@ -103,26 +100,13 @@ pub async fn auth(mut ctx: AuthContext) -> HandlerResult {
             "session": &ctx.session_id,
         })))
     } else {
-        let catalog = ctx.catalog();
-        Ok(html_response(ctx.app.templates.confirm_email.render(&[
-            ("display_origin", display_origin.as_str()),
-            ("session_id", &ctx.session_id),
-            ("title", catalog.gettext("Confirm your address")),
-            (
-                "explanation",
-                catalog.gettext("We've sent you an email to confirm your address."),
-            ),
-            (
-                "use",
-                catalog.gettext("Use the link in that email to login to"),
-            ),
-            (
-                "alternate",
-                catalog.gettext(
-                    "Alternatively, enter the code from the email to continue in this browser tab:",
-                ),
-            ),
-        ])))
+        Ok(render_form(
+            &ctx.app,
+            ctx.catalog(),
+            &ctx.session_id,
+            &display_origin,
+            None,
+        ))
     }
 }
 
@@ -143,7 +127,21 @@ pub async fn confirmation(ctx: &mut Context) -> HandlerResult {
 
     if code != bridge_data.code {
         metrics::AUTH_EMAIL_CODE_INCORRECT.inc();
-        return Err(BrokerError::ProviderInput("incorrect code".to_owned()));
+        let mut res = if ctx.want_json {
+            json_response(&json!({
+                "result": "incorrect_code",
+            }))
+        } else {
+            render_form(
+                &ctx.app,
+                ctx.catalog(),
+                &ctx.session_id,
+                &ctx.display_origin(),
+                Some("The code you entered was incorrect."),
+            )
+        };
+        *res.status_mut() = StatusCode::FORBIDDEN;
+        return Ok(res);
     }
 
     if !ctx.app.uncounted_emails.contains(&data.email_addr) {
@@ -151,4 +149,36 @@ pub async fn confirmation(ctx: &mut Context) -> HandlerResult {
     }
 
     complete_auth(ctx, data).await
+}
+
+fn render_form(
+    app: &Config,
+    catalog: &Catalog,
+    session_id: &str,
+    display_origin: &str,
+    error: Option<&str>,
+) -> Response {
+    html_response(app.templates.confirm_email.render(&[
+        ("display_origin", display_origin),
+        ("session_id", session_id),
+        ("title", catalog.gettext("Confirm your address")),
+        (
+            "explanation",
+            catalog.gettext("We've sent you an email to confirm your address."),
+        ),
+        (
+            "use",
+            catalog.gettext("Use the link in that email to login to"),
+        ),
+        (
+            "alternate",
+            catalog.gettext(
+                "Alternatively, enter the code from the email to continue in this browser tab:",
+            ),
+        ),
+        (
+            "error",
+            error.map(|msg| catalog.gettext(msg)).unwrap_or_default(),
+        ),
+    ]))
 }

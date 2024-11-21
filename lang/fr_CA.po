@@ -29,6 +29,9 @@ msgstr "Utilisez le lien contenu dans ce courriel pour vous connecter à"
 msgid "Alternatively, enter the code from the email to continue in this browser tab:"
 msgstr "Vous pouvez également saisir le code figurant dans l'e-mail pour continuer dans cet onglet du navigateur :"
 
+msgid "The code you entered was incorrect."
+msgstr "Le code saisi était incorrect."
+
 msgid "The request is invalid, and could not be completed."
 msgstr "La demande n'est pas valide et n'a pas pu être traitée."
 

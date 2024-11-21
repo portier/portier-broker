@@ -29,6 +29,9 @@ msgstr "Use the link in that email to login to"
 msgid "Alternatively, enter the code from the email to continue in this browser tab:"
 msgstr "Alternatively, enter the code from the email to continue in this browser tab:"
 
+msgid "The code you entered was incorrect."
+msgstr "The code you entered was incorrect."
+
 msgid "The request is invalid, and could not be completed."
 msgstr "The request is invalid, and could not be completed."
 
