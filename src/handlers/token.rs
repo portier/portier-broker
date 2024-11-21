@@ -4,6 +4,7 @@ use crate::{
     agents::ConsumeAuthCode,
     crypto::create_jwt,
     error::BrokerError,
+    validation::parse_redirect_uri,
     web::{json_response, Context, HandlerResult},
 };
 
@@ -23,6 +24,11 @@ pub async fn token(ctx: &mut Context) -> HandlerResult {
     let code = try_get_provider_param!(params, "code");
     let redirect_uri = try_get_provider_param!(params, "redirect_uri");
 
+    // Even though we compare to the original below, parse again, because the client may use a
+    // serialization different from us.
+    let redirect_uri = parse_redirect_uri(&redirect_uri, "redirect_uri")
+        .map_err(|e| BrokerError::ProviderInput(format!("{e}")))?;
+
     let data = ctx
         .app
         .store
@@ -36,23 +42,17 @@ pub async fn token(ctx: &mut Context) -> HandlerResult {
             error_description: "invalid authorization code".to_owned(),
         })?;
 
-    if data.return_params.redirect_uri.as_str() != redirect_uri {
+    if data.return_params.redirect_uri != redirect_uri {
         return Err(BrokerError::ProviderInput(
             "redirect_uri does not match the original from the authorization request".to_owned(),
         ));
     }
 
-    let origin = data
-        .return_params
-        .redirect_uri
-        .origin()
-        .ascii_serialization();
-
     let jwt = create_jwt(
         &ctx.app,
         &data.email,
         &data.email_addr,
-        &origin,
+        &redirect_uri.origin().ascii_serialization(),
         &data.nonce,
         data.signing_alg,
     )
