@@ -178,9 +178,8 @@ impl RotatingKeys {
     fn generate_one(&self, signing_alg: SigningAlgorithm) -> String {
         use SigningAlgorithm::*;
         match signing_alg {
-            EdDsa => Ed25519KeyPair::generate(self.rng.clone()),
+            EdDsa => <Ed25519KeyPair as GeneratedKeyPair>::generate(self.rng.clone()),
             Rs256 => <RsaKeyPair as GeneratedKeyPair>::generate(GenerateRsaConfig {
-                rng: self.rng.clone(),
                 modulus_bits: self.rsa_modulus_bits,
                 command: self.generate_rsa_command.clone(),
             }),

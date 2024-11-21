@@ -202,7 +202,6 @@ impl GeneratedKeyPair for Ed25519KeyPair {
 }
 
 pub struct GenerateRsaConfig {
-    pub rng: SecureRandom,
     pub modulus_bits: usize,
     pub command: Vec<String>,
 }
