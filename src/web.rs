@@ -148,6 +148,16 @@ impl RequestData {
     pub fn form_params(&self) -> HashMap<String, String> {
         parse_form_encoded(&self.body)
     }
+
+    /// Unicode serialization of the origin for display.
+    pub fn display_origin(&self) -> String {
+        self.return_params
+            .as_ref()
+            .expect("display_origin called without redirect_uri set")
+            .redirect_uri
+            .origin()
+            .unicode_serialization()
+    }
 }
 
 impl Context {

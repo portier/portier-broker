@@ -29,6 +29,11 @@
             <input type="text" name="code" maxlength="20" autofocus autocomplete="off" autocorrect="off" autocapitalize="off"><button type="submit">Login</button>
           </div>
         </form>
+        {{# error }}
+          <p class="error">
+            {{ error }}
+          </p>
+        {{/ error }}
       </aside>
    </div>
 </body>
