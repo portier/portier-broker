@@ -72,8 +72,14 @@ properties:
   resolver:
     type: string
     description: >
-      Used to populate config.toml:verify_with_resolver (also sets verify_public_ip to true)
+      Used to populate config.toml:verify_with_resolver
     default: 169.254.169.254:53
+
+  public_ip:
+    type: boolean
+    description: >
+      Used to populate config.toml:verify_public_ip (only used when 'resolver' is set)
+    default: true
 
   from_name:
     type: string

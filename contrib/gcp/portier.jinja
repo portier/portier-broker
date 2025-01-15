@@ -220,8 +220,10 @@ resources:
 {%- if "resolver" in properties %}
             - name: BROKER_VERIFY_WITH_RESOLVER
               value: {{ properties["resolver"] }}
+{%- if "public_ip" in properties %}
             - name: BROKER_VERIFY_PUBLIC_IP
-              value: "true"
+              value: "{{ properties["public_ip"] }}"
+{%- endif %}
 {%- endif %}
             resources:
               limits:
