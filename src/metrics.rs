@@ -320,7 +320,7 @@ pub struct HistogramTimer<'a> {
     inner: &'a Histogram,
     start: Instant,
 }
-impl<'a> HistogramTimer<'a> {
+impl HistogramTimer<'_> {
     pub fn observe_duration(self) {
         self.inner.record(Instant::now().duration_since(self.start));
     }

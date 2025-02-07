@@ -53,7 +53,7 @@ pub async fn token(ctx: &mut Context) -> HandlerResult {
         &data.email,
         &data.email_addr,
         &redirect_uri.origin().ascii_serialization(),
-        &data.nonce,
+        data.nonce.as_deref(),
         data.signing_alg,
     )
     .await

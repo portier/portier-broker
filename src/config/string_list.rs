@@ -112,7 +112,7 @@ impl<'a> Iterator for StringListIter<'a> {
     }
 }
 
-impl<'a> FusedIterator for StringListIter<'a> {}
+impl FusedIterator for StringListIter<'_> {}
 
 /// Source of a `StringListIter` result.
 pub enum StringListSource<'a> {
@@ -132,7 +132,7 @@ pub enum StringListSource<'a> {
     },
 }
 
-impl<'a> fmt::Display for StringListSource<'a> {
+impl fmt::Display for StringListSource<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             StringListSource::Literal { index } => write!(f, "#{} (literal)", index + 1),
@@ -174,7 +174,7 @@ impl<'a, R: Read> StringListReader<'a, R> {
     }
 }
 
-impl<'a, R: Read> Iterator for StringListReader<'a, R> {
+impl<R: Read> Iterator for StringListReader<'_, R> {
     type Item = Result<String, IoError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -197,7 +197,7 @@ impl<'a, R: Read> Iterator for StringListReader<'a, R> {
     }
 }
 
-impl<'a, R: Read> FusedIterator for StringListReader<'a, R> {}
+impl<R: Read> FusedIterator for StringListReader<'_, R> {}
 
 #[cfg(test)]
 mod test {
