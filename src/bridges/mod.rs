@@ -102,7 +102,7 @@ pub async fn complete_auth(ctx: &mut Context, data: SessionData) -> HandlerResul
                 &data.email,
                 &data.email_addr,
                 &origin,
-                &data.nonce,
+                data.nonce.as_deref(),
                 data.signing_alg,
             )
             .await

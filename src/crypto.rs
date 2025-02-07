@@ -238,7 +238,7 @@ pub async fn create_jwt(
     email: &str,
     email_addr: &EmailAddress,
     aud: &str,
-    nonce: &Option<String>,
+    nonce: Option<&str>,
     signing_alg: SigningAlgorithm,
 ) -> Result<String, SignError> {
     let now = unix_duration();
