@@ -38,9 +38,9 @@ Baseline costs are ~$80/month when idle:
 You will need to already have have a GCP account, created a project with an billing account assigned to it and that you have at least 'Editor' permissions on it.
 
     gcloud --project [PROJECT_ID] services enable \
+        artifactregistry.googleapis.com \
         cloudbuild.googleapis.com \
         cloudresourcemanager.googleapis.com \
-        containerregistry.googleapis.com \
         deploymentmanager.googleapis.com \
         redis.googleapis.com \
         run.googleapis.com \

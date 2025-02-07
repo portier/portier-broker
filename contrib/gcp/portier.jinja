@@ -11,6 +11,17 @@ resources:
         value: >
           $.concat("Bearer ", $.googleOauth2AccessToken())
 
+- name: {{ env["deployment"] }}-typeprovider-artifactregistry
+  type: deploymentmanager.v2beta.typeProvider
+  properties:
+    descriptorUrl: https://artifactregistry.googleapis.com/$discovery/rest?version=v1
+    options:
+      inputMappings:
+      - fieldName: Authorization
+        location: HEADER
+        value: >
+          $.concat("Bearer ", $.googleOauth2AccessToken())
+
 - name: {{ env["deployment"] }}-typeprovider-cloudbuild
   type: deploymentmanager.v2beta.typeProvider
   properties:
@@ -57,6 +68,15 @@ resources:
         value: >
           $.concat("Bearer ", $.googleOauth2AccessToken())
 
+- name: {{ env['deployment'] }}-repository
+  type: {{ env["project"] }}/{{ env["deployment"] }}-typeprovider-artifactregistry:projects.locations.repositories
+  metadata:
+    dependsOn:
+    - {{ env["deployment"] }}-typeprovider-artifactregistry
+  properties:
+    parent: projects/{{ env["project"] }}/locations/{{ properties["region"] }}
+    repositoryId: env["deployment"]
+
 - name: {{ env["deployment"] }}-sourcerepo
   type: {{ env["project"] }}/{{ env["deployment"] }}-typeprovider-sourcerepo:projects.repos
   metadata:
@@ -72,6 +92,7 @@ resources:
     dependsOn:
     - {{ env["deployment"] }}-typeprovider-cloudbuild
     - {{ env["deployment"] }}-sourcerepo
+    - {{ env['deployment'] }}-repository
   properties:
     projectId: {{ env["project"] }}
     name: {{ env["deployment"] }}
@@ -81,13 +102,13 @@ resources:
       tagName: ^prod$
     build:
       images:
-      - gcr.io/$PROJECT_ID/$REPO_NAME:$TAG_NAME
+      - {{ properties["region"] }}-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$REPO_NAME:$TAG_NAME
       steps:
       - name: gcr.io/cloud-builders/docker
         args:
         - build
         - -t
-        - gcr.io/$PROJECT_ID/$REPO_NAME:$TAG_NAME
+        - {{ properties["region"] }}-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$REPO_NAME:$TAG_NAME
 {%- if "data_url" in properties %}
         - --build-arg=data_url={{ properties["data_url"] }}
 {%- endif %}
@@ -169,7 +190,7 @@ resources:
           serviceAccountName: $(ref.{{ env["deployment"] }}-serviceaccount.email)
           timeoutSeconds: 30
           containers:
-          - image: gcr.io/{{ env["project"] }}/{{ env["deployment"] }}:prod
+          - image: {{ properties["region"] }}-docker.pkg.dev/{{ env["project"] }}/{{ env["deployment"] }}/{{ env["deployment"] }}:prod
             ports:
             - name: http1
               containerPort: 3333
@@ -220,8 +241,10 @@ resources:
 {%- if "resolver" in properties %}
             - name: BROKER_VERIFY_WITH_RESOLVER
               value: {{ properties["resolver"] }}
+{%- if "public_ip" in properties %}
             - name: BROKER_VERIFY_PUBLIC_IP
-              value: "true"
+              value: "{{ properties["public_ip"] }}"
+{%- endif %}
 {%- endif %}
             resources:
               limits:
