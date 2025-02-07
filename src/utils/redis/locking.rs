@@ -1,8 +1,12 @@
-use crate::utils::{redis::pubsub::Subscriber, SecureRandom};
-use futures_util::future::{self, FutureExt};
+use crate::utils::SecureRandom;
+use bytes::Bytes;
+use futures_util::StreamExt;
 use redis::{aio::MultiplexedConnection, RedisResult, Script, Value};
 use std::sync::Arc;
 use tokio::time::{interval, Duration};
+use tokio_stream::wrappers::IntervalStream;
+
+use super::pubsub::{self, Pubsub};
 
 // TODO: Lock locally first, so multiple locks from the same machine are more efficient.
 
@@ -10,7 +14,7 @@ use tokio::time::{interval, Duration};
 ///
 /// This will try to send a
 pub struct LockGuard {
-    key: Vec<u8>,
+    key: Bytes,
     request: Vec<u8>,
     conn: MultiplexedConnection,
     unlock_script: Arc<Script>,
@@ -24,7 +28,7 @@ impl Drop for LockGuard {
         let unlock_script = self.unlock_script.clone();
         tokio::spawn(async move {
             let mut invocation = unlock_script.prepare_invoke();
-            invocation.key(key.clone()).arg(&request[..]);
+            invocation.key(key.as_ref()).arg(&request[..]);
             let res: RedisResult<Value> = invocation.invoke_async(&mut conn).await;
             if let Err(err) = res {
                 log::error!("Failed to release Redis lock: {:?}", err);
@@ -39,7 +43,7 @@ impl Drop for LockGuard {
 #[derive(Clone)]
 pub struct LockClient {
     conn: MultiplexedConnection,
-    pubsub: Subscriber,
+    pubsub: Pubsub,
     rng: SecureRandom,
     unlock_script: Arc<Script>,
 }
@@ -49,7 +53,7 @@ impl LockClient {
     ///
     /// This takes a Redis connection and a Redis pubsub connection, which must both be connected
     /// to the same server.
-    pub fn new(conn: MultiplexedConnection, pubsub: Subscriber, rng: SecureRandom) -> Self {
+    pub fn new(conn: MultiplexedConnection, pubsub: pubsub::Pubsub, rng: SecureRandom) -> Self {
         let unlock_script = Arc::new(Script::new(
             r"
             if redis.call('GET', KEYS[1]) == ARGV[1] then
@@ -75,17 +79,17 @@ impl LockClient {
     ///
     /// Note that the given key *is* the lock, and the key may not otherwise be written to.
     /// (Unlike, say, file locking, where the lock is conceptually metadata on the file.)
-    pub async fn lock(&mut self, key: &[u8]) -> LockGuard {
+    pub async fn lock(&mut self, key: impl Into<Bytes>) -> LockGuard {
+        let key = key.into();
         let request = self.rng.generate_async(16).await;
-        let mut sub = self.pubsub.subscribe(key.to_vec()).await;
-        let mut retry = interval(Duration::from_secs(2));
-        #[allow(clippy::mut_mut)]
+        // Try at an interval, as well as listening for unlock events.
+        let mut stream = futures_util::stream::select(
+            IntervalStream::new(interval(Duration::from_secs(2))).map(|_| ()),
+            self.pubsub.subscribe(key.clone()).map(|_| ()),
+        );
         loop {
-            let retry_fut = retry.tick().fuse();
-            let sub_fut = sub.recv().fuse();
-            tokio::pin!(retry_fut, sub_fut);
-            future::select(retry_fut, sub_fut).await;
-            if self.try_lock(key, &request).await {
+            stream.next().await;
+            if self.try_lock(key.as_ref(), &request).await {
                 return self.make_guard(key, request);
             }
         }
@@ -110,9 +114,9 @@ impl LockClient {
     }
 
     /// Create a lock guard, once we've acquired the lock.
-    fn make_guard(&self, key: &[u8], request: Vec<u8>) -> LockGuard {
+    fn make_guard(&self, key: Bytes, request: Vec<u8>) -> LockGuard {
         LockGuard {
-            key: key.to_vec(),
+            key,
             request,
             conn: self.conn.clone(),
             unlock_script: self.unlock_script.clone(),
