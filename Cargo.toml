@@ -41,7 +41,6 @@ http = "1.0.0"
 http-body-util = "0.1.0"
 hyper-staticfile = "0.10.0"
 idna = "1.0.0"
-ipnetwork = "0.20.0"
 listenfd = "1.0.0"
 mustache = "0.9.0"
 percent-encoding = "2.1.0"
@@ -80,6 +79,10 @@ version = "0.6.0"
 version = "0.1.1"
 features = ["tokio"]
 
+[dependencies.ipnetwork]
+version = "0.21.1"
+features = ["serde"]
+
 [dependencies.lettre]
 optional = true
 version = "0.11.1"
@@ -92,7 +95,7 @@ features = ["std", "release_max_level_info"]
 
 [dependencies.redis]
 optional = true
-version = "0.25.3"
+version = "0.28.2"
 default-features = false
 features = ["script", "tokio-comp"]
 
@@ -120,6 +123,10 @@ features = ["derive"]
 [dependencies.tokio]
 version = "1.13.0"
 features = ["fs", "macros", "process", "rt-multi-thread", "sync", "time"]
+
+[dependencies.tokio-stream]
+version = "0.1.17"
+features = ["sync", "time"]
 
 [dependencies.hickory-resolver]
 version = "0.24.0"

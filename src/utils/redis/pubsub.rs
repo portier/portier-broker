@@ -1,317 +1,166 @@
-use futures_util::future::poll_fn;
-use redis::{ConnectionAddr, ConnectionInfo, ErrorKind, RedisError, RedisResult, Value};
-use std::collections::hash_map::{Entry, HashMap};
-use std::future::Future;
-use std::io::Result as IoResult;
-use std::net::ToSocketAddrs;
-use std::pin::Pin;
-use std::task::Poll;
-use tokio::io::{self, AsyncWriteExt};
-use tokio::net::TcpStream;
-use tokio::sync::{broadcast, mpsc, oneshot};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    sync::Arc,
+    task::Poll,
+};
 
-#[cfg(unix)]
-use tokio::net::UnixStream;
+use bytes::Bytes;
+use futures_util::{Stream, StreamExt};
+use redis::aio::AsyncPushSender;
+use tokio::sync::{broadcast::Sender, Mutex};
+use tokio_stream::wrappers::{errors::BroadcastStreamRecvError, BroadcastStream};
 
-type Decoder = combine::stream::Decoder<
-    combine::parser::combinator::AnySendSyncPartialState,
-    combine::stream::PointerOffset<[u8]>,
->;
-
-/// Read half of a Redis pubsub connection.
-struct ReadHalf {
-    inner: io::BufReader<Box<dyn io::AsyncRead + Unpin + Send>>,
-    decoder: Decoder,
-}
-impl ReadHalf {
-    /// Read a value from Redis.
-    async fn read(&mut self) -> RedisResult<Value> {
-        redis::parse_redis_value_async(&mut self.decoder, &mut self.inner).await
-    }
-}
-
-/// Write half of a Redis pubsub connection.
-struct WriteHalf {
-    inner: Box<dyn io::AsyncWrite + Unpin + Send>,
-}
-impl WriteHalf {
-    /// Write a command on the Redis connection.
-    async fn write(&mut self, cmd: &[&[u8]]) -> IoResult<()> {
-        let mut data = format!("*{}\r\n", cmd.len()).into_bytes();
-        for part in cmd {
-            data.append(&mut format!("${}\r\n", part.len()).into_bytes());
-            data.extend_from_slice(part);
-            data.extend_from_slice(b"\r\n");
-        }
-        self.inner.write_all(&data).await
-    }
-}
-
-/// Channel type used to receive pubsub messages.
-pub type RecvChan = broadcast::Receiver<Vec<u8>>;
-
-/// Channel type used to reply to `Cmd`.
-type ReplyChan = oneshot::Sender<RecvChan>;
-
-/// Command type sent to the connection loop.
-struct Cmd {
-    /// Channel to subscribe to.
-    chan: Vec<u8>,
-    /// Reply channel for the command.
-    reply: ReplyChan,
-}
-
-/// Tracks an active subscription on the Redis server.
-struct Sub {
-    /// Channel sender used to notify all logical subscribers.
-    tx: broadcast::Sender<Vec<u8>>,
-    /// Reply channels that are awaiting confirmation.
-    pending: Option<Vec<ReplyChan>>,
-}
-
-/// Polling events that can happen in the connection loop.
-enum LoopEvent {
-    Cmd(Cmd),
-    CmdClosed,
-    Interval,
-    Read((RedisResult<Value>, ReadHalf)),
-}
-
-/// The Redis pubsub connection loop.
-async fn conn_loop(mut rx: ReadHalf, mut tx: WriteHalf, mut cmd: mpsc::Receiver<Cmd>) {
-    // Ping or cleanup subscriptions at an interval.
-    let interval = tokio::time::interval(tokio::time::Duration::from_secs(20));
-    tokio::pin!(interval);
-    // Ignore the first (immediate) tick.
-    interval.as_mut().tick().await;
-
-    // Current read operation.
-    // TODO: The redis crate has a ValueCodec, but doesn't expose it. This is a workaround.
-    let mut read_fut: Pin<Box<dyn Future<Output = _> + Send>> = Box::pin(async move {
-        let res = rx.read().await;
-        (res, rx)
-    });
-
-    // Map of active subscriptions by channel name.
-    let mut subs: HashMap<Vec<u8>, Sub> = HashMap::new();
-
-    loop {
-        // This specifically prioritizes processing commands over receiving.
-        match poll_fn(|cx| {
-            if let Poll::Ready(res) = cmd.poll_recv(cx) {
-                match res {
-                    Some(cmd) => Poll::Ready(LoopEvent::Cmd(cmd)),
-                    None => Poll::Ready(LoopEvent::CmdClosed),
-                }
-            } else if interval.as_mut().poll_tick(cx).is_ready() {
-                Poll::Ready(LoopEvent::Interval)
-            } else if let Poll::Ready(res) = read_fut.as_mut().poll(cx) {
-                Poll::Ready(LoopEvent::Read(res))
-            } else {
-                Poll::Pending
-            }
-        })
-        .await
-        {
-            LoopEvent::Cmd(Cmd { chan, reply }) => match subs.entry(chan.clone()) {
-                // If already subscribed, reply with a broadcast channel immediately. Otherwise,
-                // add the reply channel to `pending`, and send the Redis subscribe command if
-                // necessary.
-                Entry::Occupied(mut entry) => {
-                    let sub = entry.get_mut();
-                    if let Some(ref mut pending) = sub.pending {
-                        pending.push(reply);
-                    } else {
-                        let _ignored = reply.send(sub.tx.subscribe());
-                    }
-                }
-                Entry::Vacant(entry) => {
-                    entry.insert(Sub {
-                        tx: broadcast::channel(8).0,
-                        pending: Some(vec![reply]),
-                    });
-                    tx.write(&[b"SUBSCRIBE", &chan])
-                        .await
-                        .expect("Failed to send subscribe command to Redis");
-                }
-            },
-            LoopEvent::CmdClosed => {
-                // TODO: Stop reading from the command channel.
-                // This, plus an empty `subs`, means we can exit.
-                unimplemented!();
-            }
-            LoopEvent::Interval => {
-                // Unsubscribe from channels that no longer have subscribers, or send a ping.
-                let to_unsub: Vec<Vec<u8>> = subs
-                    .iter()
-                    .filter_map(|(chan, sub)| {
-                        if sub.pending.is_none() && sub.tx.receiver_count() == 0 {
-                            Some(chan.clone())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-                if to_unsub.is_empty() {
-                    tx.write(&[b"PING"])
-                        .await
-                        .expect("Failed to send ping command to Redis");
-                } else {
-                    for chan in &to_unsub {
-                        subs.remove(chan);
-                    }
-                    let mut unsub_cmd: Vec<&[u8]> = vec![b"UNSUBSCRIBE"];
-                    unsub_cmd.extend(to_unsub.iter().map(|chan| &chan[..]));
-                    tx.write(&unsub_cmd)
-                        .await
-                        .expect("Failed to send unsubscribe command to Redis");
-                }
-            }
-            LoopEvent::Read((res, mut rx)) => {
-                read_fut = Box::pin(async move {
-                    let res = rx.read().await;
-                    (res, rx)
-                });
-                let value = res.expect("Failed to read from Redis");
-                let vec = match value {
-                    // Note: If we have no subscriptions at all, we receive pongs as regular
-                    // replies instead of events.
-                    Value::Status(status) if status == "PONG" => continue,
-                    Value::Bulk(ref vec) if vec.len() >= 2 => vec,
-                    _ => panic!("Unexpected value from Redis: {value:?}"),
-                };
-                match (&vec[0], &vec[1], vec.get(2)) {
-                    // Handle a message event by sending on the broadcast channel.
-                    (Value::Data(ev), Value::Data(chan), Some(Value::Data(data)))
-                        if ev == b"message" =>
-                    {
-                        if let Some(sub) = subs.get(&chan[..]) {
-                            let _ignored = sub.tx.send(data.clone());
-                        }
-                    }
-                    // Handle subscription confirmation by sending out pending replies.
-                    (Value::Data(ev), Value::Data(chan), _) if ev == b"subscribe" => {
-                        if let Some(ref mut sub) = subs.get_mut(&chan[..]) {
-                            if let Some(pending) = sub.pending.take() {
-                                for reply in pending {
-                                    let _ignored = reply.send(sub.tx.subscribe());
-                                }
-                            }
-                        }
-                    }
-                    // Some other events are ok, but we do nothing with them.
-                    (Value::Data(ev), _, _) if ev == b"unsubscribe" || ev == b"pong" => {}
-                    _ => panic!("Unexpected value from Redis: {value:?}"),
-                }
-            }
-        }
-    }
-}
-
-/// A Subscriber can be used to subscribe to Redis pubsub channels.
+/// An `AsyncPushSender` that wraps a broadcast channel.
 ///
-/// This struct can be cheaply cloned. It is simply a client of the connection loop which is
-/// running in another task.
+/// Filters only for regular messages, and converts to Bytes first.
+pub struct FilteredBroadcast {
+    sender: Sender<(Bytes, Bytes)>,
+}
+
+impl FilteredBroadcast {
+    pub fn new(sender: Sender<(Bytes, Bytes)>) -> Self {
+        Self { sender }
+    }
+}
+
+impl AsyncPushSender for FilteredBroadcast {
+    fn send(&self, info: redis::PushInfo) -> Result<(), redis::aio::SendError> {
+        if info.kind != redis::PushKind::Message {
+            return Ok(());
+        }
+
+        let mut it = info.data.into_iter();
+        let (Some(chan), Some(message), None) = (it.next(), it.next(), it.next()) else {
+            return Ok(());
+        };
+
+        let (Ok(chan), Ok(message)) = (
+            redis::from_owned_redis_value::<Vec<u8>>(chan),
+            redis::from_owned_redis_value::<Vec<u8>>(message),
+        ) else {
+            return Ok(());
+        };
+
+        let _ = self.sender.send((chan.into(), message.into()));
+        Ok(())
+    }
+}
+
+/// Map holding subscription counts.
+type Subscriptions = Arc<Mutex<HashMap<Bytes, u16>>>;
+
+/// Manages Redis pubsub subscriptions.
 #[derive(Clone)]
+pub struct Pubsub {
+    conn: redis::aio::MultiplexedConnection,
+    push_tx: Sender<(Bytes, Bytes)>,
+    subscriptions: Subscriptions,
+}
+
+impl Pubsub {
+    pub fn new(conn: redis::aio::MultiplexedConnection, push_tx: Sender<(Bytes, Bytes)>) -> Self {
+        Self {
+            conn,
+            push_tx,
+            subscriptions: Subscriptions::default(),
+        }
+    }
+
+    pub fn subscribe(&self, chan: impl Into<Bytes>) -> Subscriber {
+        Subscriber::new(self, chan.into())
+    }
+}
+
+/// Represents a single subscription to a Redis channel.
 pub struct Subscriber {
-    cmd: mpsc::Sender<Cmd>,
+    conn: redis::aio::MultiplexedConnection,
+    push_rx: BroadcastStream<(Bytes, Bytes)>,
+    subscriptions: Subscriptions,
+    chan: Bytes,
 }
 
 impl Subscriber {
-    /// Subscribe to a channel.
-    ///
-    /// This function does not complete until the server has confirmed the subscription.
-    pub async fn subscribe(&mut self, chan: Vec<u8>) -> broadcast::Receiver<Vec<u8>> {
-        let (reply_tx, reply_rx) = oneshot::channel();
-        let cmd = Cmd {
-            chan,
-            reply: reply_tx,
-        };
-        if self.cmd.send(cmd).await.is_ok() {
-            if let Ok(rx) = reply_rx.await {
-                return rx;
+    fn new(pubsub: &Pubsub, chan: Bytes) -> Self {
+        let sub = {
+            let conn = pubsub.conn.clone();
+            let push_rx = BroadcastStream::new(pubsub.push_tx.subscribe());
+            let subscriptions = pubsub.subscriptions.clone();
+            let chan = chan.clone();
+            Subscriber {
+                conn,
+                push_rx,
+                subscriptions,
+                chan,
             }
-        }
-        panic!("Tried to subscribe on closed pubsub connection");
+        };
+
+        let mut conn = pubsub.conn.clone();
+        let subscriptions = pubsub.subscriptions.clone();
+        tokio::spawn(async move {
+            let mut subscriptions = subscriptions.lock().await;
+            let num = subscriptions.entry(chan.clone()).or_default();
+            *num += 1;
+            if *num == 1 {
+                drop(subscriptions);
+                if let Err(err) = conn.subscribe(chan.as_ref()).await {
+                    log::error!("Redis subscribe failed: {err}");
+                }
+            }
+        });
+
+        sub
     }
 }
 
-/// Make a pubsub connection to Redis.
-pub async fn connect(info: &ConnectionInfo) -> RedisResult<Subscriber> {
-    // Note: This code is borrowed from the redis crate.
-    let (rx, tx): (
-        Box<dyn io::AsyncRead + Unpin + Send>,
-        Box<dyn io::AsyncWrite + Unpin + Send>,
-    ) = match info.addr {
-        ConnectionAddr::Tcp(ref host, port) => {
-            let socket_addr = {
-                let mut socket_addrs = (&host[..], port).to_socket_addrs()?;
-                match socket_addrs.next() {
-                    Some(socket_addr) => socket_addr,
-                    None => {
-                        return Err(RedisError::from((
-                            ErrorKind::InvalidClientConfig,
-                            "No address found for host",
-                        )));
+impl Drop for Subscriber {
+    fn drop(&mut self) {
+        let mut conn = self.conn.clone();
+        let subscriptions = self.subscriptions.clone();
+        let chan = self.chan.clone();
+        tokio::spawn(async move {
+            let mut subscriptions = subscriptions.lock().await;
+            match subscriptions.entry(chan.clone()) {
+                Entry::Occupied(entry) if *entry.get() == 1 => {
+                    entry.remove();
+                    drop(subscriptions);
+                    if let Err(err) = conn.unsubscribe(chan.as_ref()).await {
+                        log::error!("Redis unsubscribe failed: {err}");
                     }
                 }
+                Entry::Occupied(mut entry) => {
+                    let entry = entry.get_mut();
+                    // Safety: entries are deleted before they reach zero.
+                    assert!(*entry > 1);
+                    *entry -= 1;
+                }
+                Entry::Vacant(_) => {
+                    // Safety: subscriber shouldn't exist without an entry.
+                    unreachable!()
+                }
             };
+        });
+    }
+}
 
-            let (rx, tx) = io::split(TcpStream::connect(&socket_addr).await?);
-            (Box::new(rx), Box::new(tx))
-        }
-
-        ConnectionAddr::TcpTls { .. } => {
-            return Err(RedisError::from((
-                ErrorKind::InvalidClientConfig,
-                "TLS connections not yet supported",
-            )))
-        }
-
-        #[cfg(unix)]
-        ConnectionAddr::Unix(ref path) => {
-            let (rx, tx) = io::split(UnixStream::connect(path).await?);
-            (Box::new(rx), Box::new(tx))
-        }
-
-        #[cfg(not(unix))]
-        ConnectionAddr::Unix(_) => {
-            return Err(RedisError::from((
-                ErrorKind::InvalidClientConfig,
-                "Cannot connect to unix sockets \
-                 on this platform",
-            )))
-        }
-    };
-
-    let mut rx = ReadHalf {
-        inner: io::BufReader::new(rx),
-        decoder: Decoder::new(),
-    };
-    let mut tx = WriteHalf { inner: tx };
-
-    if let Some(ref passwd) = info.redis.password {
-        if let Some(ref username) = info.redis.username {
-            tx.write(&[b"AUTH", username.as_bytes(), passwd.as_bytes()])
-                .await?;
-        } else {
-            tx.write(&[b"AUTH", passwd.as_bytes()]).await?;
-        }
-        match rx.read().await {
-            Ok(Value::Okay) => (),
-            _ => {
-                return Err((
-                    ErrorKind::AuthenticationFailed,
-                    "Password authentication failed",
-                )
-                    .into());
+impl Stream for Subscriber {
+    type Item = Bytes;
+    fn poll_next(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        loop {
+            match self.push_rx.poll_next_unpin(cx) {
+                Poll::Ready(Some(Ok((chan, message)))) if chan == self.chan => {
+                    return Poll::Ready(Some(message));
+                }
+                Poll::Ready(Some(
+                    Ok(_) // Filter out other channels.
+                    | Err(BroadcastStreamRecvError::Lagged(_)) // Ignore lag.
+                )) => {}
+                // Bubble EOS or pending.
+                Poll::Ready(None) => return Poll::Ready(None),
+                Poll::Pending => return Poll::Pending,
             }
         }
     }
-
-    // Note: Pubsub ignores database ID, so we don't need to send `SELECT`.
-
-    let (cmd_tx, cmd_rx) = mpsc::channel(8);
-    tokio::spawn(conn_loop(rx, tx, cmd_rx));
-    Ok(Subscriber { cmd: cmd_tx })
 }

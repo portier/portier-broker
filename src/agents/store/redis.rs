@@ -10,8 +10,9 @@ use ::redis::{
     aio::MultiplexedConnection as RedisConn, pipe, AsyncCommands, Client as RedisClient,
     IntoConnectionInfo, RedisResult, Script,
 };
-use futures_util::future;
+use futures_util::{future, StreamExt};
 use std::{convert::identity, sync::Arc, time::Duration};
+use tokio::sync::broadcast;
 
 /// Internal message used to lock a key set.
 struct LockKeys(SigningAlgorithm);
@@ -43,8 +44,8 @@ pub struct RedisStore {
     id: Arc<[u8]>,
     /// The connection.
     conn: RedisConn,
-    /// Pubsub client.
-    pubsub: pubsub::Subscriber,
+    /// Handles pubsub subscriptions.
+    pubsub: pubsub::Pubsub,
     /// Locking client.
     locking: locking::LockClient,
     /// TTL of session keys
@@ -81,12 +82,19 @@ impl RedisStore {
             url = format!("redis://{}", &url);
         }
         let id = rng.generate_async(16).await.into();
-        let info = url.as_str().into_connection_info()?;
+        let mut info = url.as_str().into_connection_info()?;
         let addr = info.addr.clone();
-        let pubsub = pubsub::connect(&info).await?;
+
+        // Configure pubsub on the same connection using RESP3.
+        info.redis.protocol = ::redis::ProtocolVersion::RESP3;
+        let (push_tx, _) = broadcast::channel(8);
         let conn = RedisClient::open(info)?
-            .get_multiplexed_tokio_connection()
+            .get_multiplexed_async_connection_with_config(
+                &::redis::AsyncConnectionConfig::default()
+                    .set_push_sender(pubsub::FilteredBroadcast::new(push_tx.clone())),
+            )
             .await?;
+        let pubsub = pubsub::Pubsub::new(conn.clone(), push_tx.clone());
         let locking = locking::LockClient::new(conn.clone(), pubsub.clone(), rng);
 
         log::warn!("Storing sessions and keys in Redis at {}", addr);
@@ -238,7 +246,7 @@ impl Handler<FetchUrlCached> for RedisStore {
         let expire_cache = self.expire_cache;
         cx.reply_later(async move {
             let key = format!("cache:{}", message.url);
-            let _lock = locking.lock(format!("lock:{key}").as_bytes()).await;
+            let _lock = locking.lock(format!("lock:{key}")).await;
             if let Some(data) = conn.get(key).await? {
                 Ok(data)
             } else {
@@ -320,27 +328,25 @@ impl Handler<DecrLimits> for RedisStore {
 
 impl Handler<EnableRotatingKeys> for RedisStore {
     fn handle(&mut self, message: EnableRotatingKeys, cx: Context<Self, EnableRotatingKeys>) {
-        let me = cx.addr().clone();
-        let my_id = self.id.clone();
-        let mut pubsub = self.pubsub.clone();
         self.key_manager = Some(message.key_manager.clone());
-        cx.reply_later(async move {
-            for signing_alg in &message.signing_algs {
-                let signing_alg = *signing_alg;
-                // Listen for key changes by other workers.
-                let chan = format!("keys-updated:{signing_alg}").into_bytes();
-                let mut sub = pubsub.subscribe(chan).await;
-                let me2 = me.clone();
-                let my_id2 = my_id.clone();
-                tokio::spawn(async move {
-                    loop {
-                        let from_id = sub.recv().await.expect("Redis keys subscription failed");
-                        if from_id.as_slice() != my_id2.as_ref() {
-                            me2.send(UpdateKeysLocked(signing_alg));
-                        }
+        // Listen for key changes by other workers.
+        for signing_alg in &message.signing_algs {
+            let signing_alg = *signing_alg;
+            let me = cx.addr().clone();
+            let my_id = self.id.clone();
+            let mut sub = self.pubsub.subscribe(format!("keys-updated:{signing_alg}"));
+            tokio::spawn(async move {
+                while let Some(from_id) = sub.next().await {
+                    if from_id != my_id.as_ref() {
+                        me.send(UpdateKeysLocked(signing_alg)).await;
                     }
-                });
-                // Fetch current keys.
+                }
+            });
+        }
+        // Fetch current keys at startup.
+        let me = cx.addr().clone();
+        cx.reply_later(async move {
+            for signing_alg in message.signing_algs {
                 me.send(UpdateKeysLocked(signing_alg)).await;
             }
         });
@@ -394,7 +400,7 @@ impl Handler<LockKeys> for RedisStore {
     fn handle(&mut self, message: LockKeys, cx: Context<Self, LockKeys>) {
         let mut locking = self.locking.clone();
         let lock_key = format!("lock:keys:{}", message.0);
-        cx.reply_later(async move { locking.lock(lock_key.as_bytes()).await });
+        cx.reply_later(async move { locking.lock(lock_key).await });
     }
 }
 
