@@ -105,7 +105,7 @@ default-features = false
 features = ["macos-system-configuration"]
 
 [dependencies.aws-lc-rs]
-version = "1.6.4"
+version = "1.12.5"
 
 [dependencies.rusqlite]
 optional = true
