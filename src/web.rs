@@ -321,7 +321,7 @@ impl Service {
         let want_json = parts
             .headers
             .get(hyper::header::ACCEPT)
-            .map_or(false, |accept| accept == "application/json");
+            .is_some_and(|accept| accept == "application/json");
         let mut ctx = Context {
             req: Arc::new(RequestData {
                 app,
