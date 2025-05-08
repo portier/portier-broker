@@ -9,6 +9,11 @@
 FROM rust:1-alpine AS build
 RUN apk add --no-cache build-base
 WORKDIR /build
+#### BEGIN faster development https://stackoverflow.com/a/58474618 ####
+COPY Cargo.toml Cargo.lock ./
+RUN echo 'fn main() {}' > dummy.rs && sed -i -e 's#src/main.rs#dummy.rs#' Cargo.toml
+#### END faster development ####
+RUN cargo build --release --locked
 COPY . .
 RUN cargo build --release --locked
 
