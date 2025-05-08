@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 # This Dockerfile creates an image with a release build of the broker.
 #
 # To run a container:
@@ -9,8 +11,15 @@
 FROM rust:1-alpine AS build
 RUN apk add --no-cache build-base
 WORKDIR /build
-COPY . .
 RUN cargo build --release --locked
+COPY . .
+# To create a debug build instead, add: --build-arg cargo_flags=""
+ARG cargo_flags="--release --locked"
+RUN \
+  --mount=type=cache,target=/usr/local/cargo/registry \
+  --mount=type=cache,target=/build/target,sharing=locked \
+  cargo build $cargo_flags && \
+  cp ./target/release/portier-broker /
 
 # Stage 2: Prepare data files.
 FROM alpine AS data
@@ -46,5 +55,5 @@ EXPOSE 3333
 
 # Stage 4: Copy in the build and data files.
 FROM base AS out
-COPY --from=build /build/target/release/portier-broker /opt/portier-broker/
+COPY --from=build /portier-broker /opt/portier-broker/
 COPY --from=data /data /opt/portier-broker
