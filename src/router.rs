@@ -33,6 +33,9 @@ pub async fn router(ctx: &mut Context) -> HandlerResult {
         // Lastly, fall back to trying to serve static files out of ./res/
         (&(Method::GET | Method::HEAD), _) => handlers::pages::static_(ctx).await,
 
+        // Needed for CORS
+        (&Method::OPTIONS, _) => Ok(empty_response(StatusCode::NO_CONTENT)),
+
         _ => Ok(empty_response(StatusCode::BAD_REQUEST)),
     }
 }
