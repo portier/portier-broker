@@ -109,6 +109,8 @@ resources:
         - build
         - -t
         - {{ properties["region"] }}-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$REPO_NAME:$TAG_NAME
+        - --cache-from
+        - {{ properties["region"] }}-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$REPO_NAME:$TAG_NAME
 {%- if "data_url" in properties %}
         - --build-arg=data_url={{ properties["data_url"] }}
 {%- endif %}
