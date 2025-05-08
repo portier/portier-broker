@@ -349,6 +349,7 @@ impl Service {
 
         // Set common response headers.
         set_headers(&mut response);
+        set_cors_headers(&ctx, &mut response);
 
         // Response status metrics.
         match response.status().as_u16() {
@@ -520,6 +521,39 @@ fn set_headers<B>(res: &mut hyper::Response<B>) {
     // Default to disable caching completely.
     if !res.headers().contains_key(CacheControl::name()) {
         res.typed_header(CacheControl::new().with_no_cache().with_no_store());
+    }
+}
+
+/// Mutate a response to set CORS headers, if enabled in configuration.
+fn set_cors_headers<B>(ctx: &Context, res: &mut hyper::Response<B>) {
+    let cors_ttl = ctx.app.cors_ttl;
+    if cors_ttl.is_zero() {
+        return;
+    }
+
+    let Some(ref allowlist) = ctx.app.allowed_origins else {
+        return;
+    };
+
+    if let Some(origin) = ctx
+        .req
+        .headers
+        .get(hyper::header::ORIGIN)
+        .and_then(|value| value.to_str().ok())
+        .filter(|value| allowlist.iter().any(|entry| entry == value))
+    {
+        res.header(
+            hyper::header::ACCESS_CONTROL_ALLOW_METHODS,
+            "GET, POST, OPTIONS".to_owned(),
+        );
+        res.header(
+            hyper::header::ACCESS_CONTROL_ALLOW_ORIGIN,
+            origin.to_owned(),
+        );
+        res.header(
+            hyper::header::ACCESS_CONTROL_MAX_AGE,
+            cors_ttl.as_secs().to_string(),
+        );
     }
 }
 

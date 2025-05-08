@@ -22,6 +22,7 @@ pub struct EnvConfig {
     data_dir: Option<String>,
 
     allowed_origins: Option<StringList>,
+    cors_ttl: Option<u64>,
     #[serde(default)]
     allowed_domains: StringList,
     #[serde(default)]
@@ -139,6 +140,9 @@ impl EnvConfig {
                     Err(err) => panic!("IO error in BROKER_ALLOWED_ORIGINS entry {source}: {err}"),
                 }
             }
+        }
+        if let Some(val) = parsed.cors_ttl {
+            builder.cors_ttl = Duration::from_secs(val);
         }
         for (source, res) in parsed.allowed_domains.iter_values() {
             let data = match res {

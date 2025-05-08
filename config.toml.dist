@@ -192,6 +192,13 @@ verify_public_ip = true
 
 allowed_domains_only = false
 
+# EXPERIMENTAL. If set to a non-zero value, requests with an `Origin` header
+# set to one of the `allowed_origins` configured above will have CORS headers
+# added to the response. The value of this setting controls the value of the
+# `Access-Control-Max-Age` response header.
+
+#cors_ttl = 0
+
 ################################################################
 # Advanced settings
 

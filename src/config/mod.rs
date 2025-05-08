@@ -70,6 +70,7 @@ pub struct Config {
     pub public_url: String,
     pub trusted_proxies: Vec<IpNetwork>,
     pub allowed_origins: Option<Vec<String>>,
+    pub cors_ttl: Duration,
     pub domain_validator: DomainValidator,
 
     pub static_ttl: Duration,
@@ -389,6 +390,7 @@ pub struct ConfigBuilder {
     pub public_url: Option<String>,
     pub trusted_proxies: Vec<IpNetwork>,
     pub allowed_origins: Option<Vec<String>>,
+    pub cors_ttl: Duration,
     pub domain_validator: DomainValidator,
     pub data_dir: String,
 
@@ -453,6 +455,7 @@ impl ConfigBuilder {
                 .map(|v| v.parse().unwrap())
                 .collect(),
             allowed_origins: None,
+            cors_ttl: Duration::ZERO,
             domain_validator: DomainValidator::new(),
             data_dir: String::new(),
 
@@ -660,6 +663,7 @@ impl ConfigBuilder {
             public_url: self.public_url.expect("no public url configured"),
             trusted_proxies: self.trusted_proxies,
             allowed_origins: self.allowed_origins,
+            cors_ttl: self.cors_ttl,
             domain_validator: self.domain_validator,
 
             static_ttl: self.static_ttl,
