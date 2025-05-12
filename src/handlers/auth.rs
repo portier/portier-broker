@@ -335,7 +335,7 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
         // The error itself is already logged above, inside the spawned task.
     } else {
         // Timeout causes fallback to the email bridge.
-        info!("discovery timed out for {}", email_addr);
+        info!("discovery timed out for {email_addr}");
     }
 
     // Fall back to email loop auth.

@@ -164,9 +164,7 @@ impl DomainValidator {
                 }
                 Err(err) => {
                     log::debug!(
-                        "Falling back to A/AAAA lookup for domain '{}', because MX lookup failed: {}",
-                        domain,
-                        err
+                        "Falling back to A/AAAA lookup for domain '{domain}', because MX lookup failed: {err}"
                     );
                     vec![&domain]
                 }
@@ -212,10 +210,7 @@ impl DomainValidator {
                         }
                         Err(err) => {
                             log::debug!(
-                                "Could not resolve mail server '{}' for domain '{}': {}",
-                                server,
-                                domain,
-                                err
+                                "Could not resolve mail server '{server}' for domain '{domain}': {err}"
                             );
                         }
                     }

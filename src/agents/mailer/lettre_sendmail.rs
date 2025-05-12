@@ -35,7 +35,7 @@ impl Handler<SendMail> for SendmailMailer {
                 cx.reply(true);
             }
             Err(err) => {
-                log::error!("Could not send mail: {}", err);
+                log::error!("Could not send mail: {err}");
                 cx.reply(false);
             }
         }

@@ -97,7 +97,7 @@ impl RedisStore {
         let pubsub = pubsub::Pubsub::new(conn.clone(), push_tx.clone());
         let locking = locking::LockClient::new(conn.clone(), pubsub.clone(), rng);
 
-        log::warn!("Storing sessions and keys in Redis at {}", addr);
+        log::warn!("Storing sessions and keys in Redis at {addr}");
         log::warn!("Please always double check this Redis and the connection to it are secure!");
         log::warn!("(This warning can't be fixed; it's a friendly reminder.)");
 

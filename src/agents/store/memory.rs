@@ -268,7 +268,7 @@ impl Handler<DecrLimits> for MemoryStore {
                 } else {
                     entry.get_mut().value -= 1;
                 }
-            };
+            }
         }
         cx.reply(Ok(()));
     }

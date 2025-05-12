@@ -220,7 +220,7 @@ pub fn verify_jws(
     // Verify the signature using the public key.
     let message_len = parts[0].len() + parts[1].len() + 1;
     pub_key
-        .verify(jws[..message_len].as_bytes(), &decoded[2])
+        .verify(&jws.as_bytes()[..message_len], &decoded[2])
         .map_err(|_err| VerifyError::BadSignature)?;
 
     // Return the payload.
