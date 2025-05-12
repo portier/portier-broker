@@ -2,7 +2,7 @@ use http::{header::HeaderName, Request};
 use ipnetwork::IpNetwork;
 use std::net::{IpAddr, SocketAddr};
 
-static X_FORWARDED_FOR: HeaderName = HeaderName::from_static("x-forwarded-for");
+const X_FORWARDED_FOR: HeaderName = HeaderName::from_static("x-forwarded-for");
 
 /// Get the real IP-address of the client.
 ///

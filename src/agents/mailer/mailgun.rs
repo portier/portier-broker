@@ -7,8 +7,8 @@ use url::{form_urlencoded, Url};
 
 use crate::{agents::*, email_address::EmailAddress, metrics, utils::agent::*};
 
-static JSON_MIME: HeaderValue = HeaderValue::from_static("application/json");
-static URLENCODED_MIME: HeaderValue = HeaderValue::from_static("application/x-www-form-urlencoded");
+const JSON_MIME: HeaderValue = HeaderValue::from_static("application/json");
+const URLENCODED_MIME: HeaderValue = HeaderValue::from_static("application/x-www-form-urlencoded");
 
 /// Mailer agent that uses the Mailgun API.
 pub struct MailgunMailer {
@@ -64,10 +64,10 @@ impl Handler<SendMail> for MailgunMailer {
             .finish();
 
         let mut request = Request::new(Method::POST, self.messages_api.clone());
-        request.headers_mut().append("Accept", JSON_MIME.clone());
+        request.headers_mut().append("Accept", JSON_MIME);
         request
             .headers_mut()
-            .append("Content-Type", URLENCODED_MIME.clone());
+            .append("Content-Type", URLENCODED_MIME);
         request
             .headers_mut()
             .append("Authorization", self.auth.clone());

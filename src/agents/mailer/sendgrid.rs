@@ -8,7 +8,7 @@ use reqwest::{Method, Request};
 use serde_json::json;
 use url::Url;
 
-static JSON_MIME: HeaderValue = HeaderValue::from_static("application/json");
+const JSON_MIME: HeaderValue = HeaderValue::from_static("application/json");
 
 /// Mailer agent that uses the Sendgrid API.
 pub struct SendgridMailer {
@@ -67,9 +67,7 @@ impl Handler<SendMail> for SendgridMailer {
         .expect("Could not build Sendgrid request JSON body");
 
         let mut request = Request::new(Method::POST, self.api.clone());
-        request
-            .headers_mut()
-            .append("Content-Type", JSON_MIME.clone());
+        request.headers_mut().append("Content-Type", JSON_MIME);
         request
             .headers_mut()
             .append("Authorization", self.auth.clone());

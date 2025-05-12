@@ -9,7 +9,7 @@ use serde::Deserialize;
 use serde_json::json;
 use url::Url;
 
-static JSON_MIME: HeaderValue = HeaderValue::from_static("application/json");
+const JSON_MIME: HeaderValue = HeaderValue::from_static("application/json");
 
 #[derive(Deserialize)]
 struct PostmarkResponse {
@@ -71,10 +71,8 @@ impl Handler<SendMail> for PostmarkMailer {
         .expect("Could not build Postmark request JSON body");
 
         let mut request = Request::new(Method::POST, self.api.clone());
-        request.headers_mut().append("Accept", JSON_MIME.clone());
-        request
-            .headers_mut()
-            .append("Content-Type", JSON_MIME.clone());
+        request.headers_mut().append("Accept", JSON_MIME);
+        request.headers_mut().append("Content-Type", JSON_MIME);
         request
             .headers_mut()
             .append("X-Postmark-Server-Token", self.token.clone());
