@@ -14,8 +14,6 @@
         , rustPlatform
         , cmake
         , makeWrapper
-        , Security
-        , SystemConfiguration
         , buildType ? "release"
         }:
         rustPlatform.buildRustPackage {
@@ -25,7 +23,6 @@
           cargoLock.lockFile = ./Cargo.lock;
 
           nativeBuildInputs = [ cmake makeWrapper ];
-          buildInputs = lib.optionals stdenv.isDarwin [ Security SystemConfiguration ];
 
           doCheck = true;
           inherit buildType;
@@ -44,12 +41,7 @@
         };
 
       overlay = final: prev: {
-        portier-broker =
-          # TODO: aws-lc-rs still seems to build with the wrong SDK.
-          let appleSdk = final.darwin.apple_sdk_11_0;
-          in appleSdk.callPackage package {
-            inherit (appleSdk.frameworks) Security SystemConfiguration;
-          };
+        portier-broker = final.callPackage package { };
       };
 
       pkgs = lib.listToAttrs (map
