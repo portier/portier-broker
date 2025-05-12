@@ -54,7 +54,7 @@ default-features = false
 features = ["std"]
 
 [dependencies.ctrlc]
-version = "3.2.1"
+version = "3.4.7"
 features = ["termination"]
 
 # TODO: https://github.com/johnstonskj/rust-email_address/issues/30
