@@ -1,13 +1,15 @@
-use hickory_resolver::{
-    config::{LookupIpStrategy, NameServerConfig, Protocol, ResolverConfig, ResolverOpts},
-    proto::{error::ProtoError, rr::rdata::MX},
-    Name, TokioAsyncResolver,
-};
 use std::{
     collections::HashSet,
     io,
     net::{IpAddr, ToSocketAddrs},
     time::Duration,
+};
+
+use hickory_resolver::{
+    config::{LookupIpStrategy, NameServerConfig, ResolveHosts, ResolverConfig, ResolverOpts},
+    name_server::TokioConnectionProvider,
+    proto::{rr::rdata::MX, xfer::Protocol, ProtoError},
+    Name, Resolver,
 };
 use thiserror::Error;
 
@@ -48,7 +50,7 @@ pub struct DomainValidator {
     /// Exact domains to block.
     blocked_domains: HashSet<Name>,
     /// DNS resolver for email domain validation.
-    dns_resolver: Option<TokioAsyncResolver>,
+    dns_resolver: Option<Resolver<TokioConnectionProvider>>,
     /// Whether to ignore reserved IP addresses in DNS results.
     pub verify_public_ip: bool,
     /// Whether to treat anything not in the allow-list as blocked.
@@ -95,6 +97,7 @@ impl DomainValidator {
                 socket_addr,
                 protocol: Protocol::Udp,
                 tls_dns_name: None,
+                http_endpoint: None,
                 trust_negative_responses: true,
                 bind_addr: None,
             });
@@ -115,10 +118,14 @@ impl DomainValidator {
         // Leave all caching to the server.
         opts.cache_size = 0;
         // Per our config docs, using `/etc/hosts` would be surprising behaviour.
-        opts.use_hosts_file = false;
+        opts.use_hosts_file = ResolveHosts::Never;
 
         // Unwrap, because this currently doesn't appear to fail ever.
-        self.dns_resolver = Some(TokioAsyncResolver::tokio(cfg, opts));
+        self.dns_resolver = Some(
+            Resolver::builder_with_config(cfg, TokioConnectionProvider::default())
+                .with_options(opts)
+                .build(),
+        );
         Ok(())
     }
 
@@ -157,9 +164,7 @@ impl DomainValidator {
                 }
                 Err(err) => {
                     log::debug!(
-                        "Falling back to A/AAAA lookup for domain '{}', because MX lookup failed: {}",
-                        domain,
-                        err
+                        "Falling back to A/AAAA lookup for domain '{domain}', because MX lookup failed: {err}"
                     );
                     vec![&domain]
                 }
@@ -205,10 +210,7 @@ impl DomainValidator {
                         }
                         Err(err) => {
                             log::debug!(
-                                "Could not resolve mail server '{}' for domain '{}': {}",
-                                server,
-                                domain,
-                                err
+                                "Could not resolve mail server '{server}' for domain '{domain}': {err}"
                             );
                         }
                     }

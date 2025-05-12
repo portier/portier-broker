@@ -168,7 +168,7 @@ async fn start_server(builder: ConfigBuilder) {
         let addr = unix.local_addr().expect("Socket activation failed");
         listener = Some(Listener::Unix(unix));
         if let Some(path) = addr.as_pathname() {
-            log::info!("Listening on Unix {:?} (via service manager)", path);
+            log::info!("Listening on Unix {path:?} (via service manager)");
         } else {
             log::info!("Listening on unnamed Unix socket (via service manager)");
         }
@@ -182,7 +182,7 @@ async fn start_server(builder: ConfigBuilder) {
                 let tcp = TcpListener::from_std(tcp).expect("Socket activation failed");
                 let addr = tcp.local_addr().expect("Socket activation failed");
                 listener = Some(Listener::Tcp(tcp));
-                log::info!("Listening on TCP {} (via service manager)", addr);
+                log::info!("Listening on TCP {addr} (via service manager)");
             }
             Ok(None) => unreachable!(),
             Err(err) => {
@@ -203,7 +203,7 @@ async fn start_server(builder: ConfigBuilder) {
         let tcp = TcpListener::bind(&addr)
             .await
             .expect("Unable to bind to listen address");
-        log::info!("Listening on TCP {}", addr);
+        log::info!("Listening on TCP {addr}");
         Listener::Tcp(tcp)
     };
 
@@ -250,7 +250,7 @@ async fn start_server(builder: ConfigBuilder) {
             // Drive active connections.
             Some(res) = connections.join_next() => {
                 if let Err(err) = res {
-                    log::warn!("Error in HTTP connection: {}", err);
+                    log::warn!("Error in HTTP connection: {err}");
                 }
                 accepting = true;
                 continue;
@@ -269,7 +269,7 @@ async fn start_server(builder: ConfigBuilder) {
                 | io::ErrorKind::ConnectionAborted
                 | io::ErrorKind::ConnectionReset => {}
                 _ => {
-                    log::error!("Accept error: {}", err);
+                    log::error!("Accept error: {err}");
                     // Assume resource exhaustion (e.g.: out of fds).
                     // Delay accepting until one of our connections closes.
                     if connections.is_empty() {

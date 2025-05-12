@@ -66,7 +66,7 @@ impl ManualKeys {
         let mut rsa_keys = vec![];
         for (source, entries) in parsed {
             if entries.is_empty() {
-                warn!("{}: ignoring, no PEM sections found", source);
+                warn!("{source}: ignoring, no PEM sections found");
             }
 
             for (idx, result) in entries.into_iter().enumerate() {
@@ -74,14 +74,14 @@ impl ManualKeys {
                 let entry = match result {
                     Ok(entry) => entry,
                     Err(err) => {
-                        warn!("{} #{}: ignoring, {}", source, idx, err);
+                        warn!("{source} #{idx}: ignoring, {err}");
                         continue;
                     }
                 };
 
                 let alg = entry.key_pair.signing_alg();
                 if !signing_algs.contains(&alg) {
-                    warn!("{} #{}: ignoring, disabled signing algorithm", source, idx);
+                    warn!("{source} #{idx}: ignoring, disabled signing algorithm");
                     continue;
                 }
 
@@ -91,10 +91,7 @@ impl ManualKeys {
                 }
 
                 let fp = entry.raw.fingerprint();
-                info!(
-                    "{} #{}: found {} key, fingerprint: {}",
-                    source, idx, alg, fp
-                );
+                info!("{source} #{idx}: found {alg} key, fingerprint: {fp}");
             }
         }
 

@@ -31,7 +31,7 @@ impl Drop for LockGuard {
             invocation.key(key.as_ref()).arg(&request[..]);
             let res: RedisResult<Value> = invocation.invoke_async(&mut conn).await;
             if let Err(err) = res {
-                log::error!("Failed to release Redis lock: {:?}", err);
+                log::error!("Failed to release Redis lock: {err:?}");
             }
         });
     }

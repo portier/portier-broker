@@ -41,23 +41,23 @@ impl BrokerError {
             | BrokerError::RateLimited
             | BrokerError::SessionExpired
             | BrokerError::ProviderCancelled => {
-                debug!("{}", self);
+                debug!("{self}");
                 None
             }
             // Provider errors can be noteworthy, especially when
             // the issue is network related.
             BrokerError::Provider(_) => {
-                info!("{}", self);
+                info!("{self}");
                 None
             }
             // Internal errors should ring alarm bells.
             BrokerError::Internal(_) => {
                 if let Some(rng) = rng {
                     let reference = random_zbase32(6, rng).await;
-                    error!("[REF:{}] {}", reference, self);
+                    error!("[REF:{reference}] {self}");
                     Some(reference)
                 } else {
-                    error!("{}", self);
+                    error!("{self}");
                     None
                 }
             }

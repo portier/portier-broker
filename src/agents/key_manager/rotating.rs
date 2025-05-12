@@ -192,10 +192,7 @@ impl Agent for RotatingKeys {
         // Initialize timer task.
         let store = self.store.clone();
         self.delays = Some(DelayQueueTask::spawn(move |signing_alg| {
-            log::info!(
-                "Reached expiry time for {} keys, attempting rotation.",
-                signing_alg
-            );
+            log::info!("Reached expiry time for {signing_alg} keys, attempting rotation.");
             store.send(RotateKeysLocked(signing_alg));
         }));
 
@@ -278,7 +275,7 @@ impl Handler<UpdateKeys> for RotatingKeys {
         let delays = self.delays.clone();
         cx.reply_later(async move {
             delays.unwrap().insert(signing_alg, current.expires).await;
-            log::info!("New {} keys installed.", signing_alg);
+            log::info!("New {signing_alg} keys installed.");
         });
     }
 }
@@ -309,7 +306,7 @@ impl Handler<RotateKeys> for RotatingKeys {
         }
 
         if current.is_some() && next.is_some() {
-            log::info!("No keys rotated for {}", signing_alg);
+            log::info!("No keys rotated for {signing_alg}");
             return cx.reply(None);
         }
 
@@ -318,14 +315,14 @@ impl Handler<RotateKeys> for RotatingKeys {
                 value: self.generate_one(signing_alg),
                 expires: SystemTime::now() + self.keys_ttl,
             });
-            log::info!("Generated current key for {}.", signing_alg);
+            log::info!("Generated current key for {signing_alg}.");
         }
         if next.is_none() {
             next = Some(Expiring {
                 value: self.generate_one(signing_alg),
                 expires: current.as_ref().unwrap().expires + self.keys_ttl,
             });
-            log::info!("Generated next key for {}.", signing_alg);
+            log::info!("Generated next key for {signing_alg}.");
         }
 
         cx.reply(Some(KeySet {

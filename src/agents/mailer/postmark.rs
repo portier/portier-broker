@@ -89,14 +89,14 @@ impl Handler<SendMail> for PostmarkMailer {
             let data = match future.await {
                 Ok(result) => result.data,
                 Err(err) => {
-                    log::error!("Postmark request failed: {}", err);
+                    log::error!("Postmark request failed: {err}");
                     return false;
                 }
             };
             let response: PostmarkResponse = match serde_json::from_str(&data) {
                 Ok(response) => response,
                 Err(err) => {
-                    log::error!("Could not parse Postmark response: {}", err);
+                    log::error!("Could not parse Postmark response: {err}");
                     return false;
                 }
             };

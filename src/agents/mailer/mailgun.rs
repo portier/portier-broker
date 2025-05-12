@@ -82,7 +82,7 @@ impl Handler<SendMail> for MailgunMailer {
             match future.await {
                 Ok(_) => true,
                 Err(err) => {
-                    log::error!("Mailgun request failed: {}", err);
+                    log::error!("Mailgun request failed: {err}");
                     false
                 }
             }

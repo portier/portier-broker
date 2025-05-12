@@ -84,7 +84,7 @@ impl Handler<SendMail> for SendgridMailer {
             match future.await {
                 Ok(_) => true,
                 Err(err) => {
-                    log::error!("Sendgrid request failed: {}", err);
+                    log::error!("Sendgrid request failed: {err}");
                     false
                 }
             }

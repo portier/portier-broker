@@ -1,7 +1,9 @@
-use crate::email_address::EmailAddress;
+use std::{fmt::Write, net::IpAddr, num::ParseIntError, str::FromStr, time::Duration};
+
 use serde::de::{Deserialize, Deserializer, Error as DeError};
-use std::{net::IpAddr, num::ParseIntError, str::FromStr, time::Duration};
 use thiserror::Error;
+
+use crate::email_address::EmailAddress;
 
 #[derive(Debug, Error, Eq, PartialEq)]
 pub enum LimitConfigError {
@@ -124,7 +126,7 @@ impl LimitInput {
         let mut result = format!("{prefix}{}", config.id);
         if config.with_ip {
             result.push_str(sep);
-            result.push_str(&format!("{}", self.ip));
+            write!(result, "{}", self.ip).unwrap();
         }
         if config.with_email_addr {
             result.push_str(sep);

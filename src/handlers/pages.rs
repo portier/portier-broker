@@ -1,10 +1,12 @@
-use crate::error::BrokerError;
-use crate::utils::http::ResponseExt;
-use crate::web::{data_response, empty_response, Context, HandlerResult, ResponseBody};
+use std::{env, fmt::Write};
+
 use headers::{ContentType, Header};
 use http::StatusCode;
 use hyper_staticfile::{AcceptEncoding, ResponseBuilder};
-use std::env;
+
+use crate::error::BrokerError;
+use crate::utils::http::ResponseExt;
+use crate::web::{data_response, empty_response, Context, HandlerResult, ResponseBody};
 
 /// Handler for the root path, redirects to the Portier homepage.
 pub async fn index(_ctx: &mut Context) -> HandlerResult {
@@ -22,7 +24,7 @@ pub async fn version(_ctx: &mut Context) -> HandlerResult {
     // Maybe check/set it in build.rs? Fall back to HEROKU_SLUG_COMMIT?
     let mut body = format!("Portier {}", env!("CARGO_PKG_VERSION"));
     if let Ok(commit) = env::var("HEROKU_SLUG_COMMIT") {
-        body.push_str(&format!(" (git commit {commit})"));
+        write!(body, " (git commit {commit})").unwrap();
     }
 
     let mut res = data_response(body);

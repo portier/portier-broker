@@ -275,7 +275,7 @@ impl TomlConfig {
                     Err(err) => panic!("IO error in allowed_origins entry {source}: {err}"),
                 }
             }
-        };
+        }
         for (source, res) in parsed.allowed_domains.iter_values() {
             let data = match res {
                 Ok(data) => data,
