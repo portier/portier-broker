@@ -129,9 +129,9 @@ version = "0.1.17"
 features = ["sync", "time"]
 
 [dependencies.hickory-resolver]
-version = "0.24.0"
+version = "0.25.2"
 default-features = false
-features = ["tokio-runtime"]
+features = ["tokio"]
 
 [dependencies.url]
 version = "2.1.1"
