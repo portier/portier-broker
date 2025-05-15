@@ -248,6 +248,8 @@ resources:
               value: "{{ properties["public_ip"] }}"
 {%- endif %}
 {%- endif %}
+            - name: BROKER_CORS_TTL
+              value: "{{ properties["cors_ttl"] }}"
             resources:
               limits:
                 cpu: 1000m
