@@ -105,6 +105,8 @@ resources:
       - {{ properties["region"] }}-docker.pkg.dev/$PROJECT_ID/$REPO_NAME/$REPO_NAME:$TAG_NAME
       steps:
       - name: gcr.io/cloud-builders/docker
+        env:
+        - DOCKER_BUILDKIT=1
         args:
         - build
         - -t
