@@ -531,17 +531,25 @@ fn set_cors_headers<B>(ctx: &Context, res: &mut hyper::Response<B>) {
         return;
     }
 
-    let Some(ref allowlist) = ctx.app.allowed_origins else {
-        return;
-    };
-
-    if let Some(origin) = ctx
+    // only if an Origin header is present
+    let origin = if let Some(origin) = ctx
         .req
         .headers
         .get(hyper::header::ORIGIN)
         .and_then(|value| value.to_str().ok())
-        .filter(|value| allowlist.iter().any(|entry| entry == value))
     {
+        origin.to_string()
+    } else {
+        return;
+    };
+
+    let cors = if let Some(ref allowed_origins) = ctx.app.allowed_origins {
+        allowed_origins.contains(&origin)
+    } else {
+        // when allowed_origins is unset all origins are allowed
+        true
+    };
+    if cors {
         res.header(
             hyper::header::ACCESS_CONTROL_ALLOW_METHODS,
             "GET, POST, OPTIONS".to_owned(),
