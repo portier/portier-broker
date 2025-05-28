@@ -1863,7 +1863,6 @@ dependencies = [
  "listenfd",
  "log 0.4.27",
  "mustache",
- "percent-encoding",
  "redis",
  "reqwest",
  "rusqlite",

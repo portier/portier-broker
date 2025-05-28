@@ -11,11 +11,8 @@ msgstr "Beende den Loginvorgang für"
 msgid "You received this email so that we may confirm your email address and finish your login to:"
 msgstr "Du hast diese Email erhalten, damit wir deine Emailadresse bestätigen und den Login beenden können:"
 
-msgid "Click here to login"
-msgstr "Klicke hier um dich einzuloggen"
-
-msgid "Alternatively, enter the following code on the login page:"
-msgstr "Alternativ kannst du diesen Code auf der Loginseite eingeben:"
+msgid "Enter the following code on the login page:"
+msgstr "Gebe diesen Code ein auf der Loginseite:"
 
 msgid "Confirm your address"
 msgstr "Bestätige deine Adresse"
@@ -23,11 +20,8 @@ msgstr "Bestätige deine Adresse"
 msgid "We've sent you an email to confirm your address."
 msgstr "Wir haben dir eine Email gesendet, um deine Adresse zu bestätigen."
 
-msgid "Use the link in that email to login to"
-msgstr "Benutze den Link in der Email für den Login bei"
-
-msgid "Alternatively, enter the code from the email to continue in this browser tab:"
-msgstr "Alternativ gebe in diesem Browsertab den in der Email stehenden Code ein:"
+msgid "Enter the code from the email to finish your login to"
+msgstr "Gebe den in der Email stehenden Code ein, um den Login zu beenden:"
 
 msgid "The code you entered was incorrect."
 msgstr "Der eingegebene Code war falsch."

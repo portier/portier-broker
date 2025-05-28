@@ -31,12 +31,11 @@ const TIMEOUT = 10000;
 const OVERALL_TIMEOUT = 30000;
 const JOHN_EMAIL = "john.doe@example.com";
 const BROKER_CONFIRM_TITLE = "Portier – Confirm your address";
-const BROKER_ERROR_TITLE = "Portier – Error";
 const RP_LOGIN_TITLE = "RP: Login";
 const RP_CONFIRMED_TITLE = "RP: Confirmed";
 const RP_GOT_ERROR_TITLE = "RP: Got error";
 
-test("successful flow with code input", async ({ mailbox, driver }) => {
+test("successful standard flow", async ({ mailbox, driver }) => {
   await driver.get("http://localhost:44180/");
   await driver.wait(until.titleIs(RP_LOGIN_TITLE), TIMEOUT);
 
@@ -51,6 +50,9 @@ test("successful flow with code input", async ({ mailbox, driver }) => {
   }
   const code = match[0];
 
+  const sessionInput = await driver.findElement(By.name("session"));
+  const sessionId = await sessionInput.getAttribute('value')
+
   const codeInput = await driver.findElement(By.name("code"));
   await codeInput.sendKeys(code, Key.RETURN);
   await driver.wait(until.titleIs(RP_CONFIRMED_TITLE), TIMEOUT);
@@ -58,40 +60,18 @@ test("successful flow with code input", async ({ mailbox, driver }) => {
   const textElement = await driver.findElement(By.css("p"));
   const text = await textElement.getText();
   assert.strictEqual(text, JOHN_EMAIL);
-});
-
-test("successful flow following the email link", async ({
-  mailbox,
-  driver,
-}) => {
-  await driver.get("http://localhost:44180/");
-  await driver.wait(until.titleIs(RP_LOGIN_TITLE), TIMEOUT);
-
-  const emailInput = await driver.findElement(By.name("email"));
-  await emailInput.sendKeys(JOHN_EMAIL, Key.RETURN);
-  await driver.wait(until.titleIs(BROKER_CONFIRM_TITLE), TIMEOUT);
-
-  const mail = mailbox.nextMail();
-  const match = /^http:\/\/localhost:44133\/confirm\?.+$/m.exec(mail ?? "");
-  if (!match) {
-    throw Error("Could not find the confirmation URL in the email text");
-  }
-  const url = match[0];
-
-  await driver.get(url);
-  await driver.wait(until.titleIs(RP_CONFIRMED_TITLE), TIMEOUT);
-
-  const textElement = await driver.findElement(By.css("p"));
-  const text = await textElement.getText();
-  assert.strictEqual(text, JOHN_EMAIL);
 
   // Ensure the link no longer works.
-  await driver.get(url);
-  await driver.wait(until.titleIs(BROKER_ERROR_TITLE), TIMEOUT);
-
-  const introElement = await driver.findElement(By.className("head"));
-  const intro = await introElement.getText();
-  assert.strictEqual(intro, "The session has expired.");
+  const replayData = new URLSearchParams()
+  replayData.set('session', sessionId);
+  replayData.set('code', code);
+  const replayResponse = await fetch('http://localhost:44133/confirm', {
+    method: 'POST',
+    body: replayData.toString(),
+  })
+  assert.strictEqual(replayResponse.status, 400);
+  const replayResponseHtml = await replayResponse.text()
+  assert.ok(replayResponseHtml.includes("The session has expired."));
 });
 
 test("successful flow with authorization code", async ({

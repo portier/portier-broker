@@ -48,16 +48,6 @@ h1, p, hr, .entry {
   background: #36abdf;
   color: #fff;
 }
-hr {
-  border: 0;
-  height: 0;
-  border-top: 1px solid rgba(0, 0, 0, 0.1);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.3);
-}
-
-aside p, aside .entry button, aside .entry input {
-  font-size: 0.9em;
-}
-aside .error {
+.error {
   color: #f00;
 }
