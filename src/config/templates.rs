@@ -38,6 +38,8 @@ impl Template {
 pub struct Templates {
     /// Page displayed when the confirmation email was sent.
     pub confirm_email: Template,
+    /// Page displayed when following an email confirmation link from a new device..
+    pub confirm_device: Template,
     /// Page displayed when the `login_hint` is missing.
     pub login_hint: Template,
     /// HTML formatted email containing the one-type pad.
@@ -56,6 +58,7 @@ impl Templates {
     pub fn new(data_dir: &str) -> Templates {
         Templates {
             confirm_email: Template::compile(data_dir, "confirm_email"),
+            confirm_device: Template::compile(data_dir, "confirm_device"),
             email_html: Template::compile(data_dir, "email_html"),
             email_text: Template::compile(data_dir, "email_text"),
             login_hint: Template::compile(data_dir, "login_hint"),

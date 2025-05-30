@@ -20,9 +20,7 @@ pub async fn router(ctx: &mut Context) -> HandlerResult {
         (&Method::POST, "/callback") => bridges::oidc::callback(ctx).await,
 
         // Email loop endpoints
-        // To thwart automated scanners that follow email links, we capture the query parameter in
-        // javascripts and rewrite to a POST request.
-        (&Method::GET, "/confirm") => handlers::rewrite_to_post::rewrite_to_post(ctx).await,
+        (&Method::GET, "/confirm") => bridges::email::confirmation(ctx).await,
         (&Method::POST, "/confirm") => bridges::email::confirmation(ctx).await,
 
         // Misc endpoints

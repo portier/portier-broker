@@ -6,12 +6,14 @@ use crate::error::BrokerError;
 use crate::metrics;
 use crate::web::{html_response, json_response, Context, HandlerResult, Response};
 use gettext::Catalog;
-use http::StatusCode;
+use http::{header, Method, StatusCode};
 use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 const QUERY_ESCAPE: &AsciiSet = &CONTROLS.add(b' ').add(b'"').add(b'#').add(b'<').add(b'>');
+
+const DEVICE_COOKIE_VALUE: &str = "device_ok=1";
 
 /// Data we store in the session.
 #[derive(Clone, Serialize, Deserialize)]
@@ -94,20 +96,34 @@ pub async fn auth(mut ctx: AuthContext) -> HandlerResult {
     }
 
     // Render a form for the user.
-    if ctx.want_json {
-        Ok(json_response(&json!({
+    let mut res = if ctx.want_json {
+        json_response(&json!({
             "result": "verification_code_sent",
             "session": &ctx.session_id,
-        })))
+        }))
     } else {
-        Ok(render_form(
+        render_form(
             &ctx.app,
             ctx.catalog(),
             &ctx.session_id,
             &display_origin,
             None,
-        ))
+        )
+    };
+
+    // Set a cooke to skip device confirmation.
+    if let Some(ttl) = ctx.app.device_cookie_ttl {
+        let age = if ttl > 0 {
+            format!("; Max-Age={ttl}")
+        } else {
+            String::new()
+        };
+        let value = format!("{DEVICE_COOKIE_VALUE}; Path=/; HttpOnly; Secure; SameSite=None{age}");
+        res.headers_mut()
+            .append(header::SET_COOKIE, value.try_into().unwrap());
     }
+
+    Ok(res)
 }
 
 /// Request handler for one-time pad email loop confirmation.
@@ -115,7 +131,12 @@ pub async fn auth(mut ctx: AuthContext) -> HandlerResult {
 /// Retrieves the session based session ID and the expected one-time pad. Verifies the code and
 /// returns the resulting token to the relying party.
 pub async fn confirmation(ctx: &mut Context) -> HandlerResult {
-    let mut params = ctx.form_params();
+    let mut params = if ctx.method == Method::GET {
+        ctx.query_params()
+    } else {
+        ctx.form_params()
+    };
+
     let session_id = try_get_provider_param!(params, "session");
     let code = try_get_provider_param!(params, "code")
         .replace(char::is_whitespace, "")
@@ -138,6 +159,35 @@ pub async fn confirmation(ctx: &mut Context) -> HandlerResult {
                 &ctx.session_id,
                 &ctx.display_origin(),
                 Some("The code you entered was incorrect."),
+            )
+        };
+        *res.status_mut() = StatusCode::FORBIDDEN;
+        return Ok(res);
+    }
+
+    // Check if we've seen this device before. If not, it may be an email scanner. There have been
+    // instances of email scanners following links, executing JS and making POST requests, which
+    // we need to prevent here.
+    if !params.contains_key("device_ok")
+        && !ctx
+            .headers
+            .get(header::COOKIE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default()
+            .split(';')
+            .any(|v| v.trim() == DEVICE_COOKIE_VALUE)
+    {
+        let mut res = if ctx.want_json {
+            json_response(&json!({
+                "result": "unverified_device",
+            }))
+        } else {
+            render_new_device_page(
+                &ctx.app,
+                ctx.catalog(),
+                &ctx.session_id,
+                &code,
+                &ctx.display_origin(),
             )
         };
         *res.status_mut() = StatusCode::FORBIDDEN;
@@ -180,5 +230,25 @@ fn render_form(
             "error",
             error.map(|msg| catalog.gettext(msg)).unwrap_or_default(),
         ),
+    ]))
+}
+
+fn render_new_device_page(
+    app: &Config,
+    catalog: &Catalog,
+    session_id: &str,
+    code: &str,
+    display_origin: &str,
+) -> Response {
+    html_response(app.templates.confirm_device.render(&[
+        ("display_origin", display_origin),
+        ("session_id", session_id),
+        ("code", code),
+        ("title", catalog.gettext("Finish logging in to")),
+        (
+            "explanation",
+            catalog.gettext("It appears that this is the first time you are logging in on this device. This extra step is necessary to prevent email scanners from consuming your unique login link. Simply follow the link below to complete your login."),
+        ),
+        ("confirm",catalog.gettext("Click here to login")),
     ]))
 }

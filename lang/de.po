@@ -32,6 +32,9 @@ msgstr "Alternativ gebe in diesem Browsertab den in der Email stehenden Code ein
 msgid "The code you entered was incorrect."
 msgstr "Der eingegebene Code war falsch."
 
+msgid "It appears that this is the first time you are logging in on this device. This extra step is necessary to prevent email scanners from consuming your unique login link. Simply follow the link below to complete your login."
+msgstr "Es scheint, dass du dich zum ersten Mal mit diesem Gerät anmelden. Dieser zusätzliche Schritt ist notwendig, um zu verhindern, dass Emailscanner deinen einzigartigen Loginlink verwenden. Folge einfach dem untenstehenden Link, um deine Login zu beenden."
+
 msgid "The request is invalid, and could not be completed."
 msgstr "Dieser Seitenaufruf ist fehlerhaft, und wir können ihn nicht beenden."
 
