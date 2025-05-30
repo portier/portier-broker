@@ -6,10 +6,10 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 
 msgid "Finish logging in to"
-msgstr "Login afronden voor"
+msgstr "Login afronden op"
 
 msgid "You received this email so that we may confirm your email address and finish your login to:"
-msgstr "U ontvangt deze email zodat wij uw email adres kunnen bevestigen en uw login kunnen afronden voor:"
+msgstr "U ontvangt deze email zodat wij uw email adres kunnen bevestigen en uw login kunnen afronden op:"
 
 msgid "Click here to login"
 msgstr "Klik hier om in te loggen"
