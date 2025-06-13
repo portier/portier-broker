@@ -32,6 +32,9 @@ msgstr "Vous pouvez également saisir le code figurant dans l'e-mail pour contin
 msgid "The code you entered was incorrect."
 msgstr "Le code saisi était incorrect."
 
+msgid "It appears that this is the first time you are logging in on this device. This extra step is necessary to prevent email scanners from consuming your unique login link. Simply follow the link below to complete your login."
+msgstr "Il semble que ce soit la première fois que vous vous connectez sur cet appareil. Cette étape supplémentaire est nécessaire pour empêcher les scanners d'e-mails d'utiliser votre lien de connexion unique. Suivez simplement le lien ci-dessous pour terminer votre connexion."
+
 msgid "The request is invalid, and could not be completed."
 msgstr "La demande n'est pas valide et n'a pas pu être traitée."
 

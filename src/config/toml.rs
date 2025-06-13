@@ -71,6 +71,8 @@ pub struct TomlConfig {
 
     sendgrid_token: Option<String>,
 
+    device_cookie_ttl: Option<i32>,
+
     limits: Option<Vec<LimitConfig>>,
     limit_per_email: Option<LegacyLimitPerEmail>,
 
@@ -415,6 +417,16 @@ impl TomlConfig {
 
         if let Some(val) = parsed.sendgrid_token {
             builder.sendgrid_token = Some(val);
+        }
+
+        if let Some(val) = parsed.device_cookie_ttl {
+            if val == -1 {
+                builder.device_cookie_ttl = None;
+            } else if let Ok(val) = val.try_into() {
+                builder.device_cookie_ttl = Some(val);
+            } else {
+                panic!("Invalid device_cookie_ttl value: {val}");
+            }
         }
 
         if let Some(val) = parsed.limits {
