@@ -7,11 +7,8 @@ use crate::metrics;
 use crate::web::{html_response, json_response, Context, HandlerResult, Response};
 use gettext::Catalog;
 use http::StatusCode;
-use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-
-const QUERY_ESCAPE: &AsciiSet = &CONTROLS.add(b' ').add(b'"').add(b'#').add(b'<').add(b'>');
 
 /// Data we store in the session.
 #[derive(Clone, Serialize, Deserialize)]
@@ -34,14 +31,6 @@ pub async fn auth(mut ctx: AuthContext) -> HandlerResult {
     // For display, we split it in two groups of 6.
     let code_fmt = [&code[0..6], &code[6..12]].join(" ");
 
-    // Generate the URL used to verify email address ownership.
-    let href = format!(
-        "{}/confirm?session={}&code={}",
-        ctx.app.public_url,
-        utf8_percent_encode(&ctx.session_id, QUERY_ESCAPE),
-        utf8_percent_encode(&code, QUERY_ESCAPE)
-    );
-
     let display_origin = ctx.display_origin();
 
     let catalog = ctx.catalog();
@@ -53,11 +42,9 @@ pub async fn auth(mut ctx: AuthContext) -> HandlerResult {
     let params = &[
         ("display_origin", display_origin.as_str()),
         ("code", &code_fmt),
-        ("link", &href),
         ("title", catalog.gettext("Finish logging in to")),
         ("explanation", catalog.gettext("You received this email so that we may confirm your email address and finish your login to:")),
-        ("click", catalog.gettext("Click here to login")),
-        ("alternate", catalog.gettext("Alternatively, enter the following code on the login page:")),
+        ("instruction", catalog.gettext("Enter the following code on the login page:")),
     ];
     let html_body = ctx.app.templates.email_html.render(params);
     let text_body = ctx.app.templates.email_text.render(params);
@@ -167,14 +154,8 @@ fn render_form(
             catalog.gettext("We've sent you an email to confirm your address."),
         ),
         (
-            "use",
-            catalog.gettext("Use the link in that email to login to"),
-        ),
-        (
-            "alternate",
-            catalog.gettext(
-                "Alternatively, enter the code from the email to continue in this browser tab:",
-            ),
+            "instruction",
+            catalog.gettext("Enter the code from the email to finish your login to"),
         ),
         (
             "error",

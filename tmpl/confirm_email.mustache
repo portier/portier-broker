@@ -14,14 +14,8 @@
           {{ explanation }}
         </h1>
         <p>
-          {{ use }}<br>
+          {{ instruction }}<br>
           <em>{{ display_origin }}</em>
-        </p>
-      </main>
-      <hr />
-      <aside>
-        <p>
-          {{ alternate }}
         </p>
         <form id="form" action="/confirm" method="post">
           <input type="hidden" name="session" value="{{ session_id }}">
@@ -34,7 +28,7 @@
             {{ error }}
           </p>
         {{/ error }}
-      </aside>
+      </main>
    </div>
 </body>
 </html>

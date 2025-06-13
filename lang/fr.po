@@ -11,11 +11,8 @@ msgstr "Finir de se connecter à"
 msgid "You received this email so that we may confirm your email address and finish your login to:"
 msgstr "Vous avez reçu cet e-mail afin que nous puissions confirmer votre adresse e-mail et terminer votre connexion :"
 
-msgid "Click here to login"
-msgstr "Cliquez ici pour vous connecter"
-
-msgid "Alternatively, enter the following code on the login page:"
-msgstr "Vous pouvez également saisir le code suivant sur la page de connexion :"
+msgid "Enter the following code on the login page:"
+msgstr "Saisissez le code suivant sur la page de connexion :"
 
 msgid "Confirm your address"
 msgstr "Confirmez votre adresse"
@@ -23,11 +20,8 @@ msgstr "Confirmez votre adresse"
 msgid "We've sent you an email to confirm your address."
 msgstr "Nous vous avons envoyé un e-mail pour confirmer votre adresse."
 
-msgid "Use the link in that email to login to"
-msgstr "Utilisez le lien contenu dans cet e-mail pour vous connecter à"
-
-msgid "Alternatively, enter the code from the email to continue in this browser tab:"
-msgstr "Vous pouvez également saisir le code figurant dans l'e-mail pour continuer dans cet onglet du navigateur :"
+msgid "Enter the code from the email to finish your login to"
+msgstr "Saisissez le code figurant dans l'e-mail pour terminer votre connexion :"
 
 msgid "The code you entered was incorrect."
 msgstr "Le code saisi était incorrect."
