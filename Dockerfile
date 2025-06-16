@@ -11,7 +11,6 @@
 FROM rust:1-alpine AS build
 RUN apk add --no-cache build-base
 WORKDIR /build
-RUN cargo build --release --locked
 COPY . .
 # To create a debug build instead, add: --build-arg cargo_flags=""
 ARG cargo_flags="--release --locked"

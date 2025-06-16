@@ -113,6 +113,12 @@ properties:
     description: >
       Password for SMTP server
 
+  cors_ttl:
+    type: integer
+    description: >
+      Setting to a non-zero value will add CORS headers to the response and set the Access-Control-Max-Age header to the value provided here
+    default: 0
+
   instances_min:
     type: integer
     description: >
