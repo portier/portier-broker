@@ -88,6 +88,7 @@ pub struct Config {
 
     pub store: Arc<dyn StoreSender>,
     pub mailer: Box<dyn Sender<SendMail>>,
+    pub device_cookie_ttl: Option<u32>,
 
     pub google_client_id: Option<String>,
     pub domain_overrides: HashMap<String, Vec<Link>>,
@@ -437,6 +438,8 @@ pub struct ConfigBuilder {
     pub sendgrid_token: Option<String>,
     pub sendgrid_api: Url,
 
+    pub device_cookie_ttl: Option<u32>,
+
     pub limits: Vec<LimitConfig>,
 
     pub google_client_id: Option<String>,
@@ -501,6 +504,8 @@ impl ConfigBuilder {
 
             sendgrid_token: None,
             sendgrid_api: "https://api.sendgrid.com/v3/mail/send".parse().unwrap(),
+
+            device_cookie_ttl: Some(0),
 
             limits: [
                 "ip:50/s",
@@ -681,6 +686,7 @@ impl ConfigBuilder {
 
             store,
             mailer,
+            device_cookie_ttl: self.device_cookie_ttl,
 
             google_client_id: self.google_client_id,
             domain_overrides,

@@ -61,3 +61,18 @@ aside p, aside .entry button, aside .entry input {
 aside .error {
   color: #f00;
 }
+
+.confirm_device form {
+  margin: 24px;
+  text-align: center;
+}
+.confirm_device button {
+  display: inline-block;
+  border: 1px solid #23a1d9;
+  border-radius: 4px;
+  padding: 12px 24px;
+  background: #36abdf;
+  color: #fff;
+  font-size: 1.25em;
+  text-decoration: none;
+}

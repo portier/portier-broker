@@ -134,6 +134,17 @@ from_address = "" # Required
 #sendgrid_token = ""
 
 ################################################################
+# Email confirmation
+
+# Email scanners may follow links and interfere with the login process. To
+# prevent this, an extra 'login' button is placed after the email confirmation.
+# We can skip this extra step by setting a cookie. This setting controls the
+# lifespan of that cookie. Must be a positive value in seconds, or zero to
+# use a session cookie (the default), or -1 to disable the cookie completely.
+
+#device_cookie_ttl = 0
+
+################################################################
 # Access control
 
 # List of (exact) website origins that are allowed to use this broker. If left

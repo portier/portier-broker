@@ -25,6 +25,7 @@
         </p>
         <form id="form" action="/confirm" method="post">
           <input type="hidden" name="session" value="{{ session_id }}">
+          <input type="hidden" name="device_ok" value="1">
           <div class="entry">
             <input type="text" name="code" maxlength="20" autofocus autocomplete="off" autocorrect="off" autocapitalize="off"><button type="submit">Login</button>
           </div>

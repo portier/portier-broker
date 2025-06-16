@@ -74,6 +74,8 @@ pub struct EnvConfig {
     sendgrid_token: Option<String>,
     sendgrid_api: Option<Url>,
 
+    device_cookie_ttl: Option<i32>,
+
     limits: Option<Vec<LimitConfig>>,
     limit_per_email: Option<LegacyLimitPerEmail>,
 
@@ -285,6 +287,16 @@ impl EnvConfig {
         }
         if let Some(val) = parsed.sendgrid_api {
             builder.sendgrid_api = val;
+        }
+
+        if let Some(val) = parsed.device_cookie_ttl {
+            if val == -1 {
+                builder.device_cookie_ttl = None;
+            } else if let Ok(val) = val.try_into() {
+                builder.device_cookie_ttl = Some(val);
+            } else {
+                panic!("Invalid device_cookie_ttl value: {val}");
+            }
         }
 
         if let Some(val) = parsed.limits {

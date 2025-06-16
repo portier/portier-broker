@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Portier &ndash; {{ title }} {{ display_origin }}</title>
+    <link rel="stylesheet" href="/static/style.css">
+  </head>
+  <body>
+    <div class="container confirm_device">
+      <main>
+        <h1 class="head">
+          {{ title }}
+          <em>{{ display_origin }}</em>
+        </h1>
+        <p>
+          {{ explanation }}<br>
+        </p>
+        <form id="form" action="/confirm" method="post">
+          <input type="hidden" name="session" value="{{ session_id }}">
+          <input type="hidden" name="code" value="{{ code }}">
+          <input type="hidden" name="device_ok" value="1">
+          <button autofocus type="submit">{{ confirm }}</button>
+        </form>
+      </main>
+   </div>
+</body>
+</html>
