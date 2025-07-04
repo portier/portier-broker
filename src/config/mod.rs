@@ -71,6 +71,7 @@ pub struct Config {
     pub trusted_proxies: Vec<IpNetwork>,
     pub allowed_origins: Option<Vec<String>>,
     pub cors_ttl: Duration,
+    pub csp: Option<String>,
     pub domain_validator: DomainValidator,
 
     pub static_ttl: Duration,
@@ -392,6 +393,7 @@ pub struct ConfigBuilder {
     pub trusted_proxies: Vec<IpNetwork>,
     pub allowed_origins: Option<Vec<String>>,
     pub cors_ttl: Duration,
+    pub csp: Option<String>,
     pub domain_validator: DomainValidator,
     pub data_dir: String,
 
@@ -459,6 +461,7 @@ impl ConfigBuilder {
                 .collect(),
             allowed_origins: None,
             cors_ttl: Duration::ZERO,
+            csp: None,
             domain_validator: DomainValidator::new(),
             data_dir: String::new(),
 
@@ -669,6 +672,7 @@ impl ConfigBuilder {
             trusted_proxies: self.trusted_proxies,
             allowed_origins: self.allowed_origins,
             cors_ttl: self.cors_ttl,
+            csp: self.csp,
             domain_validator: self.domain_validator,
 
             static_ttl: self.static_ttl,

@@ -22,6 +22,7 @@ pub struct TomlConfig {
 
     allowed_origins: Option<StringList>,
     cors_ttl: Option<u64>,
+    csp: Option<String>,
     #[serde(default)]
     allowed_domains: StringList,
     #[serde(default)]
@@ -281,6 +282,9 @@ impl TomlConfig {
         }
         if let Some(val) = parsed.cors_ttl {
             builder.cors_ttl = Duration::from_secs(val);
+        }
+        if let Some(val) = parsed.csp {
+            builder.csp = Some(val);
         }
         for (source, res) in parsed.allowed_domains.iter_values() {
             let data = match res {

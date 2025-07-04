@@ -276,6 +276,7 @@ impl Service {
         if req.uri().scheme_str().is_some() || req.uri().host().is_some() {
             let mut response = empty_response(StatusCode::BAD_REQUEST);
             set_headers(&mut response);
+            set_csp_headers(&app, &mut response);
             return Ok(response);
         }
 
@@ -324,7 +325,7 @@ impl Service {
             .is_some_and(|accept| accept == "application/json");
         let mut ctx = Context {
             req: Arc::new(RequestData {
-                app,
+                app: app.clone(),
                 ip,
                 method: parts.method,
                 uri: parts.uri,
@@ -349,6 +350,7 @@ impl Service {
 
         // Set common response headers.
         set_headers(&mut response);
+        set_csp_headers(&app, &mut response);
         set_cors_headers(&ctx, &mut response);
 
         // Response status metrics.
@@ -499,21 +501,9 @@ async fn handle_error(ctx: &Context, err: BrokerError) -> Response {
 
 /// Mutate a response to set common headers.
 fn set_headers<B>(res: &mut hyper::Response<B>) {
-    // Specify a tight content security policy. We need to be able to POST
-    // redirect anywhere, and run our own scripts.
-    let csp = concat!(
-        "sandbox allow-scripts allow-forms",
-        "; default-src 'none'",
-        "; script-src 'self'",
-        "; style-src 'self'",
-        "; form-action *",
-    );
-
     res.typed_header(StrictTransportSecurity::excluding_subdomains(
         Duration::from_secs(31_536_000_u64),
     ));
-    res.header(hyper::header::CONTENT_SECURITY_POLICY, csp);
-    res.header("x-content-security-policy", csp);
     res.header(hyper::header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_owned());
     res.header(hyper::header::X_XSS_PROTECTION, "1; mode=block".to_owned());
     res.header(hyper::header::X_FRAME_OPTIONS, "DENY".to_owned());
@@ -522,6 +512,26 @@ fn set_headers<B>(res: &mut hyper::Response<B>) {
     if !res.headers().contains_key(CacheControl::name()) {
         res.typed_header(CacheControl::new().with_no_cache().with_no_store());
     }
+}
+
+/// Mutate a response to set CSP headers
+fn set_csp_headers<B>(app: &ConfigRc, res: &mut hyper::Response<B>) {
+    let csp = if let Some(ref csp) = app.csp {
+        csp
+    } else {
+        // Specify a tight content security policy. We need to be able to POST
+        // redirect anywhere, and run our own scripts.
+        concat!(
+            "sandbox allow-scripts allow-forms",
+            "; default-src 'none'",
+            "; script-src 'self'",
+            "; style-src 'self'",
+            "; form-action *",
+        )
+    };
+
+    res.header(hyper::header::CONTENT_SECURITY_POLICY, csp);
+    res.header("x-content-security-policy", csp);
 }
 
 /// Mutate a response to set CORS headers, if enabled in configuration.
@@ -685,8 +695,6 @@ mod tests {
 
         let headers = res.headers();
         assert!(headers.contains_key("Strict-Transport-Security"));
-        assert!(headers.contains_key("Content-Security-Policy"));
-        assert!(headers.contains_key("X-Content-Security-Policy"));
         assert!(headers.contains_key("X-Content-Type-Options"));
         assert!(headers.contains_key("X-XSS-Protection"));
         assert!(headers.contains_key("X-Frame-Options"));

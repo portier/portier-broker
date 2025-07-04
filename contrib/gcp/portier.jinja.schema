@@ -117,7 +117,11 @@ properties:
     type: integer
     description: >
       Setting to a non-zero value will add CORS headers to the response and set the Access-Control-Max-Age header to the value provided here
-    default: 0
+
+  csp:
+    type: string
+    description: >
+      Setting to a non-zero value will add CORS headers to the response and set the Access-Control-Max-Age header to the value provided here
 
   instances_min:
     type: integer

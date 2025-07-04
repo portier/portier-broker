@@ -250,8 +250,14 @@ resources:
               value: "{{ properties["public_ip"] }}"
 {%- endif %}
 {%- endif %}
+{%- if "cors_ttl" in properties %}
             - name: BROKER_CORS_TTL
               value: "{{ properties["cors_ttl"] }}"
+{%- endif %}
+{%- if "csp" in properties %}
+            - name: BROKER_CSP
+              value: "{{ properties["csp"] }}"
+{%- endif %}
             resources:
               limits:
                 cpu: 1000m
