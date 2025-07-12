@@ -37,6 +37,9 @@ h1, p, hr, .entry {
   border-radius: 0;
   vertical-align: middle;
 }
+.entry button:disabled {
+  opacity: 30%;
+}
 .entry input {
   width: 20em;
   border-style: solid;

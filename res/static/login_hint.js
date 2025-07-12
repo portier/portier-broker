@@ -5,3 +5,6 @@ document.addEventListener('DOMContentLoaded', function() {
   input.value = '';
   input.value = value;
 });
+form.addEventListener('submit', function(ev) {
+  ev.target.querySelector('button[type="submit"]').disabled = true;
+});
