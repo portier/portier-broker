@@ -95,7 +95,7 @@ features = ["std", "release_max_level_info"]
 
 [dependencies.redis]
 optional = true
-version = "0.32.0"
+version = "0.32.5"
 default-features = false
 features = ["script", "tokio-comp"]
 
