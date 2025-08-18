@@ -100,7 +100,7 @@ default-features = false
 features = ["script", "tokio-comp"]
 
 [dependencies.reqwest]
-version = "0.12.3"
+version = "0.12.23"
 default-features = false
 features = ["macos-system-configuration"]
 
