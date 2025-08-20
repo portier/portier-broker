@@ -562,6 +562,10 @@ fn set_cors_headers<B>(ctx: &Context, res: &mut hyper::Response<B>) {
             hyper::header::ACCESS_CONTROL_MAX_AGE,
             cors_ttl.as_secs().to_string(),
         );
+        // two RP's using the same instance would re-use the cached CORS
+        // response for the other site and result in a CORS access error
+        // so we use this to tell the browser to cache partition by origin
+        res.header(hyper::header::VARY, "origin".to_owned());
     }
 }
 
