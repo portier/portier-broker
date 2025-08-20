@@ -210,6 +210,11 @@ allowed_domains_only = false
 
 #cors_ttl = 0
 
+# EXPERIMENTAL. If set, the value of this settings controls the value of the
+# `Content-Security-Policy` response header.
+
+#csp = "..."
+
 ################################################################
 # Advanced settings
 
