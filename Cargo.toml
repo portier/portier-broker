@@ -109,7 +109,7 @@ version = "1.6.4"
 
 [dependencies.rusqlite]
 optional = true
-version = "0.36.0"
+version = "0.37.0"
 features = ["bundled"]
 
 [dependencies.rustls]
