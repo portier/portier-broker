@@ -109,7 +109,7 @@ jobs:
       run: cargo build --locked --target $BUILD_TARGET --features insecure
 
     - name: E2E test deps
-      run: cd tests/e2e/ && corepack enable && yarn
+      run: cd tests/e2e/ && npm i
       timeout-minutes: 10
 
     - name: E2E test Firefox
@@ -176,7 +176,7 @@ jobs:
       run: cargo test --locked
 
     - name: E2E test deps
-      run: cd tests/e2e/ && corepack enable && yarn
+      run: cd tests/e2e/ && npm i
       timeout-minutes: 10
 
     - name: E2E test Safari

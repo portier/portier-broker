@@ -12,7 +12,7 @@ of the test run: 44125, 44133, 44180.
 Install the test suite local dependencies with:
 
 ```bash
-yarn
+npm i
 ```
 
 Run the test suite with:
