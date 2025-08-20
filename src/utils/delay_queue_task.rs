@@ -43,7 +43,7 @@ impl<K: Clone + Eq + Hash + Send + 'static> DelayQueueTask<K> {
     /// function is called inside the Tokio run-time, and may not block.
     pub fn spawn<H>(mut handler: H) -> Self
     where
-        H: (FnMut(K)) + Send + 'static,
+        H: FnMut(K) + Send + 'static,
     {
         let (tx, mut rx) = mpsc::channel(8);
         tokio::spawn(async move {

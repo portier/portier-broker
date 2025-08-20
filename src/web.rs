@@ -230,7 +230,8 @@ impl Context {
 /// Hyper Body implementation for responses.
 pub enum ResponseBody {
     Data(Option<Bytes>),
-    Static(StaticBody),
+    Static(Box<StaticBody>),
+    Empty,
 }
 
 impl Body for ResponseBody {
@@ -244,6 +245,7 @@ impl Body for ResponseBody {
         match *self {
             Self::Data(ref mut data) => Poll::Ready(Ok(data.take().map(Frame::data)).transpose()),
             Self::Static(ref mut inner) => Pin::new(inner).poll_frame(cx),
+            Self::Empty => Poll::Ready(None),
         }
     }
 }
@@ -564,10 +566,7 @@ fn set_cors_headers<B>(ctx: &Context, res: &mut hyper::Response<B>) {
             hyper::header::ACCESS_CONTROL_ALLOW_METHODS,
             "GET, POST, OPTIONS".to_owned(),
         );
-        res.header(
-            hyper::header::ACCESS_CONTROL_ALLOW_ORIGIN,
-            origin.to_owned(),
-        );
+        res.header(hyper::header::ACCESS_CONTROL_ALLOW_ORIGIN, origin.clone());
         res.header(
             hyper::header::ACCESS_CONTROL_MAX_AGE,
             cors_ttl.as_secs().to_string(),
@@ -682,7 +681,7 @@ pub fn html_response(html: String) -> Response {
 
 /// Create a response with an empty body and a specific status code.
 pub fn empty_response(status: StatusCode) -> Response {
-    let mut res = Response::new(ResponseBody::Static(StaticBody::Empty));
+    let mut res = Response::new(ResponseBody::Empty);
     *res.status_mut() = status;
     res
 }

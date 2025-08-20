@@ -137,10 +137,10 @@ impl fmt::Display for StringListSource<'_> {
         match self {
             StringListSource::Literal { index } => write!(f, "#{} (literal)", index + 1),
             StringListSource::File { index, path, line } if *line != 0 => {
-                write!(f, "#{} {path:?}:{line}", index + 1)
+                write!(f, "#{} {}:{line}", index + 1, path.display())
             }
             StringListSource::File { index, path, .. } => {
-                write!(f, "#{} {path:?}", index + 1)
+                write!(f, "#{} {}", index + 1, path.display())
             }
         }
     }
