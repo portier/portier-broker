@@ -59,5 +59,5 @@ pub async fn static_(ctx: &mut Context) -> HandlerResult {
         .cache_headers(Some(ctx.app.static_ttl.as_secs() as u32))
         .build(result)
         .expect("could not build static serving response");
-    Ok(res.map(ResponseBody::Static))
+    Ok(res.map(|body| ResponseBody::Static(Box::new(body))))
 }

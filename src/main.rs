@@ -168,7 +168,7 @@ async fn start_server(builder: ConfigBuilder) {
         let addr = unix.local_addr().expect("Socket activation failed");
         listener = Some(Listener::Unix(unix));
         if let Some(path) = addr.as_pathname() {
-            log::info!("Listening on Unix {path:?} (via service manager)");
+            log::info!("Listening on Unix {} (via service manager)", path.display());
         } else {
             log::info!("Listening on unnamed Unix socket (via service manager)");
         }
