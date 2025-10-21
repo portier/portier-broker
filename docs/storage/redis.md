@@ -31,10 +31,10 @@ variables:
 
 ## Security
 
-It is strongly recommended to protect your Redis server at the network level.
-You should take as much care as possible to only allow the broker to connect to
-Redis. Ideally, you'd also ensure no eavesdropping is possible on the
-connections (but this can be difficult in the cloud).
+It is strongly recommended to secure your connection to the Redis server.
+Either ensure the connection uses a secure network, or use TLS (using
+`rediss://` URLs). You should take as much care as possible to only allow the
+broker to connect to Redis.
 
 Notable DON'Ts:
 
