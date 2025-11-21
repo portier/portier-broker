@@ -76,10 +76,12 @@ impl RedisStore {
         fetcher: Addr<FetchAgent>,
         rng: SecureRandom,
     ) -> RedisResult<Self> {
-        if url.starts_with("http://") {
-            url = url.replace("http://", "redis://");
-        } else if !url.starts_with("redis://") {
+        if !url.contains("://") {
+            // Fixes up standalone IPs or hostnames.
             url = format!("redis://{}", &url);
+        } else if url.starts_with("http") {
+            // Handles both HTTP and HTTPS URLs provided by some provisioning systems.
+            url = format!("redis{}", &url[4..]);
         }
         let id = rng.generate_async(16).await.into();
         let mut info = url.as_str().into_connection_info()?;
