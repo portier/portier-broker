@@ -67,7 +67,7 @@ jobs:
       run: cargo build --locked --target $BUILD_TARGET
 
     - name: Upload artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: Linux binary (debug)
         path: target/${{ env.BUILD_TARGET }}/debug/portier-broker
@@ -167,7 +167,7 @@ jobs:
       run: cargo build --locked
 
     - name: Upload artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: MacOS binary (debug)
         path: target/debug/portier-broker
@@ -212,7 +212,7 @@ jobs:
       run: cargo build --locked
 
     - name: Upload artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v5
       with:
         name: Windows binary (debug)
         path: target/debug/portier-broker.exe
