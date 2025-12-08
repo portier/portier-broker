@@ -9,7 +9,9 @@ pub enum ValidationError {
     InvalidUrl(#[from] url::ParseError),
     #[error("the URL must not contain a username or password: {0}")]
     UserinfoPresent(Url),
-    #[error("parsing and re-serializing the URL changed its representation (check for unnecessary information like default ports): {0}")]
+    #[error(
+        "parsing and re-serializing the URL changed its representation (check for unnecessary information like default ports): {0}"
+    )]
     InconsistentSerialization(Url),
     #[error("the URL contains an invalid port: {0}")]
     InvalidPort(Url),

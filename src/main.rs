@@ -51,7 +51,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::task::JoinSet;
 
 #[cfg(not(windows))]
-use tokio::net::{unix::SocketAddr as UnixSocketAddr, UnixListener, UnixStream};
+use tokio::net::{UnixListener, UnixStream, unix::SocketAddr as UnixSocketAddr};
 
 /// Defines the program's version, as set by Cargo at compile time.
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -142,9 +142,9 @@ async fn start_server(builder: ConfigBuilder) {
     impl Listener {
         async fn accept(&mut self) -> io::Result<Socket> {
             match self {
-                Listener::Tcp(ref mut listener) => listener.accept().await.map(Socket::Tcp),
+                Listener::Tcp(listener) => listener.accept().await.map(Socket::Tcp),
                 #[cfg(not(windows))]
-                Listener::Unix(ref mut listener) => listener.accept().await.map(Socket::Unix),
+                Listener::Unix(listener) => listener.accept().await.map(Socket::Unix),
             }
         }
     }

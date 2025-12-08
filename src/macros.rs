@@ -9,14 +9,14 @@
 /// ```
 #[macro_export]
 macro_rules! try_get_input_param {
-    ( $params:expr , $key:tt ) => {
+    ( $params:expr, $key:tt ) => {
         $params.remove($key).ok_or_else(|| {
             $crate::error::BrokerError::Input(
                 concat!("missing request parameter ", $key).to_owned(),
             )
         })?
     };
-    ( $params:expr , $key:tt , $default:expr ) => {
+    ( $params:expr, $key:tt, $default:expr ) => {
         $params.remove($key).unwrap_or($default)
     };
 }
@@ -31,7 +31,7 @@ macro_rules! try_get_input_param {
 /// ```
 #[macro_export]
 macro_rules! try_get_provider_param {
-    ( $params:expr , $key:tt ) => {
+    ( $params:expr, $key:tt ) => {
         $params.remove($key).ok_or_else(|| {
             $crate::error::BrokerError::ProviderInput(
                 concat!("missing request parameter ", $key).to_owned(),

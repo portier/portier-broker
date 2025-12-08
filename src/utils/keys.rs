@@ -1,8 +1,7 @@
 use crate::crypto::SigningAlgorithm;
 use crate::utils::{
-    base64url,
+    SecureRandom, base64url,
     pem::{self, ParsedKeyPair},
-    SecureRandom,
 };
 use aws_lc_rs::{
     digest,
@@ -10,7 +9,7 @@ use aws_lc_rs::{
     rsa,
     signature::{self, Ed25519KeyPair, KeyPair, RsaKeyPair},
 };
-use serde_json::{json, Value as JsonValue};
+use serde_json::{Value as JsonValue, json};
 use std::ffi::OsString;
 use std::process::{Command, Stdio};
 use thiserror::Error;

@@ -1,10 +1,10 @@
 use crate::agents::*;
 use crate::crypto::SigningAlgorithm;
 use crate::utils::{
+    SecureRandom,
     agent::*,
     keys::{NamedKeyPair, SignError},
     pem::{self, ParsedKeyPair},
-    SecureRandom,
 };
 use aws_lc_rs::signature::{Ed25519KeyPair, RsaKeyPair};
 use log::{info, warn};

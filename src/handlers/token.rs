@@ -5,7 +5,7 @@ use crate::{
     crypto::create_jwt,
     error::BrokerError,
     validation::parse_redirect_uri,
-    web::{json_response, Context, HandlerResult},
+    web::{Context, HandlerResult, json_response},
 };
 
 pub async fn token(ctx: &mut Context) -> HandlerResult {

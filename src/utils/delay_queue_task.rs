@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc;
-use tokio::time::{sleep_until, Duration as TokioDuration, Instant as TokioInstant};
+use tokio::time::{Duration as TokioDuration, Instant as TokioInstant, sleep_until};
 
 /// Trait for converting various types to a timer deadline.
 pub trait IntoDeadline {

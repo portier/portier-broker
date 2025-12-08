@@ -6,7 +6,7 @@ use crate::email_address::EmailAddress;
 use crate::error::{BrokerError, BrokerResult};
 use crate::metrics;
 use crate::router::router;
-use crate::utils::{http::ResponseExt, real_ip, BoxError, BoxFuture};
+use crate::utils::{BoxError, BoxFuture, http::ResponseExt, real_ip};
 use bytes::Bytes;
 use gettext::Catalog;
 use headers::{CacheControl, ContentType, Header, StrictTransportSecurity};
@@ -27,13 +27,7 @@ use std::{
     task::{Context as TaskContext, Poll},
     time::Duration,
 };
-use thiserror::Error;
-use url::{form_urlencoded, Url};
-
-/// Error type used within an `io::Error`, to indicate a size limit was exceeded.
-#[derive(Debug, Error)]
-#[error("size limit exceeded")]
-pub struct SizeLimitExceeded;
+use url::{Url, form_urlencoded};
 
 /// A session as stored in Redis.
 #[derive(Clone, Serialize, Deserialize)]

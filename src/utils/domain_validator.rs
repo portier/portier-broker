@@ -6,10 +6,10 @@ use std::{
 };
 
 use hickory_resolver::{
+    Name, Resolver,
     config::{LookupIpStrategy, NameServerConfig, ResolveHosts, ResolverConfig, ResolverOpts},
     name_server::TokioConnectionProvider,
-    proto::{rr::rdata::MX, xfer::Protocol, ProtoError},
-    Name, Resolver,
+    proto::{ProtoError, rr::rdata::MX, xfer::Protocol},
 };
 use thiserror::Error;
 

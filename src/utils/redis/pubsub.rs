@@ -1,5 +1,5 @@
 use std::{
-    collections::{hash_map::Entry, HashMap},
+    collections::{HashMap, hash_map::Entry},
     sync::Arc,
     task::Poll,
 };
@@ -7,8 +7,8 @@ use std::{
 use bytes::Bytes;
 use futures_util::{Stream, StreamExt};
 use redis::aio::AsyncPushSender;
-use tokio::sync::{broadcast::Sender, Mutex};
-use tokio_stream::wrappers::{errors::BroadcastStreamRecvError, BroadcastStream};
+use tokio::sync::{Mutex, broadcast::Sender};
+use tokio_stream::wrappers::{BroadcastStream, errors::BroadcastStreamRecvError};
 
 /// An `AsyncPushSender` that wraps a broadcast channel.
 ///
@@ -35,8 +35,8 @@ impl AsyncPushSender for FilteredBroadcast {
         };
 
         let (Ok(chan), Ok(message)) = (
-            redis::from_owned_redis_value::<Vec<u8>>(chan),
-            redis::from_owned_redis_value::<Vec<u8>>(message),
+            redis::from_redis_value::<Vec<u8>>(chan),
+            redis::from_redis_value::<Vec<u8>>(message),
         ) else {
             return Ok(());
         };
@@ -137,7 +137,7 @@ impl Drop for Subscriber {
                     // Safety: subscriber shouldn't exist without an entry.
                     unreachable!()
                 }
-            };
+            }
         });
     }
 }

@@ -1,6 +1,6 @@
 use crate::email_address::EmailAddress;
 use crate::utils::http::ResponseExt;
-use crate::web::{data_response, Context, HandlerResult};
+use crate::web::{Context, HandlerResult, data_response};
 use headers::{CacheControl, ContentType};
 
 /// Request handler for the email normalization endpoint.

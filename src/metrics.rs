@@ -1,8 +1,8 @@
 use std::{
     fmt,
     sync::{
-        atomic::{AtomicU64, Ordering},
         RwLock,
+        atomic::{AtomicU64, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -283,7 +283,7 @@ impl Histogram {
         inner.sum += time;
         inner.count += 1;
     }
-    pub fn start_timer(&self) -> HistogramTimer {
+    pub fn start_timer(&self) -> HistogramTimer<'_> {
         HistogramTimer {
             inner: self,
             start: Instant::now(),

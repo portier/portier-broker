@@ -6,7 +6,7 @@ use hyper_staticfile::{AcceptEncoding, ResponseBuilder};
 
 use crate::error::BrokerError;
 use crate::utils::http::ResponseExt;
-use crate::web::{data_response, empty_response, Context, HandlerResult, ResponseBody};
+use crate::web::{Context, HandlerResult, ResponseBody, data_response, empty_response};
 
 /// Handler for the root path, redirects to the Portier homepage.
 pub async fn index(_ctx: &mut Context) -> HandlerResult {

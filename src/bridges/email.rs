@@ -1,13 +1,13 @@
 use crate::agents::mailer::SendMail;
-use crate::bridges::{complete_auth, AuthContext, BridgeData};
+use crate::bridges::{AuthContext, BridgeData, complete_auth};
 use crate::config::Config;
 use crate::crypto::random_zbase32;
 use crate::error::BrokerError;
 use crate::metrics;
-use crate::web::{html_response, json_response, Context, HandlerResult, Response};
+use crate::web::{Context, HandlerResult, Response, html_response, json_response};
 use gettext::Catalog;
-use http::{header, Method, StatusCode};
-use percent_encoding::{utf8_percent_encode, AsciiSet, CONTROLS};
+use http::{Method, StatusCode, header};
+use percent_encoding::{AsciiSet, CONTROLS, utf8_percent_encode};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 

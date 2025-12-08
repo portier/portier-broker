@@ -3,7 +3,7 @@
 use std::io::{BufRead, Error as IoError, Read};
 
 use aws_lc_rs::{
-    digest::{digest, SHA256},
+    digest::{SHA256, digest},
     signature::{Ed25519KeyPair, RsaKeyPair},
 };
 use base64::prelude::*;
@@ -63,8 +63,8 @@ impl ParsedKeyPair {
     pub fn signing_alg(&self) -> SigningAlgorithm {
         use ParsedKeyPair::*;
         match self {
-            Ed25519(ref inner) => inner.signing_alg(),
-            Rsa(ref inner) => inner.signing_alg(),
+            Ed25519(inner) => inner.signing_alg(),
+            Rsa(inner) => inner.signing_alg(),
         }
     }
 }
