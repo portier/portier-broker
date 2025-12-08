@@ -1,9 +1,9 @@
 use crate::utils::SecureRandom;
 use bytes::Bytes;
 use futures_util::StreamExt;
-use redis::{aio::MultiplexedConnection, RedisResult, Script, Value};
+use redis::{RedisResult, Script, Value, aio::MultiplexedConnection};
 use std::sync::Arc;
-use tokio::time::{interval, Duration};
+use tokio::time::{Duration, interval};
 use tokio_stream::wrappers::IntervalStream;
 
 use super::pubsub::{self, Pubsub};

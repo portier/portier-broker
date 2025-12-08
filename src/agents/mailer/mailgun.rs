@@ -3,7 +3,7 @@ use std::time::Duration;
 use base64::prelude::*;
 use http::HeaderValue;
 use reqwest::{Method, Request};
-use url::{form_urlencoded, Url};
+use url::{Url, form_urlencoded};
 
 use crate::{agents::*, email_address::EmailAddress, metrics, utils::agent::*};
 

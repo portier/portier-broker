@@ -2,15 +2,15 @@ use crate::agents::*;
 use crate::config::LimitConfig;
 use crate::crypto::SigningAlgorithm;
 use crate::utils::{
+    BoxError, SecureRandom,
     agent::*,
     redis::{locking, pubsub},
-    BoxError, SecureRandom,
 };
 use ::redis::{
-    aio::MultiplexedConnection as RedisConn, pipe, AsyncCommands, Client as RedisClient,
-    IntoConnectionInfo, RedisResult, Script,
+    AsyncCommands, Client as RedisClient, IntoConnectionInfo, RedisResult, Script,
+    aio::MultiplexedConnection as RedisConn, pipe,
 };
-use futures_util::{future, StreamExt};
+use futures_util::{StreamExt, future};
 use std::{convert::identity, sync::Arc, time::Duration};
 use tokio::sync::broadcast;
 

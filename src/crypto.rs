@@ -2,14 +2,14 @@ use crate::agents::SignJws;
 use crate::bridges::oidc::ProviderKey;
 use crate::config::Config;
 use crate::email_address::EmailAddress;
-use crate::utils::{base64url, keys::SignError, unix_duration, SecureRandom};
+use crate::utils::{SecureRandom, base64url, keys::SignError, unix_duration};
 use aws_lc_rs::{
     digest,
     error::Unspecified,
     signature::{self, UnparsedPublicKey},
 };
 use serde_json as json;
-use serde_json::{json, Error as JsonError, Value};
+use serde_json::{Error as JsonError, Value, json};
 use std::fmt;
 use std::iter::Iterator;
 use thiserror::Error;
@@ -74,10 +74,8 @@ impl SupportedPublicKey {
     pub fn verify(&self, message: &[u8], signature: &[u8]) -> Result<(), Unspecified> {
         use SupportedPublicKey::*;
         match self {
-            Ed25519(ref inner) => inner.verify(message, signature),
-            Rsa(ref inner) => {
-                inner.verify(&signature::RSA_PKCS1_2048_8192_SHA256, message, signature)
-            }
+            Ed25519(inner) => inner.verify(message, signature),
+            Rsa(inner) => inner.verify(&signature::RSA_PKCS1_2048_8192_SHA256, message, signature),
         }
     }
 }

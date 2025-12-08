@@ -31,8 +31,8 @@ use crate::bridges::oidc::GOOGLE_IDP_ORIGIN;
 use crate::crypto::SigningAlgorithm;
 use crate::email_address::EmailAddress;
 use crate::utils::{
-    agent::{spawn_agent, Addr, Sender},
     DomainValidator, SecureRandom,
+    agent::{Addr, Sender, spawn_agent},
 };
 use crate::webfinger::{Link, ParseLinkError, Relation};
 

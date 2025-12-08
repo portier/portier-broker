@@ -1,4 +1,4 @@
-use http::{header::HeaderName, Request};
+use http::{Request, header::HeaderName};
 use ipnetwork::IpNetwork;
 use std::net::{IpAddr, SocketAddr};
 
@@ -44,7 +44,7 @@ pub fn real_ip<B>(
 
 #[cfg(test)]
 mod tests {
-    use super::{real_ip, X_FORWARDED_FOR};
+    use super::{X_FORWARDED_FOR, real_ip};
     use http::header::HeaderValue;
     use std::net::IpAddr;
 

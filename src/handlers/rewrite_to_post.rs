@@ -1,4 +1,4 @@
-use crate::web::{html_response, Context, HandlerResult};
+use crate::web::{Context, HandlerResult, html_response};
 
 /// Request handler that transforms fragment and query parameters to POST parameters.
 ///

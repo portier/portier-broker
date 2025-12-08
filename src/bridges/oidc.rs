@@ -1,16 +1,16 @@
 use crate::agents::FetchUrlCached;
-use crate::bridges::{complete_auth, AuthContext, BridgeData};
+use crate::bridges::{AuthContext, BridgeData, complete_auth};
 use crate::config::Config;
 use crate::crypto::{self, SigningAlgorithm};
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
 use crate::utils::{http::ResponseExt, unix_timestamp};
-use crate::web::{empty_response, json_response, Context, HandlerResult};
+use crate::web::{Context, HandlerResult, empty_response, json_response};
 use crate::webfinger::{Link, Relation};
 use crate::{metrics, validation};
 use http::StatusCode;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use url::Url;
 
 /// The origin of the Google identity provider.
@@ -249,12 +249,12 @@ pub async fn callback(ctx: &mut Context) -> HandlerResult {
             return Err(BrokerError::SpecificInput {
                 error: params.remove("error").unwrap(),
                 error_description: params.remove("error_description").unwrap_or_default(),
-            })
+            });
         }
         err => {
             return Err(BrokerError::Provider(format!(
                 "provider returned error: {err}"
-            )))
+            )));
         }
     }
 

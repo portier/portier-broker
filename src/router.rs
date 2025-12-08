@@ -1,4 +1,4 @@
-use crate::web::{empty_response, Context, HandlerResult};
+use crate::web::{Context, HandlerResult, empty_response};
 use crate::{bridges, handlers};
 use http::{Method, StatusCode};
 

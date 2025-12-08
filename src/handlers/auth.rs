@@ -5,11 +5,11 @@ use crate::crypto::SigningAlgorithm;
 use crate::email_address::EmailAddress;
 use crate::error::BrokerError;
 use crate::metrics;
-use crate::utils::http::ResponseExt;
 use crate::utils::DomainValidationError;
+use crate::utils::http::ResponseExt;
 use crate::validation::parse_redirect_uri;
 use crate::web::{
-    html_response, json_response, Context, HandlerResult, ResponseMode, ResponseType, ReturnParams,
+    Context, HandlerResult, ResponseMode, ResponseType, ReturnParams, html_response, json_response,
 };
 use crate::webfinger::{self, Relation};
 use headers::{CacheControl, Expires};
@@ -98,7 +98,7 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
         _ => {
             return Err(BrokerError::Input(
                 "unsupported response_type, must be id_token or code".to_owned(),
-            ))
+            ));
         }
     };
 
@@ -111,7 +111,7 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
         _ => {
             return Err(BrokerError::Input(
                 "unsupported response_mode, must be fragment, form_post or query".to_owned(),
-            ))
+            ));
         }
     };
 
@@ -265,7 +265,7 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
         Err(e) => {
             return Err(BrokerError::Internal(format!(
                 "could not test rate limit: {e}"
-            )))
+            )));
         }
     }
 
@@ -326,16 +326,19 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
             res
         })
     });
-    if let Ok(res) = discovery_future.await {
-        if let Ok(v) = res.unwrap() {
-            // Discovery succeeded, simply return the response.
-            return Ok(v);
+    match discovery_future.await {
+        Ok(res) => {
+            if let Ok(v) = res.unwrap() {
+                // Discovery succeeded, simply return the response.
+                return Ok(v);
+            }
+            // Errors cause fallback to the email bridge.
+            // The error itself is already logged above, inside the spawned task.
         }
-        // Errors cause fallback to the email bridge.
-        // The error itself is already logged above, inside the spawned task.
-    } else {
-        // Timeout causes fallback to the email bridge.
-        info!("discovery timed out for {email_addr}");
+        _ => {
+            // Timeout causes fallback to the email bridge.
+            info!("discovery timed out for {email_addr}");
+        }
     }
 
     // Fall back to email loop auth.

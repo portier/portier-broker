@@ -10,7 +10,8 @@ pub struct SdNotify {
 impl SdNotify {
     pub fn new() -> Self {
         let path = env::var_os("NOTIFY_SOCKET");
-        env::remove_var("NOTIFY_SOCKET");
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        //unsafe { env::remove_var("NOTIFY_SOCKET") };
         Self { path }
     }
 

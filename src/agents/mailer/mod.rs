@@ -5,8 +5,8 @@ use crate::utils::agent::Message;
 
 #[cfg(feature = "lettre")]
 use ::lettre::message::{
-    header::{HeaderName, HeaderValue},
     Mailbox, Message as LettreMessage, MultiPart,
+    header::{HeaderName, HeaderValue},
 };
 
 /// Message requesting a mail be sent.

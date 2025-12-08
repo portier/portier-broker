@@ -87,12 +87,12 @@ impl<'a> Iterator for StringListIter<'a> {
             }
 
             match self.list.inner.get(self.index)? {
-                StringListEntry::Literal(ref data) => {
+                StringListEntry::Literal(data) => {
                     let source = StringListSource::Literal { index: self.index };
                     self.index += 1;
                     return Some((source, Ok(data.into())));
                 }
-                StringListEntry::File(ref path) => {
+                StringListEntry::File(path) => {
                     self.reader = match StringListReader::open(path) {
                         Ok(reader) => Some(reader),
                         Err(err) => {

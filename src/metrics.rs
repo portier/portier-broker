@@ -1,8 +1,8 @@
 use std::{
     fmt,
     sync::{
-        atomic::{AtomicU64, Ordering},
         RwLock,
+        atomic::{AtomicU64, Ordering},
     },
     time::{Duration, Instant},
 };

@@ -4,8 +4,8 @@ use crate::crypto::{create_jwt, session_id};
 use crate::email_address::EmailAddress;
 use crate::error::{BrokerError, BrokerResult};
 use crate::web::{
-    json_response, return_to_relier, Context, HandlerResult, RequestData, ResponseType, Session,
-    SessionData,
+    Context, HandlerResult, RequestData, ResponseType, Session, SessionData, json_response,
+    return_to_relier,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;

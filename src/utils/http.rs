@@ -1,6 +1,6 @@
 use headers::{Header, HeaderMapExt};
-use http::header::{HeaderName, HeaderValue};
 use http::Response;
+use http::header::{HeaderName, HeaderValue};
 use std::convert::TryFrom;
 use std::fmt::Debug;
 
