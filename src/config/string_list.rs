@@ -43,7 +43,7 @@ impl<'de> Deserialize<'de> for StringList {
 
 impl StringList {
     /// Iterate values in the list.
-    pub fn iter_values(&self) -> StringListIter {
+    pub fn iter_values(&self) -> StringListIter<'_> {
         StringListIter {
             list: self,
             index: 0,
