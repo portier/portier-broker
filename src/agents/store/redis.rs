@@ -82,11 +82,13 @@ impl RedisStore {
             url = format!("redis://{}", &url);
         }
         let id = rng.generate_async(16).await.into();
-        let mut info = url.as_str().into_connection_info()?;
-        let addr = info.addr.clone();
+        let info = url.as_str().into_connection_info()?;
+        let addr = info.addr().clone();
 
         // Configure pubsub on the same connection using RESP3.
-        info.redis.protocol = ::redis::ProtocolVersion::RESP3;
+        let redis_settings = info.redis_settings().clone();
+        let info =
+            info.set_redis_settings(redis_settings.set_protocol(::redis::ProtocolVersion::RESP3));
         let (push_tx, _) = broadcast::channel(8);
         let conn = RedisClient::open(info)?
             .get_multiplexed_async_connection_with_config(

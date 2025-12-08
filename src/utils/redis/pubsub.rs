@@ -35,8 +35,8 @@ impl AsyncPushSender for FilteredBroadcast {
         };
 
         let (Ok(chan), Ok(message)) = (
-            redis::from_owned_redis_value::<Vec<u8>>(chan),
-            redis::from_owned_redis_value::<Vec<u8>>(message),
+            redis::from_redis_value::<Vec<u8>>(chan),
+            redis::from_redis_value::<Vec<u8>>(message),
         ) else {
             return Ok(());
         };
