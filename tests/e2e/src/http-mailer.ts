@@ -17,7 +17,7 @@ export interface HttpMailer {
 }
 
 const jsonParser = createJsonParser();
-const formParser = createFormParser({ extended: false });
+const formParser = createFormParser();
 
 export default ({ mailbox }: { mailbox: Mailbox }): HttpMailer => {
   const app = express();

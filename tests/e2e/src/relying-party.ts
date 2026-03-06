@@ -1,13 +1,12 @@
 // Starts a simple relying party implementation.
 
+import PortierClient from "portier";
 import express, { Request, Response } from "express";
-import fetch from "node-fetch";
 import querystring from "querystring";
 import { EventEmitter } from "events";
-import { PortierClient } from "portier";
 import { urlencoded as createFormParser } from "body-parser";
 
-const formParser = createFormParser({ extended: false });
+const formParser = createFormParser();
 
 export type RelyingParty = EventEmitter & {
   portier: PortierClient;
@@ -46,7 +45,7 @@ export default (): RelyingParty => {
       return;
     }
 
-    res.redirect(303, authUrl);
+    res.status(303).redirect(authUrl);
   });
 
   app.get("/verify", verifyHandler);
@@ -75,7 +74,7 @@ export default (): RelyingParty => {
           redirect_uri: portier.redirectUri,
         }),
       });
-      const body = await tokenRes.json();
+      const body: any = await tokenRes.json();
       if (tokenRes.status !== 200) {
         if (!emitter.emit("gotError", params)) {
           console.error(`RP got an error from the broker: ${body.error}`);
