@@ -304,11 +304,11 @@ impl Service {
                         catalog_idx = idx;
                         break 'lang;
                     }
-                    if let Some(user_language_primary) = user_language_primary {
-                        if lang == user_language_primary {
-                            catalog_idx = idx;
-                            break 'lang;
-                        }
+                    if let Some(user_language_primary) = user_language_primary
+                        && lang == user_language_primary
+                    {
+                        catalog_idx = idx;
+                        break 'lang;
                     }
                 }
             }

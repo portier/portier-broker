@@ -164,12 +164,12 @@ pub async fn auth(ctx: &mut Context) -> HandlerResult {
         Some(nonce)
     };
 
-    if let Some(ref whitelist) = ctx.app.allowed_origins {
-        if !whitelist.contains(&client_id) {
-            return Err(BrokerError::Input(
-                "the origin is not whitelisted".to_owned(),
-            ));
-        }
+    if let Some(ref whitelist) = ctx.app.allowed_origins
+        && !whitelist.contains(&client_id)
+    {
+        return Err(BrokerError::Input(
+            "the origin is not whitelisted".to_owned(),
+        ));
     }
 
     let scope = try_get_input_param!(params, "scope");
