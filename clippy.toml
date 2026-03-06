@@ -1,2 +1,2 @@
-msrv = "1.85"
+msrv = "1.89"
 doc-valid-idents = ["OpenID", "OAuth", "OAuth2"]
