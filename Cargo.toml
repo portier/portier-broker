@@ -17,8 +17,8 @@ lettre_smtp = ["lettre", "lettre/smtp-transport"]
 lettre_sendmail = ["lettre", "lettre/sendmail-transport"]
 postmark = []
 mailgun = []
-native-tls = ["hyper-tls", "reqwest/native-tls", "lettre?/native-tls"]
-rustls = ["dep:rustls", "hyper-rustls", "lettre?/rustls", "lettre?/rustls-platform-verifier", "lettre?/aws-lc-rs"]
+native-tls = ["reqwest/native-tls", "lettre?/native-tls"]
+rustls = ["dep:rustls", "reqwest/rustls", "lettre?/rustls", "lettre?/rustls-platform-verifier", "lettre?/aws-lc-rs"]
 sendgrid = []
 
 [[bin]]
@@ -67,14 +67,6 @@ version = "1.0.0"
 default-features = false
 features = ["http1", "server"]
 
-[dependencies.hyper-rustls]
-optional = true
-version = "0.27.0"
-
-[dependencies.hyper-tls]
-optional = true
-version = "0.6.0"
-
 [dependencies.hyper-util]
 version = "0.1.1"
 features = ["tokio"]
@@ -102,6 +94,7 @@ features = ["script", "tokio-comp"]
 [dependencies.reqwest]
 version = "0.13.1"
 default-features = false
+features = ["charset", "system-proxy"]
 
 [dependencies.aws-lc-rs]
 version = "1.6.4"
