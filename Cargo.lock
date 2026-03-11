@@ -1731,7 +1731,7 @@ checksum = "c33a9471896f1c69cecef8d20cbe2f7accd12527ce60845ff44c153bb2a21b49"
 
 [[package]]
 name = "portier_broker"
-version = "0.15.0"
+version = "0.15.1"
 dependencies = [
  "accept-language",
  "aws-lc-rs",
