@@ -92,7 +92,7 @@ default-features = false
 features = ["script", "tokio-comp"]
 
 [dependencies.reqwest]
-version = "0.13.1"
+version = "0.13.3"
 default-features = false
 features = ["charset", "system-proxy"]
 
