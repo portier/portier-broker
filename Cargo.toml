@@ -97,7 +97,7 @@ default-features = false
 features = ["charset", "system-proxy"]
 
 [dependencies.aws-lc-rs]
-version = "1.6.4"
+version = "1.17.0"
 
 [dependencies.rusqlite]
 optional = true
