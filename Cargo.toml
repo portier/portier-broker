@@ -82,7 +82,7 @@ default-features = false
 features = ["builder"]
 
 [dependencies.log]
-version = "0.4.11"
+version = "0.4.32"
 features = ["std", "release_max_level_info"]
 
 [dependencies.redis]
