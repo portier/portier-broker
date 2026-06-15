@@ -121,7 +121,7 @@ version = "0.1.17"
 features = ["sync", "time"]
 
 [dependencies.hickory-resolver]
-version = "0.25.2"
+version = "0.26.1"
 default-features = false
 features = ["tokio"]
 
