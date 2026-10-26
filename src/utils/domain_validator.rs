@@ -6,10 +6,10 @@ use std::{
 };
 
 use hickory_resolver::{
-    Name, Resolver,
+    Resolver,
     config::{LookupIpStrategy, NameServerConfig, ResolveHosts, ResolverConfig, ResolverOpts},
-    name_server::TokioConnectionProvider,
-    proto::{ProtoError, rr::rdata::MX, xfer::Protocol},
+    net::runtime::TokioRuntimeProvider,
+    proto::{ProtoError, rr::domain::Name},
 };
 use thiserror::Error;
 
@@ -50,7 +50,7 @@ pub struct DomainValidator {
     /// Exact domains to block.
     blocked_domains: HashSet<Name>,
     /// DNS resolver for email domain validation.
-    dns_resolver: Option<Resolver<TokioConnectionProvider>>,
+    dns_resolver: Option<Resolver<TokioRuntimeProvider>>,
     /// Whether to ignore reserved IP addresses in DNS results.
     pub verify_public_ip: bool,
     /// Whether to treat anything not in the allow-list as blocked.
@@ -91,17 +91,15 @@ impl DomainValidator {
             return Ok(());
         };
 
-        let mut cfg = ResolverConfig::new();
-        for socket_addr in addr.to_socket_addrs()? {
-            cfg.add_name_server(NameServerConfig {
-                socket_addr,
-                protocol: Protocol::Udp,
-                tls_dns_name: None,
-                http_endpoint: None,
-                trust_negative_responses: true,
-                bind_addr: None,
-            });
-        }
+        let cfg = ResolverConfig::from_name_servers(
+            addr.to_socket_addrs()?
+                .map(|socket_addr| {
+                    let mut res = NameServerConfig::udp(socket_addr.ip());
+                    res.connections[0].port = socket_addr.port();
+                    res
+                })
+                .collect(),
+        );
 
         let mut opts = ResolverOpts::default();
         // Email domains must always be FQDNs.
@@ -109,8 +107,6 @@ impl DomainValidator {
         // Tighter timeouts and retries, because we're handling a user agent request.
         opts.timeout = Duration::from_secs(5);
         opts.attempts = 1;
-        // Trust the server, don't do DNSSEC ourselves.
-        opts.validate = false;
         // Assume mail servers still require IPv4, so try query only A-records first.
         // This creates an edge case with `verify_public_ip`, where the mail server only has
         // private IPv4, but public IPv6, yet we fail. We consider this extremely unlikely.
@@ -122,9 +118,10 @@ impl DomainValidator {
 
         // Unwrap, because this currently doesn't appear to fail ever.
         self.dns_resolver = Some(
-            Resolver::builder_with_config(cfg, TokioConnectionProvider::default())
+            Resolver::builder_with_config(cfg, TokioRuntimeProvider::default())
                 .with_options(opts)
-                .build(),
+                .build()
+                .map_err(io::Error::other)?,
         );
         Ok(())
     }
@@ -153,12 +150,14 @@ impl DomainValidator {
             // likely a real mail domain has MX records.
             let res = resolver.mx_lookup(domain.clone()).await;
             let mut has_mx = false;
-            let mail_servers: Vec<&Name> = match res {
-                Ok(ref mx) => {
+            let mail_servers: Vec<_> = match res {
+                Ok(ref records) => {
                     has_mx = true;
                     // Answers should always be FQDNs. We also ignore priority.
-                    mx.iter()
-                        .map(MX::exchange)
+                    records
+                        .answers()
+                        .iter()
+                        .map(|record| &record.name)
                         .filter(|name| name.is_fqdn())
                         .collect()
                 }

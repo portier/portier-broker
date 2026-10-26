@@ -18,7 +18,7 @@ jobs:
       uses: dtolnay/rust-toolchain@1.95
 
     - name: Cache
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: |
           ~/.cargo/registry
@@ -46,7 +46,7 @@ jobs:
       run: sudo apt-get install gettext musl-tools
 
     - name: Checkout
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
 
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
@@ -55,7 +55,7 @@ jobs:
         components: rustfmt, clippy
 
     - name: Cache
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: |
           ~/.cargo/registry
@@ -113,35 +113,35 @@ jobs:
       timeout-minutes: 10
 
     - name: E2E test Firefox
-      run: cd tests/e2e/ && SELENIUM_BROWSER=firefox ./main.js
+      run: cd tests/e2e/ && SELENIUM_BROWSER=firefox npm test
       timeout-minutes: 10
 
     - name: E2E test Chrome
-      run: cd tests/e2e/ && SELENIUM_BROWSER=chrome ./main.js
+      run: cd tests/e2e/ && SELENIUM_BROWSER=chrome npm test
       timeout-minutes: 10
 
     - name: E2E test Redis
-      run: cd tests/e2e/ && TEST_STORE=redis TEST_KEY_MANAGER=rotating ./main.js
+      run: cd tests/e2e/ && TEST_STORE=redis TEST_KEY_MANAGER=rotating npm test
       timeout-minutes: 10
 
     - name: E2E test SQLite
-      run: cd tests/e2e/ && TEST_STORE=sqlite TEST_KEY_MANAGER=rotating ./main.js
+      run: cd tests/e2e/ && TEST_STORE=sqlite TEST_KEY_MANAGER=rotating npm test
       timeout-minutes: 10
 
     - name: E2E test sendmail
-      run: cd tests/e2e/ && TEST_MAILER=sendmail ./main.js
+      run: cd tests/e2e/ && TEST_MAILER=sendmail npm test
       timeout-minutes: 10
 
     - name: E2E test Postmark
-      run: cd tests/e2e/ && TEST_MAILER=postmark ./main.js
+      run: cd tests/e2e/ && TEST_MAILER=postmark npm test
       timeout-minutes: 10
 
     - name: E2E test Mailgun
-      run: cd tests/e2e/ && TEST_MAILER=mailgun ./main.js
+      run: cd tests/e2e/ && TEST_MAILER=mailgun npm test
       timeout-minutes: 10
 
     - name: E2E test SendGrid
-      run: cd tests/e2e/ && TEST_MAILER=sendgrid ./main.js
+      run: cd tests/e2e/ && TEST_MAILER=sendgrid npm test
       timeout-minutes: 10
 
   macos-build:
@@ -149,13 +149,13 @@ jobs:
     steps:
 
     - name: Checkout
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
 
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
 
     - name: Cache
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: |
           ~/.cargo/registry
@@ -180,7 +180,7 @@ jobs:
       timeout-minutes: 10
 
     - name: E2E test Safari
-      run: cd tests/e2e/ && SELENIUM_BROWSER=safari ./main.js
+      run: cd tests/e2e/ && SELENIUM_BROWSER=safari npm test
       timeout-minutes: 10
       # TODO: fails sporadically
       continue-on-error: true
@@ -190,7 +190,7 @@ jobs:
     steps:
 
     - name: Checkout
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
 
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
@@ -200,7 +200,7 @@ jobs:
       uses: ilammy/setup-nasm@v1
 
     - name: Cache
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: |
           ~/.cargo/registry
