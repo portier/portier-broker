@@ -79,7 +79,7 @@ impl RedisStore {
         if url.starts_with("http://") {
             url = url.replace("http://", "redis://");
         } else if !url.starts_with("redis://") {
-            url = format!("redis://{}", &url);
+            url = format!("redis://{url}");
         }
         let id = rng.generate_async(16).await.into();
         let info = url.as_str().into_connection_info()?;

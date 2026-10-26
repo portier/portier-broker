@@ -161,7 +161,7 @@ pub async fn auth(mut ctx: AuthContext, link: &Link, prompt: &str) -> HandlerRes
             ("state", &ctx.session_id),
             ("response_type", "id_token"),
             ("client_id", &bridge_data.client_id),
-            ("redirect_uri", &format!("{}/callback", &ctx.app.public_url)),
+            ("redirect_uri", &format!("{}/callback", ctx.app.public_url)),
         ]);
         if !prompt.is_empty() {
             query.append_pair("prompt", prompt);

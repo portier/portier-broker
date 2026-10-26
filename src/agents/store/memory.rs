@@ -139,10 +139,7 @@ impl Handler<Gc> for MemoryStore {
                 match slot.try_lock() {
                     Ok(maybe_entry) => {
                         Arc::strong_count(slot) > 1
-                            || maybe_entry
-                                .as_ref()
-                                .filter(|entry| entry.is_alive())
-                                .is_some()
+                            || maybe_entry.as_ref().is_some_and(Expiring::is_alive)
                     }
                     _ => true,
                 }

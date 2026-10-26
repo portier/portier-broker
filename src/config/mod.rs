@@ -465,11 +465,11 @@ impl ConfigBuilder {
             domain_validator: DomainValidator::new(),
             data_dir: String::new(),
 
-            static_ttl: Duration::from_secs(604_800),
-            discovery_ttl: Duration::from_secs(604_800),
-            keys_ttl: Duration::from_secs(86_400),
+            static_ttl: Duration::from_hours(168),
+            discovery_ttl: Duration::from_hours(168),
+            keys_ttl: Duration::from_hours(24),
             token_ttl: Duration::from_secs(600),
-            session_ttl: Duration::from_secs(900),
+            session_ttl: Duration::from_mins(15),
             auth_code_ttl: Duration::from_secs(600),
             cache_ttl: Duration::from_secs(3600),
 

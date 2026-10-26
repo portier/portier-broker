@@ -7,7 +7,7 @@ homepage = "http://portier.io"
 repository = "https://github.com/portier/portier-broker"
 readme = "README.md"
 license = "MIT/Apache-2.0"
-rust-version = "1.89"
+rust-version = "1.95"
 edition = "2024"
 
 [features]
@@ -30,7 +30,7 @@ overflow-checks = true
 
 [dependencies]
 accept-language = "3.0.1"
-base64 = "0.22.0"
+base64 = "0.23.1"
 bytes = "1.0.1"
 docopt = "1.1.0"
 envy = "0.4.1"
@@ -101,7 +101,7 @@ version = "1.6.4"
 
 [dependencies.rusqlite]
 optional = true
-version = "0.39.0"
+version = "0.41.0"
 features = ["bundled"]
 
 [dependencies.rustls]
@@ -121,7 +121,7 @@ version = "0.1.17"
 features = ["sync", "time"]
 
 [dependencies.hickory-resolver]
-version = "0.25.2"
+version = "0.26.3"
 default-features = false
 features = ["tokio"]
 

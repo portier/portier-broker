@@ -177,7 +177,7 @@ impl Context {
         let session_id = crypto::session_id(email_addr, client_id, &self.app.rng).await;
 
         let req = self.get_mut_req();
-        assert!(req.session_id.is_empty());
+        assert_eq!(req.session_id, "");
 
         let return_params = req
             .return_params
@@ -212,7 +212,7 @@ impl Context {
             .ok_or(BrokerError::SessionExpired)?;
 
         let req = self.get_mut_req();
-        assert!(req.session_id.is_empty());
+        assert_eq!(req.session_id, "");
         assert!(req.return_params.is_none());
 
         req.session_id = id.to_owned();
@@ -498,7 +498,7 @@ async fn handle_error(ctx: &Context, err: BrokerError) -> Response {
 /// Mutate a response to set common headers.
 fn set_headers<B>(res: &mut hyper::Response<B>) {
     res.typed_header(StrictTransportSecurity::excluding_subdomains(
-        Duration::from_secs(31_536_000_u64),
+        Duration::from_hours(8760),
     ));
     res.header(hyper::header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_owned());
     res.header(hyper::header::X_XSS_PROTECTION, "1; mode=block".to_owned());

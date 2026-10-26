@@ -4,7 +4,7 @@
   "license": "(MIT OR Apache-2.0)",
   "private": true,
   "scripts": {
-    "test": "node ./main.js",
+    "test": "tsx ./src/main.ts",
     "test:chrome": "cross-env SELENIUM_BROWSER=chrome npm test",
     "test:firefox": "cross-env SELENIUM_BROWSER=firefox npm test"
   },
@@ -21,7 +21,7 @@
     "portier": "^0.7.0",
     "selenium-webdriver": "^4.0.0-beta.1",
     "smtp-server": "^3.18.0",
-    "ts-node": "^10.1.0",
-    "typescript": "5.9.3"
+    "tsx": "^4.23.15",
+    "typescript": "7.0.2"
   }
 }
