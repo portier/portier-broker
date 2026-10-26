@@ -234,16 +234,8 @@ impl Handler<UpdateKeys> for RotatingKeys {
         let key_set = message.0;
 
         // Start rotation if the store loaded incomplete or expired keys.
-        let has_current = key_set
-            .current
-            .as_ref()
-            .filter(|entry| entry.is_alive())
-            .is_some();
-        let has_next = key_set
-            .next
-            .as_ref()
-            .filter(|entry| entry.is_alive())
-            .is_some();
+        let has_current = key_set.current.as_ref().is_some_and(Expiring::is_alive);
+        let has_next = key_set.next.as_ref().is_some_and(Expiring::is_alive);
         if !has_current || !has_next {
             let store = self.store.clone();
             return cx.reply_later(async move {
@@ -296,7 +288,7 @@ impl Handler<RotateKeys> for RotatingKeys {
 
         // Rotate twice, in case we skipped some time and `next` has also expired.
         for _ in 0..2 {
-            if current.as_ref().filter(|entry| entry.is_alive()).is_none() {
+            if current.as_ref().is_none_or(|entry| !entry.is_alive()) {
                 previous = current.map(|entry| entry.value);
                 current = next;
                 next = None;
