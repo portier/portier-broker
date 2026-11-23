@@ -106,6 +106,7 @@ impl std::str::FromStr for EmailAddress {
                 minimum_sub_domains: 2,
                 allow_domain_literal: false,
                 allow_display_text: false,
+                allow_long_local_parts: false,
             },
         )?;
         Ok(result)

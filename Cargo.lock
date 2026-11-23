@@ -530,9 +530,9 @@ dependencies = [
 
 [[package]]
 name = "email_address"
-version = "0.2.8"
+version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0bf217fe11ae440852d70a5301712b9fdbb7b6e120b4c4d9645536a3bee9c0c"
+checksum = "5ab6bbd053d3cdc62ba3de82aae11530a97bbd5b3a572fbdbcd0f0e545e3ff21"
 
 [[package]]
 name = "encoding"
